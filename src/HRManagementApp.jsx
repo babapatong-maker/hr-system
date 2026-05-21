@@ -160,7 +160,7 @@ function AttendanceModal({ onClose, onCheckin, employees }) {
     const now = new Date();
     const { error } = await supabase.from("attendance").insert({
       employee_id: selectedEmp,
-      check_in: now.toISOString(),
+(เว้นว่าง — ไม่ต้องใส่อะไร)
       latitude: coords?.lat,
       longitude: coords?.lng,
       distance_from_school: distance,

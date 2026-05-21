@@ -970,4 +970,109 @@ export default function HRApp() {
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <div style={{ textAlign: "right" }}>
             <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#0f172a" }}>{currentUser.name}</div>
-            <div style={{ fontSize: "0.7rem", color: "#647
+            <div style={{ fontSize: "0.7rem", color: "#64748b" }}>
+              {currentUser.role === "admin" ? "👑 Admin" : "พนักงาน"} • {currentUser.department}
+            </div>
+          </div>
+          <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #2563eb, #7c3aed)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "0.9rem" }}>{currentUser.name?.[0]}</div>
+          <button onClick={handleLogout} title="ออกจากระบบ" style={{ background: "#fef2f2", border: "1.5px solid #fca5a5", borderRadius: "10px", padding: "0.45rem 0.65rem", cursor: "pointer", color: "#dc2626", display: "flex", alignItems: "center", gap: "0.3rem", fontFamily: "inherit", fontSize: "0.78rem", fontWeight: 600 }}>
+            <LogOut size={14} />
+          </button>
+        </div>
+      </header>
+
+      <div style={{ display: "flex", flex: 1 }}>
+        <aside style={{ width: 230, background: "#fff", borderRight: "1px solid #e2e8f0", padding: "1rem 0.75rem", display: "flex", flexDirection: "column", gap: "0.25rem", overflowY: "auto", position: "sticky", top: 60, height: "calc(100vh - 60px)" }}>
+          <div style={{ background: "linear-gradient(135deg, #eff6ff, #f0f9ff)", border: "1px solid #bfdbfe", borderRadius: "12px", padding: "0.75rem", marginBottom: "0.75rem", textAlign: "center" }}>
+            <div style={{ fontSize: "1.4rem", fontWeight: 800, color: "#1d4ed8" }}>{currentTime.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Bangkok" })}</div>
+            <div style={{ fontSize: "0.72rem", color: "#64748b" }}>{currentTime.toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Bangkok" })}</div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.4rem", marginBottom: "1rem" }}>
+            <button onClick={openCheckIn} style={{ background: "linear-gradient(135deg, #2563eb, #1d4ed8)", border: "none", borderRadius: "10px", padding: "0.6rem", color: "#fff", fontWeight: 700, fontSize: "0.78rem", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.3rem", boxShadow: "0 4px 14px rgba(37,99,235,0.3)", fontFamily: "inherit" }}>
+              <LogIn size={16} /> เข้างาน
+            </button>
+            <button onClick={openCheckOut} style={{ background: "linear-gradient(135deg, #f59e0b, #d97706)", border: "none", borderRadius: "10px", padding: "0.6rem", color: "#fff", fontWeight: 700, fontSize: "0.78rem", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.3rem", boxShadow: "0 4px 14px rgba(245,158,11,0.3)", fontFamily: "inherit" }}>
+              <LogOut size={16} /> กลับบ้าน
+            </button>
+          </div>
+
+          {visibleNavItems.map(item => {
+            const Icon = item.icon;
+            const isActive = activePage === item.key;
+            return (
+              <button key={item.key} onClick={() => setActivePage(item.key)} style={{ width: "100%", display: "flex", alignItems: "center", gap: "0.6rem", padding: "0.6rem 0.75rem", borderRadius: "10px", border: "none", background: isActive ? "#eff6ff" : "transparent", color: isActive ? "#2563eb" : "#475569", cursor: "pointer", fontSize: "0.875rem", fontWeight: isActive ? 700 : 500, fontFamily: "inherit", textAlign: "left" }}>
+                <Icon size={17} /><span>{item.label}</span>
+              </button>
+            );
+          })}
+        </aside>
+
+        <main style={{ flex: 1, padding: "1.5rem", overflowY: "auto" }}>
+          {loading ? (
+            <div style={{ textAlign: "center", padding: "3rem", color: "#64748b" }}>
+              <RefreshCw size={32} style={{ animation: "spin 1s linear infinite", margin: "0 auto 1rem" }} />
+              <div>กำลังโหลด...</div>
+            </div>
+          ) : (
+            <>
+              {activePage === "dashboard" && (
+                <>
+                  <PageHeader title={`สวัสดี ${currentUser.name?.split(" ")[0]} 👋`} />
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
+                    {stats.map(stat => <StatCard key={stat.label} stat={stat} />)}
+                  </div>
+                  <Card>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}><Activity size={18} color="#2563eb" /><div style={{ fontWeight: 700, color: "#0f172a", fontSize: "0.95rem" }}>กิจกรรมล่าสุด</div></div>
+                      <button onClick={fetchData} style={{ background: "none", border: "1.5px solid #e2e8f0", borderRadius: "8px", padding: "0.35rem 0.75rem", fontSize: "0.78rem", color: "#475569", cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                        <RefreshCw size={13} /> รีเฟรช
+                      </button>
+                    </div>
+                    {activityLog.length === 0 ? (
+                      <div style={{ textAlign: "center", padding: "2rem", color: "#94a3b8" }}>ยังไม่มีข้อมูล</div>
+                    ) : (
+                      <div style={{ overflowX: "auto" }}>
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+                          <thead>
+                            <tr style={{ borderBottom: "2px solid #f1f5f9" }}>
+                              {["พนักงาน", "แผนก", "เข้างาน", "กลับบ้าน"].map(h => (
+                                <th key={h} style={{ padding: "0.5rem 0.75rem", textAlign: "left", color: "#94a3b8", fontWeight: 600, fontSize: "0.75rem", whiteSpace: "nowrap" }}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {activityLog.slice(0, 10).map((row, i) => (
+                              <tr key={row.id} style={{ borderBottom: "1px solid #f8fafc", background: i % 2 === 0 ? "#fff" : "#fafafa" }}>
+                                <td style={{ padding: "0.65rem 0.75rem" }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                    <Avatar name={row.employees?.name} index={i} />
+                                    <span style={{ fontWeight: 600, color: "#0f172a" }}>{row.employees?.name || "-"}</span>
+                                  </div>
+                                </td>
+                                <td style={{ padding: "0.65rem 0.75rem", color: "#64748b" }}>{row.employees?.department || "-"}</td>
+                                <td style={{ padding: "0.65rem 0.75rem" }}><span style={{ background: "#dcfce7", color: "#16a34a", fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>{fmtTime(row.check_in)}</span></td>
+                                <td style={{ padding: "0.65rem 0.75rem" }}>{row.check_out ? <span style={{ background: "#fef3c7", color: "#d97706", fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>{fmtTime(row.check_out)}</span> : <span style={{ color: "#94a3b8", fontSize: "0.78rem" }}>-</span>}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </Card>
+                </>
+              )}
+              {activePage === "employee" && <EmployeePage employees={employees} onRefresh={fetchData} />}
+              {activePage === "attendance" && <AttendancePage employees={employees} activityLog={activityLog} currentUser={currentUser} onRefresh={fetchData} />}
+              {activePage === "leave" && <LeavePage employees={employees} leaves={leaves} currentUser={currentUser} onRefresh={fetchData} />}
+              {activePage === "outing" && <OutingPage employees={employees} outings={outings} currentUser={currentUser} onRefresh={fetchData} />}
+              {activePage === "report" && <ReportPage employees={employees} attendance={activityLog} leaves={leaves} outings={outings} />}
+            </>
+          )}
+        </main>
+      </div>
+
+      {showAttendance && <AttendanceModal mode={attMode} onClose={() => setShowAttendance(false)} onCheckin={() => { setShowAttendance(false); fetchData(); }} employees={employees} currentUser={currentUser} />}
+    </div>
+  );
+}

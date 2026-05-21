@@ -524,7 +524,7 @@ export default function HRApp() {
                             </td>
                             <td style={{ padding: "0.65rem 0.75rem", color: "#64748b" }}>{row.employees?.department || "-"}</td>
                             <td style={{ padding: "0.65rem 0.75rem" }}><span style={{ background: "#dcfce7", color: "#16a34a", fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.6rem", borderRadius: "20px" }}>เข้างาน</span></td>
-                            <td style={{ padding: "0.65rem 0.75rem", color: "#475569", fontWeight: 600, whiteSpace: "nowrap" }}>{new Date(row.check_in).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.</td>
+                            <td style={{ padding: "0.65rem 0.75rem", color: "#475569", fontWeight: 600, whiteSpace: "nowrap" }}>{new Date(row.check_in).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" })} น.</td>
                             <td style={{ padding: "0.65rem 0.75rem" }}>
                               <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", color: "#64748b", fontSize: "0.8rem" }}>
                                 <MapPin size={12} color="#94a3b8" />{row.distance_from_school ? `${Math.round(row.distance_from_school)} ม.` : "-"}

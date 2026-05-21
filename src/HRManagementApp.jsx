@@ -417,7 +417,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, mode = "i
   const [distance, setDistance] = useState(null);
   const [done, setDone] = useState(false);
   const [doneTime, setDoneTime] = useState(null);
-  const [selectedEmp, setSelectedEmp] = useState(currentUser?.role === "admin" ? "" : currentUser?.id || "");
+  const [selectedEmp, setSelectedEmp] = useState(currentUser?.id || "");
   const [openAttendance, setOpenAttendance] = useState(null);
 
   useEffect(() => {
@@ -480,14 +480,9 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, mode = "i
 
   return (
     <Modal title={mode === "in" ? "ลงเวลาเข้างาน" : "ลงเวลากลับบ้าน"} subtitle={`📍 รัศมี ${GEOFENCE_RADIUS} เมตรจากโรงเรียน`} onClose={onClose} icon={mode === "in" ? LogIn : LogOut} color={mode === "in" ? "#1d4ed8" : "#d97706"}>
-      {currentUser?.role === "admin" ? (
-        <select value={selectedEmp} onChange={e => setSelectedEmp(e.target.value)} style={{ ...selectStyle, marginBottom: "1.25rem" }}>
-          <option value="">-- เลือกชื่อพนักงาน --</option>
-          {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name} — {emp.department}</option>)}
-        </select>
-      ) : (
-        <div style={{ ...inputStyle, background: "#f8fafc", color: "#475569", marginBottom: "1.25rem", textAlign: "center", fontWeight: 600 }}>{currentUser?.name}</div>
-      )}
+      <div style={{ ...inputStyle, background: "#eff6ff", color: "#1d4ed8", marginBottom: "1.25rem", textAlign: "center", fontWeight: 700, border: "1.5px solid #bfdbfe" }}>
+        👤 {currentUser?.name}
+      </div>
 
       {mode === "out" && selectedEmp && !openAttendance && (
         <div style={{ background: "#fef2f2", border: "1.5px solid #fca5a5", borderRadius: "12px", padding: "0.75rem", marginBottom: "1.25rem", textAlign: "center", color: "#dc2626", fontSize: "0.85rem", fontWeight: 600 }}>⚠️ ยังไม่ได้ลงเวลาเข้างานวันนี้</div>

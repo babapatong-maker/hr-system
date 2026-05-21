@@ -31,6 +31,37 @@ const fmtTime = (t) => t ? new Date(t).toLocaleTimeString("th-TH", { hour: "2-di
 const fmtDate = (t) => t ? new Date(t).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit", timeZone: "Asia/Bangkok" }) : "-";
 const todayISO = () => new Date().toISOString().split("T")[0];
 
+// คำนวณสถานะมาสาย / กลับก่อน
+function checkLate(checkInTime, workStart, grace = 0) {
+  if (!checkInTime || !workStart) return null;
+  const ci = new Date(checkInTime);
+  const ciH = ci.getUTCHours() + 7; // Asia/Bangkok
+  const ciM = ci.getUTCMinutes();
+  const [wh, wm] = workStart.split(":").map(Number);
+  const ciMinutes = ciH * 60 + ciM;
+  const wsMinutes = wh * 60 + wm + grace;
+  if (ciMinutes > wsMinutes) {
+    const diff = ciMinutes - wsMinutes;
+    return { late: true, minutes: diff };
+  }
+  return { late: false, minutes: 0 };
+}
+
+function checkEarly(checkOutTime, workEnd) {
+  if (!checkOutTime || !workEnd) return null;
+  const co = new Date(checkOutTime);
+  const coH = co.getUTCHours() + 7;
+  const coM = co.getUTCMinutes();
+  const [wh, wm] = workEnd.split(":").map(Number);
+  const coMinutes = coH * 60 + coM;
+  const weMinutes = wh * 60 + wm;
+  if (coMinutes < weMinutes) {
+    const diff = weMinutes - coMinutes;
+    return { early: true, minutes: diff };
+  }
+  return { early: false, minutes: 0 };
+}
+
 const DEPT_OPTIONS = ["วิชาการ", "บริหาร", "พลศึกษา", "คณิตศาสตร์", "ภาษาไทย", "ศิลปะ", "วิทยาศาสตร์", "สังคมศึกษา", "ภาษาอังกฤษ", "การงานอาชีพ"];
 
 const navItems = [
@@ -40,6 +71,7 @@ const navItems = [
   { icon: Umbrella, label: "การลา", key: "leave", roles: ["admin", "employee"] },
   { icon: ArrowRightLeft, label: "ขอออกนอกสถานที่", key: "outing", roles: ["admin", "employee"] },
   { icon: BarChart3, label: "รายงาน", key: "report", roles: ["admin"] },
+  { icon: Settings, label: "ตั้งค่าเวลาทำงาน", key: "settings", roles: ["admin"] },
 ];
 
 const inputStyle = { width: "100%", padding: "0.65rem 0.75rem", border: "1.5px solid #e2e8f0", borderRadius: "10px", fontSize: "0.9rem", fontFamily: "inherit", color: "#0f172a", outline: "none", background: "#fff" };
@@ -586,7 +618,7 @@ function EmployeePage({ employees, onRefresh }) {
   );
 }
 
-function AttendancePage({ employees, activityLog, currentUser, onRefresh }) {
+function AttendancePage({ employees, activityLog, currentUser, settings, onRefresh }) {
   const [showIn, setShowIn] = useState(false);
   const [showOut, setShowOut] = useState(false);
   const filtered = currentUser?.role === "admin" ? activityLog : activityLog.filter(a => a.employee_id === currentUser?.id);
@@ -597,9 +629,11 @@ function AttendancePage({ employees, activityLog, currentUser, onRefresh }) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
         <button onClick={() => setShowIn(true)} style={{ background: "linear-gradient(135deg, #2563eb, #1d4ed8)", border: "none", borderRadius: "1rem", padding: "1.5rem", color: "#fff", cursor: "pointer", fontFamily: "inherit", boxShadow: "0 8px 24px rgba(37,99,235,0.3)", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
           <LogIn size={32} /><div style={{ fontSize: "1.1rem", fontWeight: 800 }}>ลงเวลาเข้างาน</div>
+          <div style={{ fontSize: "0.75rem", opacity: 0.9 }}>เวลาทำงาน: {settings?.work_start?.slice(0,5)} น.</div>
         </button>
         <button onClick={() => setShowOut(true)} style={{ background: "linear-gradient(135deg, #f59e0b, #d97706)", border: "none", borderRadius: "1rem", padding: "1.5rem", color: "#fff", cursor: "pointer", fontFamily: "inherit", boxShadow: "0 8px 24px rgba(245,158,11,0.3)", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
           <LogOut size={32} /><div style={{ fontSize: "1.1rem", fontWeight: 800 }}>ลงเวลากลับบ้าน</div>
+          <div style={{ fontSize: "0.75rem", opacity: 0.9 }}>เวลาเลิก: {settings?.work_end?.slice(0,5)} น.</div>
         </button>
       </div>
 
@@ -608,7 +642,7 @@ function AttendancePage({ employees, activityLog, currentUser, onRefresh }) {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
             <thead>
               <tr style={{ borderBottom: "2px solid #f1f5f9" }}>
-                {["พนักงาน", "แผนก", "วันที่", "เข้างาน", "กลับบ้าน", "รวม"].map(h => (
+                {["พนักงาน", "วันที่", "เข้างาน", "กลับบ้าน", "รวม", "สถานะ"].map(h => (
                   <th key={h} style={{ padding: "0.5rem 0.75rem", textAlign: "left", color: "#94a3b8", fontWeight: 600, fontSize: "0.75rem", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
@@ -618,6 +652,8 @@ function AttendancePage({ employees, activityLog, currentUser, onRefresh }) {
                 <tr><td colSpan={6} style={{ padding: "2rem", textAlign: "center", color: "#94a3b8" }}>ไม่มีข้อมูล</td></tr>
               ) : filtered.map((row, i) => {
                 const hours = row.check_out ? ((new Date(row.check_out) - new Date(row.check_in)) / 3600000).toFixed(1) : null;
+                const lateInfo = checkLate(row.check_in, settings?.work_start, settings?.late_grace_minutes);
+                const earlyInfo = row.check_out ? checkEarly(row.check_out, settings?.work_end) : null;
                 return (
                   <tr key={row.id} style={{ borderBottom: "1px solid #f8fafc", background: i % 2 === 0 ? "#fff" : "#fafafa" }}>
                     <td style={{ padding: "0.65rem 0.75rem" }}>
@@ -626,13 +662,25 @@ function AttendancePage({ employees, activityLog, currentUser, onRefresh }) {
                         <span style={{ fontWeight: 600, color: "#0f172a" }}>{row.employees?.name || "-"}</span>
                       </div>
                     </td>
-                    <td style={{ padding: "0.65rem 0.75rem", color: "#64748b" }}>{row.employees?.department || "-"}</td>
                     <td style={{ padding: "0.65rem 0.75rem", color: "#475569" }}>{fmtDate(row.check_in)}</td>
                     <td style={{ padding: "0.65rem 0.75rem" }}><span style={{ background: "#dcfce7", color: "#16a34a", fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>{fmtTime(row.check_in)}</span></td>
                     <td style={{ padding: "0.65rem 0.75rem" }}>
                       {row.check_out ? <span style={{ background: "#fef3c7", color: "#d97706", fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>{fmtTime(row.check_out)}</span> : <span style={{ color: "#94a3b8", fontSize: "0.78rem" }}>ยังไม่กลับ</span>}
                     </td>
                     <td style={{ padding: "0.65rem 0.75rem", color: "#475569", fontWeight: 600 }}>{hours ? `${hours} ชม.` : "-"}</td>
+                    <td style={{ padding: "0.65rem 0.75rem" }}>
+                      <div style={{ display: "flex", gap: "0.25rem", flexWrap: "wrap" }}>
+                        {lateInfo?.late && (
+                          <span style={{ background: "#fef2f2", color: "#dc2626", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>⚠️ สาย {lateInfo.minutes} น.</span>
+                        )}
+                        {!lateInfo?.late && lateInfo && (
+                          <span style={{ background: "#dcfce7", color: "#16a34a", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>✓ ตรงเวลา</span>
+                        )}
+                        {earlyInfo?.early && (
+                          <span style={{ background: "#fef2f2", color: "#dc2626", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>🚪 กลับก่อน {earlyInfo.minutes} น.</span>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
@@ -641,8 +689,8 @@ function AttendancePage({ employees, activityLog, currentUser, onRefresh }) {
         </div>
       </Card>
 
-      {showIn && <AttendanceModal mode="in" onClose={() => setShowIn(false)} onCheckin={() => { setShowIn(false); onRefresh(); }} employees={employees} currentUser={currentUser} />}
-      {showOut && <AttendanceModal mode="out" onClose={() => setShowOut(false)} onCheckin={() => { setShowOut(false); onRefresh(); }} employees={employees} currentUser={currentUser} />}
+      {showIn && <AttendanceModal mode="in" onClose={() => setShowIn(false)} onCheckin={() => { setShowIn(false); onRefresh(); }} employees={employees} currentUser={currentUser} settings={settings} />}
+      {showOut && <AttendanceModal mode="out" onClose={() => setShowOut(false)} onCheckin={() => { setShowOut(false); onRefresh(); }} employees={employees} currentUser={currentUser} settings={settings} />}
     </div>
   );
 }
@@ -849,8 +897,59 @@ function ReportPage({ employees, attendance, leaves, outings }) {
   );
 }
 
+function SettingsPage({ settings, onRefresh }) {
+  const [form, setForm] = useState({
+    work_start: settings?.work_start?.slice(0, 5) || "08:00",
+    work_end: settings?.work_end?.slice(0, 5) || "16:30",
+    late_grace_minutes: settings?.late_grace_minutes || 0,
+  });
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    const { error } = await supabase.from("settings").update({ ...form, updated_at: new Date().toISOString() }).eq("id", 1);
+    setSaving(false);
+    if (!error) {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+      onRefresh();
+    }
+  };
+
+  return (
+    <div>
+      <PageHeader title="ตั้งค่าเวลาทำงาน" />
+      <Card>
+        <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem", maxWidth: 500 }}>
+          <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "10px", padding: "0.75rem", fontSize: "0.85rem", color: "#1d4ed8" }}>
+            ⏰ ระบบจะคำนวณ "มาสาย" และ "กลับก่อน" ตามเวลาที่ตั้งนี้
+          </div>
+
+          <Field label="เวลาเข้างาน">
+            <input type="time" value={form.work_start} onChange={e => setForm(f => ({ ...f, work_start: e.target.value }))} style={inputStyle} />
+          </Field>
+
+          <Field label="เวลาเลิกงาน">
+            <input type="time" value={form.work_end} onChange={e => setForm(f => ({ ...f, work_end: e.target.value }))} style={inputStyle} />
+          </Field>
+
+          <Field label="ผ่อนผันการมาสาย (นาที)">
+            <input type="number" min="0" max="60" value={form.late_grace_minutes} onChange={e => setForm(f => ({ ...f, late_grace_minutes: parseInt(e.target.value) || 0 }))} style={inputStyle} />
+            <div style={{ fontSize: "0.72rem", color: "#94a3b8", marginTop: "0.25rem" }}>เช่น 5 นาที = มาสายไม่เกิน 5 นาทียังถือว่าตรงเวลา</div>
+          </Field>
+
+          <button onClick={handleSave} disabled={saving} style={{ padding: "0.85rem", borderRadius: "10px", border: "none", background: saved ? "#16a34a" : "linear-gradient(135deg, #2563eb, #1d4ed8)", color: "#fff", fontWeight: 700, fontSize: "0.95rem", cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}>
+            {saving ? <RefreshCw size={18} style={{ animation: "spin 1s linear infinite" }} /> : saved ? <CheckCircle size={18} /> : <Save size={18} />}
+            {saving ? "กำลังบันทึก..." : saved ? "บันทึกแล้ว!" : "บันทึกการตั้งค่า"}
+          </button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 function StatCard({ stat }) {
-  const Icon = stat.icon;
   return (
     <div style={{ background: "#fff", borderRadius: "1rem", padding: "1.25rem", boxShadow: "0 2px 12px rgba(0,0,0,0.06)", border: "1px solid #f1f5f9" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -875,6 +974,7 @@ export default function HRApp() {
   const [employees, setEmployees] = useState([]);
   const [leaves, setLeaves] = useState([]);
   const [outings, setOutings] = useState([]);
+  const [settings, setSettings] = useState({ work_start: "08:00", work_end: "16:30", late_grace_minutes: 0 });
   const [currentTime, setCurrentTime] = useState(new Date());
   const [loading, setLoading] = useState(true);
 
@@ -898,6 +998,10 @@ export default function HRApp() {
     if (lvs) setLeaves(lvs);
     const { data: outs } = await supabase.from("outings").select("*, employees(name, department)").order("out_time", { ascending: false });
     if (outs) setOutings(outs);
+
+    const { data: stg } = await supabase.from("settings").select("*").eq("id", 1).single();
+    if (stg) setSettings(stg);
+
     setLoading(false);
   }
 
@@ -917,14 +1021,32 @@ export default function HRApp() {
   const stats = currentUser.role === "admin" ? [
     { label: "พนักงานทั้งหมด", value: employees.length, icon: Users, color: "#2563eb", bg: "#eff6ff", trend: "ข้อมูลจริง" },
     { label: "ลงเวลาวันนี้", value: todayAttendance.length, icon: CheckCircle, color: "#059669", bg: "#ecfdf5", trend: `${employees.length > 0 ? Math.round(todayAttendance.length / employees.length * 100) : 0}%` },
-    { label: "ออกนอกสถานที่", value: currentlyOut, icon: ArrowRightLeft, color: "#d97706", bg: "#fef3c7", trend: "ขณะนี้" },
-    { label: "รออนุมัติลา", value: pendingLeaves, icon: AlertCircle, color: "#dc2626", bg: "#fef2f2", trend: pendingLeaves > 0 ? "ต้องดำเนินการ" : "ไม่มี" },
-  ] : [
-    { label: "วันนี้", value: myAttToday ? "✓ เข้างานแล้ว" : "—", icon: CheckCircle, color: myAttToday ? "#059669" : "#94a3b8", bg: myAttToday ? "#ecfdf5" : "#f8fafc", trend: myAttToday ? fmtTime(myAttToday.check_in) : "ยังไม่ลงเวลา" },
-    { label: "การลาของฉัน", value: leaves.filter(l => l.employee_id === currentUser.id).length, icon: Umbrella, color: "#7c3aed", bg: "#f5f3ff", trend: "รวม" },
-    { label: "รออนุมัติ", value: leaves.filter(l => l.employee_id === currentUser.id && l.status === "pending").length, icon: AlertCircle, color: "#d97706", bg: "#fef3c7", trend: "รอ" },
-    { label: "ออกนอกสถานที่", value: outings.filter(o => o.employee_id === currentUser.id).length, icon: ArrowRightLeft, color: "#dc2626", bg: "#fef2f2", trend: "รวม" },
-  ];
+    { label: "มาสายวันนี้", value: todayAttendance.filter(a => checkLate(a.check_in, settings?.work_start, settings?.late_grace_minutes)?.late).length, icon: AlertCircle, color: "#dc2626", bg: "#fef2f2", trend: "นับเฉพาะวันนี้" },
+    { label: "รออนุมัติลา", value: pendingLeaves, icon: Umbrella, color: "#d97706", bg: "#fef3c7", trend: pendingLeaves > 0 ? "ต้องดำเนินการ" : "ไม่มี" },
+  ] : (() => {
+    const myLateInfo = myAttToday ? checkLate(myAttToday.check_in, settings?.work_start, settings?.late_grace_minutes) : null;
+    const myEarlyInfo = myAttToday?.check_out ? checkEarly(myAttToday.check_out, settings?.work_end) : null;
+    return [
+      {
+        label: "วันนี้",
+        value: myAttToday ? (myLateInfo?.late ? `⚠️ สาย ${myLateInfo.minutes} น.` : "✓ ตรงเวลา") : "—",
+        icon: myLateInfo?.late ? AlertCircle : CheckCircle,
+        color: myLateInfo?.late ? "#dc2626" : (myAttToday ? "#059669" : "#94a3b8"),
+        bg: myLateInfo?.late ? "#fef2f2" : (myAttToday ? "#ecfdf5" : "#f8fafc"),
+        trend: myAttToday ? fmtTime(myAttToday.check_in) : "ยังไม่ลงเวลา"
+      },
+      {
+        label: "การกลับ",
+        value: myAttToday?.check_out ? (myEarlyInfo?.early ? `🚪 ก่อน ${myEarlyInfo.minutes} น.` : "✓ ตรงเวลา") : "—",
+        icon: myEarlyInfo?.early ? AlertCircle : CheckCircle,
+        color: myEarlyInfo?.early ? "#dc2626" : (myAttToday?.check_out ? "#059669" : "#94a3b8"),
+        bg: myEarlyInfo?.early ? "#fef2f2" : (myAttToday?.check_out ? "#ecfdf5" : "#f8fafc"),
+        trend: myAttToday?.check_out ? fmtTime(myAttToday.check_out) : "ยังไม่กลับ"
+      },
+      { label: "การลาของฉัน", value: leaves.filter(l => l.employee_id === currentUser.id).length, icon: Umbrella, color: "#7c3aed", bg: "#f5f3ff", trend: "รวม" },
+      { label: "รออนุมัติ", value: leaves.filter(l => l.employee_id === currentUser.id && l.status === "pending").length, icon: AlertCircle, color: "#d97706", bg: "#fef3c7", trend: "รอ" },
+    ];
+  })();
 
   const openCheckIn = () => { setAttMode("in"); setShowAttendance(true); };
   const openCheckOut = () => { setAttMode("out"); setShowAttendance(true); };
@@ -1040,10 +1162,11 @@ export default function HRApp() {
                 </>
               )}
               {activePage === "employee" && <EmployeePage employees={employees} onRefresh={fetchData} />}
-              {activePage === "attendance" && <AttendancePage employees={employees} activityLog={activityLog} currentUser={currentUser} onRefresh={fetchData} />}
+              {activePage === "attendance" && <AttendancePage employees={employees} activityLog={activityLog} currentUser={currentUser} settings={settings} onRefresh={fetchData} />}
               {activePage === "leave" && <LeavePage employees={employees} leaves={leaves} currentUser={currentUser} onRefresh={fetchData} />}
               {activePage === "outing" && <OutingPage employees={employees} outings={outings} currentUser={currentUser} onRefresh={fetchData} />}
               {activePage === "report" && <ReportPage employees={employees} attendance={activityLog} leaves={leaves} outings={outings} />}
+              {activePage === "settings" && <SettingsPage settings={settings} onRefresh={fetchData} />}
             </>
           )}
         </main>

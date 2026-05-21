@@ -271,7 +271,7 @@ function EmployeeModal({ employee, onClose, onSave }) {
 // ─── LEAVE MODAL ──────────────────────────────────────────────────────────────
 function LeaveModal({ employees, currentUser, onClose, onSave }) {
   const [form, setForm] = useState({
-    employee_id: currentUser?.role === "admin" ? "" : currentUser?.id || "",
+    employee_id: currentUser?.id || "",
     leave_type: "ลาป่วย", duration_type: "เต็มวัน",
     start_date: todayISO(), end_date: todayISO(),
     start_time: "08:30", end_time: "16:30", hours: 8, reason: ""
@@ -306,18 +306,9 @@ function LeaveModal({ employees, currentUser, onClose, onSave }) {
     <Modal title="ขอลา" onClose={onClose} icon={Umbrella} color="#059669">
       <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
         {error && <ErrorBox>{error}</ErrorBox>}
-        {currentUser?.role === "admin" ? (
-          <Field label="พนักงาน *">
-            <select value={form.employee_id} onChange={e => setForm(f => ({ ...f, employee_id: e.target.value }))} style={selectStyle}>
-              <option value="">-- เลือกพนักงาน --</option>
-              {employees.map(e => <option key={e.id} value={e.id}>{e.name} — {e.department}</option>)}
-            </select>
-          </Field>
-        ) : (
-          <Field label="พนักงาน">
-            <div style={{ ...inputStyle, background: "#f8fafc", color: "#475569" }}>{currentUser?.name}</div>
-          </Field>
-        )}
+        <div style={{ ...inputStyle, background: "#eff6ff", color: "#1d4ed8", textAlign: "center", fontWeight: 700, border: "1.5px solid #bfdbfe" }}>
+          👤 {currentUser?.name}
+        </div>
         <Field label="ประเภทการลา">
           <select value={form.leave_type} onChange={e => setForm(f => ({ ...f, leave_type: e.target.value }))} style={selectStyle}>
             <option>ลาป่วย</option><option>ลากิจ</option><option>ลาพักร้อน</option><option>ลาคลอด</option><option>ลาบวช</option>
@@ -366,7 +357,7 @@ function LeaveModal({ employees, currentUser, onClose, onSave }) {
 // ─── OUTING MODAL ─────────────────────────────────────────────────────────────
 function OutingModal({ employees, currentUser, onClose, onSave }) {
   const [form, setForm] = useState({
-    employee_id: currentUser?.role === "admin" ? "" : currentUser?.id || "",
+    employee_id: currentUser?.id || "",
     destination: "", reason: ""
   });
   const [saving, setSaving] = useState(false);
@@ -386,18 +377,9 @@ function OutingModal({ employees, currentUser, onClose, onSave }) {
     <Modal title="ขอออกนอกสถานที่" onClose={onClose} icon={ArrowRightLeft} color="#d97706">
       <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
         {error && <ErrorBox>{error}</ErrorBox>}
-        {currentUser?.role === "admin" ? (
-          <Field label="พนักงาน *">
-            <select value={form.employee_id} onChange={e => setForm(f => ({ ...f, employee_id: e.target.value }))} style={selectStyle}>
-              <option value="">-- เลือกพนักงาน --</option>
-              {employees.map(e => <option key={e.id} value={e.id}>{e.name} — {e.department}</option>)}
-            </select>
-          </Field>
-        ) : (
-          <Field label="พนักงาน">
-            <div style={{ ...inputStyle, background: "#f8fafc", color: "#475569" }}>{currentUser?.name}</div>
-          </Field>
-        )}
+        <div style={{ ...inputStyle, background: "#eff6ff", color: "#1d4ed8", textAlign: "center", fontWeight: 700, border: "1.5px solid #bfdbfe" }}>
+          👤 {currentUser?.name}
+        </div>
         <Field label="สถานที่ปลายทาง">
           <InputWithIcon icon={MapPin} value={form.destination} onChange={v => setForm(f => ({ ...f, destination: v }))} placeholder="เช่น ธนาคาร, ไปประชุม" />
         </Field>

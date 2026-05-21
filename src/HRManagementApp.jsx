@@ -950,6 +950,7 @@ function SettingsPage({ settings, onRefresh }) {
 }
 
 function StatCard({ stat }) {
+  const Icon = stat.icon;
   return (
     <div style={{ background: "#fff", borderRadius: "1rem", padding: "1.25rem", boxShadow: "0 2px 12px rgba(0,0,0,0.06)", border: "1px solid #f1f5f9" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>

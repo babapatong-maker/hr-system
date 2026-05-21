@@ -754,8 +754,8 @@ function AttendancePage({ employees, activityLog, currentUser, settings, onRefre
         </div>
       </Card>
 
-      {showIn && <AttendanceModal mode="in" onClose={() => setShowIn(false)} onCheckin={() => { setShowIn(false); onRefresh(); }} employees={employees} currentUser={currentUser} settings={settings} />}
-      {showOut && <AttendanceModal mode="out" onClose={() => setShowOut(false)} onCheckin={() => { setShowOut(false); onRefresh(); }} employees={employees} currentUser={currentUser} settings={settings} />}
+      {showIn && <AttendanceModal mode="in" onClose={() => { setShowIn(false); onRefresh(); }} onCheckin={() => onRefresh()} employees={employees} currentUser={currentUser} settings={settings} />}
+      {showOut && <AttendanceModal mode="out" onClose={() => { setShowOut(false); onRefresh(); }} onCheckin={() => onRefresh()} employees={employees} currentUser={currentUser} settings={settings} />}
     </div>
   );
 }
@@ -1238,7 +1238,7 @@ export default function HRApp() {
         </main>
       </div>
 
-      {showAttendance && <AttendanceModal mode={attMode} onClose={() => setShowAttendance(false)} onCheckin={() => { setShowAttendance(false); fetchData(); }} employees={employees} currentUser={currentUser} />}
+      {showAttendance && <AttendanceModal mode={attMode} onClose={() => { setShowAttendance(false); fetchData(); }} onCheckin={() => fetchData()} employees={employees} currentUser={currentUser} settings={settings} />}
     </div>
   );
 }

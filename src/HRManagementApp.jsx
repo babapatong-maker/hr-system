@@ -425,7 +425,8 @@ function OutingModal({ employees, currentUser, onClose, onSave }) {
 }
 
 // ─── ATTENDANCE MODAL ─────────────────────────────────────────────────────────
-function AttendanceModal({ onClose, onCheckin, employees, currentUser, mode = "in" }) {
+function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings, mode = "in" }) {
+  const [myStats, setMyStats] = useState({ late: 0, early: 0, leaves: 0, outings: 0 });
   const [gpsState, setGpsState] = useState("idle");
   const [coords, setCoords] = useState(null);
   const [distance, setDistance] = useState(null);
@@ -433,6 +434,33 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, mode = "i
   const [doneTime, setDoneTime] = useState(null);
   const [selectedEmp, setSelectedEmp] = useState(currentUser?.id || "");
   const [openAttendance, setOpenAttendance] = useState(null);
+
+  useEffect(() => {
+    // ดึงสถิติของพนักงานคนนี้ (เดือนปัจจุบัน)
+    if (!currentUser?.id) return;
+    (async () => {
+      const monthStart = new Date();
+      monthStart.setDate(1);
+      monthStart.setHours(0, 0, 0, 0);
+      const monthStartISO = monthStart.toISOString();
+
+      const { data: atts } = await supabase.from("attendance").select("*").eq("employee_id", currentUser.id).gte("check_in", monthStartISO);
+      const { data: lvs } = await supabase.from("leaves").select("*").eq("employee_id", currentUser.id).gte("start_date", monthStart.toISOString().split("T")[0]);
+      const { data: outs } = await supabase.from("outings").select("*").eq("employee_id", currentUser.id).gte("out_time", monthStartISO);
+
+      let late = 0, early = 0;
+      (atts || []).forEach(a => {
+        const l = checkLate(a.check_in, settings?.work_start, settings?.late_grace_minutes);
+        if (l?.late) late++;
+        if (a.check_out) {
+          const e = checkEarly(a.check_out, settings?.work_end);
+          if (e?.early) early++;
+        }
+      });
+
+      setMyStats({ late, early, leaves: (lvs || []).length, outings: (outs || []).length });
+    })();
+  }, [currentUser, settings]);
 
   useEffect(() => {
     if (mode === "out" && selectedEmp) {
@@ -528,11 +556,48 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, mode = "i
       )}
 
       {done && (
-        <div style={{ background: "#f0fdf4", border: "1.5px solid #86efac", borderRadius: "12px", padding: "1rem", marginBottom: "1.25rem", textAlign: "center" }}>
-          <CheckCircle size={32} color="#16a34a" style={{ margin: "0 auto 0.5rem" }} />
-          <div style={{ fontWeight: 700, color: "#15803d" }}>บันทึกสำเร็จ!</div>
-          <div style={{ color: "#166534", fontSize: "0.85rem" }}>เวลา {doneTime} น.</div>
-        </div>
+        <>
+          <div style={{ background: "#f0fdf4", border: "1.5px solid #86efac", borderRadius: "12px", padding: "1rem", marginBottom: "0.75rem", textAlign: "center" }}>
+            <CheckCircle size={32} color="#16a34a" style={{ margin: "0 auto 0.5rem" }} />
+            <div style={{ fontWeight: 700, color: "#15803d" }}>บันทึกสำเร็จ!</div>
+            <div style={{ color: "#166534", fontSize: "0.85rem" }}>เวลา {doneTime} น.</div>
+            {mode === "in" && (() => {
+              const li = checkLate(new Date().toISOString(), settings?.work_start, settings?.late_grace_minutes);
+              return li?.late
+                ? <div style={{ marginTop: "0.5rem", background: "#fef2f2", border: "1px solid #fca5a5", color: "#dc2626", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>⚠️ มาสาย {li.minutes} นาที</div>
+                : <div style={{ marginTop: "0.5rem", color: "#16a34a", fontSize: "0.8rem", fontWeight: 600 }}>✓ มาตรงเวลา</div>;
+            })()}
+            {mode === "out" && (() => {
+              const ei = checkEarly(new Date().toISOString(), settings?.work_end);
+              return ei?.early
+                ? <div style={{ marginTop: "0.5rem", background: "#fef2f2", border: "1px solid #fca5a5", color: "#dc2626", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>🚪 กลับก่อนเวลา {ei.minutes} นาที</div>
+                : <div style={{ marginTop: "0.5rem", color: "#16a34a", fontSize: "0.8rem", fontWeight: 600 }}>✓ กลับตามเวลา</div>;
+            })()}
+          </div>
+
+          {/* สรุปสถิติเดือนนี้ */}
+          <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.75rem", marginBottom: "1.25rem" }}>
+            <div style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: 600, marginBottom: "0.5rem", textAlign: "center" }}>📊 สถิติเดือนนี้</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.4rem" }}>
+              <div style={{ background: "#fef2f2", borderRadius: "8px", padding: "0.4rem", textAlign: "center" }}>
+                <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#dc2626" }}>{myStats.late}</div>
+                <div style={{ fontSize: "0.65rem", color: "#dc2626", fontWeight: 600 }}>มาสาย</div>
+              </div>
+              <div style={{ background: "#fef3c7", borderRadius: "8px", padding: "0.4rem", textAlign: "center" }}>
+                <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#d97706" }}>{myStats.early}</div>
+                <div style={{ fontSize: "0.65rem", color: "#d97706", fontWeight: 600 }}>กลับก่อน</div>
+              </div>
+              <div style={{ background: "#f5f3ff", borderRadius: "8px", padding: "0.4rem", textAlign: "center" }}>
+                <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#7c3aed" }}>{myStats.leaves}</div>
+                <div style={{ fontSize: "0.65rem", color: "#7c3aed", fontWeight: 600 }}>ลา</div>
+              </div>
+              <div style={{ background: "#eff6ff", borderRadius: "8px", padding: "0.4rem", textAlign: "center" }}>
+                <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#2563eb" }}>{myStats.outings}</div>
+                <div style={{ fontSize: "0.65rem", color: "#2563eb", fontWeight: 600 }}>ออกนอก</div>
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       <div style={{ display: "flex", gap: "0.75rem" }}>

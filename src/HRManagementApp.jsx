@@ -607,6 +607,8 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
   const [distance, setDistance] = useState(null);
   const [done, setDone] = useState(false);
   const [doneTime, setDoneTime] = useState(null);
+  const [doneQuote, setDoneQuote] = useState("");
+  const [doneStatus, setDoneStatus] = useState(null); // {late|early|onTime|leaveEarly|stayLate|onTimeLeave, minutes}
   const [selectedEmp, setSelectedEmp] = useState(currentUser?.id || "");
   const [openAttendance, setOpenAttendance] = useState(null);
 
@@ -685,7 +687,24 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
   };
 
   const finish = () => {
-    setDoneTime(new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Bangkok" }));
+    const now = new Date();
+    setDoneTime(now.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Bangkok" }));
+
+    // คำนวณสถานะครั้งเดียว
+    let quoteType, info;
+    if (mode === "in") {
+      info = checkLate(now.toISOString(), settings?.work_start, settings?.late_grace_minutes);
+      if (info?.late) quoteType = "late";
+      else if (info?.early) quoteType = "early";
+      else quoteType = "onTime";
+    } else {
+      info = checkEarly(now.toISOString(), settings?.work_end);
+      if (info?.early) quoteType = "leaveEarly";
+      else if (info?.late) quoteType = "stayLate";
+      else quoteType = "onTimeLeave";
+    }
+    setDoneStatus({ type: quoteType, minutes: info?.minutes || 0 });
+    setDoneQuote(randomQuote(quoteType));
     setDone(true);
     onCheckin && onCheckin();
   };
@@ -736,32 +755,30 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
             <CheckCircle size={32} color="#16a34a" style={{ margin: "0 auto 0.5rem" }} />
             <div style={{ fontWeight: 700, color: "#15803d" }}>บันทึกสำเร็จ!</div>
             <div style={{ color: "#166534", fontSize: "0.85rem" }}>เวลา {doneTime} น.</div>
-            {mode === "in" && (() => {
-              const li = checkLate(new Date().toISOString(), settings?.work_start, settings?.late_grace_minutes);
-              let badge, quoteType;
-              if (li?.late) { badge = <div style={{ marginTop: "0.5rem", background: "#fef2f2", border: "1px solid #fca5a5", color: "#dc2626", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>⚠️ มาสาย {formatMinutes(li.minutes)}</div>; quoteType = "late"; }
-              else if (li?.early) { badge = <div style={{ marginTop: "0.5rem", background: "#eff6ff", border: "1px solid #93c5fd", color: "#2563eb", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>⏰ เข้าก่อนเวลา {formatMinutes(li.minutes)}</div>; quoteType = "early"; }
-              else { badge = <div style={{ marginTop: "0.5rem", color: "#16a34a", fontSize: "0.8rem", fontWeight: 600 }}>✓ มาตรงเวลา</div>; quoteType = "onTime"; }
+            {mode === "in" && doneStatus && (() => {
+              let badge;
+              if (doneStatus.type === "late") badge = <div style={{ marginTop: "0.5rem", background: "#fef2f2", border: "1px solid #fca5a5", color: "#dc2626", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>⚠️ มาสาย {formatMinutes(doneStatus.minutes)}</div>;
+              else if (doneStatus.type === "early") badge = <div style={{ marginTop: "0.5rem", background: "#eff6ff", border: "1px solid #93c5fd", color: "#2563eb", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>⏰ เข้าก่อนเวลา {formatMinutes(doneStatus.minutes)}</div>;
+              else badge = <div style={{ marginTop: "0.5rem", color: "#16a34a", fontSize: "0.8rem", fontWeight: 600 }}>✓ มาตรงเวลา</div>;
               return (
                 <>
                   {badge}
                   <div style={{ marginTop: "0.5rem", fontSize: "0.85rem", color: "#475569", fontStyle: "italic", textAlign: "center", padding: "0.5rem", background: "#f8fafc", borderRadius: "8px" }}>
-                    💬 {randomQuote(quoteType)}
+                    💬 {doneQuote}
                   </div>
                 </>
               );
             })()}
-            {mode === "out" && (() => {
-              const ei = checkEarly(new Date().toISOString(), settings?.work_end);
-              let badge, quoteType;
-              if (ei?.early) { badge = <div style={{ marginTop: "0.5rem", background: "#fef2f2", border: "1px solid #fca5a5", color: "#dc2626", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>🚪 กลับก่อนเวลา {formatMinutes(ei.minutes)}</div>; quoteType = "leaveEarly"; }
-              else if (ei?.late) { badge = <div style={{ marginTop: "0.5rem", background: "#dcfce7", border: "1px solid #86efac", color: "#16a34a", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>✓ กลับช้ากว่าเวลา {formatMinutes(ei.minutes)}</div>; quoteType = "stayLate"; }
-              else { badge = <div style={{ marginTop: "0.5rem", color: "#16a34a", fontSize: "0.8rem", fontWeight: 600 }}>✓ กลับตรงเวลา</div>; quoteType = "onTimeLeave"; }
+            {mode === "out" && doneStatus && (() => {
+              let badge;
+              if (doneStatus.type === "leaveEarly") badge = <div style={{ marginTop: "0.5rem", background: "#fef2f2", border: "1px solid #fca5a5", color: "#dc2626", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>🚪 กลับก่อนเวลา {formatMinutes(doneStatus.minutes)}</div>;
+              else if (doneStatus.type === "stayLate") badge = <div style={{ marginTop: "0.5rem", background: "#dcfce7", border: "1px solid #86efac", color: "#16a34a", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>✓ กลับช้ากว่าเวลา {formatMinutes(doneStatus.minutes)}</div>;
+              else badge = <div style={{ marginTop: "0.5rem", color: "#16a34a", fontSize: "0.8rem", fontWeight: 600 }}>✓ กลับตรงเวลา</div>;
               return (
                 <>
                   {badge}
                   <div style={{ marginTop: "0.5rem", fontSize: "0.85rem", color: "#475569", fontStyle: "italic", textAlign: "center", padding: "0.5rem", background: "#f8fafc", borderRadius: "8px" }}>
-                    💬 {randomQuote(quoteType)}
+                    💬 {doneQuote}
                   </div>
                 </>
               );

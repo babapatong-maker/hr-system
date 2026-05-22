@@ -1133,9 +1133,10 @@ function OutingPage({ employees, outings, currentUser, onRefresh }) {
   );
 }
 
-function ReportPage({ employees, attendance, leaves, outings }) {
+function ReportPage({ employees, attendance, leaves, outings, settings }) {
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [empFilter, setEmpFilter] = useState("");
+  const [reportType, setReportType] = useState("summary"); // summary | attendance | late | leave | outing
 
   const monthStart = new Date(month + "-01");
   const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
@@ -1144,19 +1145,80 @@ function ReportPage({ employees, attendance, leaves, outings }) {
   const inMonth = (dateStr) => { if (!dateStr) return false; const d = new Date(dateStr); return d.getMonth() === monthStart.getMonth() && d.getFullYear() === monthStart.getFullYear(); };
   const empList = empFilter ? employees.filter(e => e.id === empFilter) : employees;
 
-  const rows = empList.map(emp => {
+  const summaryRows = empList.map(emp => {
     const attDays = attendance.filter(a => a.employee_id === emp.id && inMonth(a.check_in));
+    const lateCount = attDays.filter(a => checkLate(a.check_in, settings?.work_start)?.late).length;
+    const earlyArrival = attDays.filter(a => checkLate(a.check_in, settings?.work_start)?.early).length;
+    const earlyDeparture = attDays.filter(a => a.check_out && checkEarly(a.check_out, settings?.work_end)?.early).length;
+    const overtime = attDays.filter(a => a.check_out && checkEarly(a.check_out, settings?.work_end)?.late).length;
     const leaveHours = leaves.filter(l => l.employee_id === emp.id && l.status === "approved" && inMonth(l.start_date)).reduce((s, l) => s + (l.hours || 8), 0);
     const outingCount = outings.filter(o => o.employee_id === emp.id && inMonth(o.out_time)).length;
     const totalHours = attDays.reduce((s, a) => s + (a.check_out ? (new Date(a.check_out) - new Date(a.check_in)) / 3600000 : 0), 0);
     const attended = attDays.length;
     const absent = Math.max(0, workDays - attended - leaveHours / 8);
-    return { emp, attended, absent: absent.toFixed(1), leaveHours, leaveDays: (leaveHours / 8).toFixed(1), outingCount, totalHours: totalHours.toFixed(1) };
+    return { emp, attended, absent: absent.toFixed(1), lateCount, earlyArrival, earlyDeparture, overtime, leaveHours, leaveDays: (leaveHours / 8).toFixed(1), outingCount, totalHours: totalHours.toFixed(1) };
   });
+
+  const exportCSV = () => {
+    let csv = "";
+    if (reportType === "summary") {
+      csv = "พนักงาน,แผนก,มาทำงาน(วัน),มาสาย(ครั้ง),เข้าก่อน(ครั้ง),กลับก่อน(ครั้ง),OT(ครั้ง),ลา(ชม.),ลา(วัน),ขาด,ออกนอก(ครั้ง),รวม(ชม.)\n";
+      summaryRows.forEach(r => {
+        csv += `${r.emp.name},${r.emp.department || ""},${r.attended},${r.lateCount},${r.earlyArrival},${r.earlyDeparture},${r.overtime},${r.leaveHours},${r.leaveDays},${r.absent},${r.outingCount},${r.totalHours}\n`;
+      });
+    } else if (reportType === "attendance") {
+      csv = "พนักงาน,วันที่,เข้างาน,กลับบ้าน,รวม(ชม.),สถานะเข้า,สถานะกลับ\n";
+      attendance.filter(a => inMonth(a.check_in) && (!empFilter || a.employee_id === empFilter)).forEach(a => {
+        const li = checkLate(a.check_in, settings?.work_start);
+        const ei = a.check_out ? checkEarly(a.check_out, settings?.work_end) : null;
+        const hours = a.check_out ? ((new Date(a.check_out) - new Date(a.check_in)) / 3600000).toFixed(1) : "-";
+        csv += `${a.employees?.name || "-"},${fmtDate(a.check_in)},${fmtTime(a.check_in)},${a.check_out ? fmtTime(a.check_out) : "-"},${hours},${li?.late ? "สาย " + li.minutes + " น." : li?.early ? "เข้าก่อน " + li.minutes + " น." : "ตรงเวลา"},${ei ? (ei.early ? "ก่อน " + ei.minutes + " น." : ei.late ? "ช้า " + ei.minutes + " น." : "ตรงเวลา") : "-"}\n`;
+      });
+    } else if (reportType === "late") {
+      csv = "พนักงาน,วันที่,เวลาเข้า,สาย(นาที)\n";
+      attendance.filter(a => inMonth(a.check_in) && (!empFilter || a.employee_id === empFilter)).forEach(a => {
+        const li = checkLate(a.check_in, settings?.work_start);
+        if (li?.late) csv += `${a.employees?.name || "-"},${fmtDate(a.check_in)},${fmtTime(a.check_in)},${li.minutes}\n`;
+      });
+    } else if (reportType === "leave") {
+      csv = "พนักงาน,ประเภท,ระยะเวลา,วันที่เริ่ม,ถึง,ชั่วโมง,เหตุผล,สถานะ\n";
+      leaves.filter(l => inMonth(l.start_date) && (!empFilter || l.employee_id === empFilter)).forEach(l => {
+        csv += `${l.employees?.name || "-"},${l.leave_type},${l.duration_type},${fmtDate(l.start_date)},${fmtDate(l.end_date)},${l.hours || 8},"${(l.reason || "").replace(/"/g, '""')}",${l.status}\n`;
+      });
+    } else if (reportType === "outing") {
+      csv = "พนักงาน,วันที่,เวลาออก,เวลากลับ,ปลายทาง,เหตุผล,สถานะ\n";
+      outings.filter(o => inMonth(o.out_time) && (!empFilter || o.employee_id === empFilter)).forEach(o => {
+        csv += `${o.employees?.name || "-"},${fmtDate(o.out_time)},${fmtTime(o.out_time)},${o.return_time ? fmtTime(o.return_time) : "-"},${o.destination || "-"},"${(o.reason || "").replace(/"/g, '""')}",${o.status}\n`;
+      });
+    }
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `รายงาน_${reportType}_${month}.csv`;
+    a.click();
+  };
+
+  const reportTabs = [
+    { key: "summary", label: "สรุปภาพรวม", icon: BarChart3, color: "#2563eb" },
+    { key: "attendance", label: "การเข้า-ออก", icon: Clock, color: "#059669" },
+    { key: "late", label: "มาสาย", icon: AlertCircle, color: "#dc2626" },
+    { key: "leave", label: "การลา", icon: Umbrella, color: "#7c3aed" },
+    { key: "outing", label: "ออกนอก รร.", icon: ArrowRightLeft, color: "#d97706" },
+  ];
 
   return (
     <div>
-      <PageHeader title="รายงานการเข้างาน" />
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.75rem" }}>
+        <div>
+          <h1 style={{ fontSize: "1.4rem", fontWeight: 800, color: "#0f172a" }}>รายงาน</h1>
+          <p style={{ color: "#64748b", fontSize: "0.85rem" }}>เดือน {new Date(month + "-01").toLocaleDateString("th-TH", { month: "long", year: "numeric" })}</p>
+        </div>
+        <button onClick={exportCSV} style={{ background: "linear-gradient(135deg, #059669, #047857)", border: "none", borderRadius: "12px", padding: "0.65rem 1.25rem", color: "#fff", fontWeight: 700, fontSize: "0.875rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.5rem", fontFamily: "inherit", boxShadow: "0 4px 14px rgba(5,150,105,0.3)" }}>
+          📥 Export Excel
+        </button>
+      </div>
+
       <Card>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem", alignItems: "end" }}>
           <Field label="เดือน"><input type="month" value={month} onChange={e => setMonth(e.target.value)} style={{ ...inputStyle, width: "auto" }} /></Field>
@@ -1173,41 +1235,198 @@ function ReportPage({ employees, attendance, leaves, outings }) {
         </div>
       </Card>
 
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem", overflowX: "auto", paddingBottom: "0.5rem" }}>
+        {reportTabs.map(tab => {
+          const Icon = tab.icon;
+          const isActive = reportType === tab.key;
+          return (
+            <button key={tab.key} onClick={() => setReportType(tab.key)} style={{
+              background: isActive ? tab.color : "#fff",
+              color: isActive ? "#fff" : "#475569",
+              border: `1.5px solid ${isActive ? tab.color : "#e2e8f0"}`,
+              borderRadius: "10px",
+              padding: "0.6rem 1rem",
+              fontSize: "0.85rem",
+              fontWeight: 700,
+              cursor: "pointer",
+              display: "flex", alignItems: "center", gap: "0.4rem",
+              fontFamily: "inherit",
+              whiteSpace: "nowrap",
+              transition: "all 0.15s"
+            }}>
+              <Icon size={15} /> {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Content */}
       <div style={{ marginTop: "1rem" }}>
         <Card padding="0">
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
-              <thead>
-                <tr style={{ background: "#f8fafc", borderBottom: "2px solid #f1f5f9" }}>
-                  {["พนักงาน", "แผนก", "มาทำงาน", "ลา (ชม.)", "ลา (วัน)", "ขาด", "ออกนอก", "รวมชั่วโมง"].map(h => (
-                    <th key={h} style={{ padding: "0.75rem 1rem", textAlign: "left", color: "#64748b", fontWeight: 600, fontSize: "0.78rem", whiteSpace: "nowrap" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r, i) => (
-                  <tr key={r.emp.id} style={{ borderBottom: "1px solid #f8fafc", background: i % 2 === 0 ? "#fff" : "#fafafa" }}>
-                    <td style={{ padding: "0.75rem 1rem" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-                        <Avatar name={r.emp.name} index={i} />
-                        <span style={{ fontWeight: 600, color: "#0f172a" }}>{r.emp.name}</span>
-                      </div>
-                    </td>
-                    <td style={{ padding: "0.75rem 1rem", color: "#64748b" }}>{r.emp.department || "-"}</td>
-                    <td style={{ padding: "0.75rem 1rem" }}><span style={{ color: "#16a34a", fontWeight: 700 }}>{r.attended} วัน</span></td>
-                    <td style={{ padding: "0.75rem 1rem", color: "#7c3aed", fontWeight: 600 }}>{r.leaveHours}</td>
-                    <td style={{ padding: "0.75rem 1rem", color: "#7c3aed", fontWeight: 600 }}>{r.leaveDays}</td>
-                    <td style={{ padding: "0.75rem 1rem" }}><span style={{ color: r.absent > 0 ? "#dc2626" : "#94a3b8", fontWeight: 700 }}>{r.absent}</span></td>
-                    <td style={{ padding: "0.75rem 1rem", color: "#d97706", fontWeight: 600 }}>{r.outingCount}</td>
-                    <td style={{ padding: "0.75rem 1rem", color: "#1d4ed8", fontWeight: 700 }}>{r.totalHours} ชม.</td>
+            {reportType === "summary" && (
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+                <thead>
+                  <tr style={{ background: "#f8fafc", borderBottom: "2px solid #f1f5f9" }}>
+                    {["พนักงาน", "แผนก", "มาทำงาน", "สาย", "เข้าก่อน", "กลับก่อน", "OT", "ลา(วัน)", "ขาด", "ออกนอก", "รวม(ชม.)"].map(h => (
+                      <th key={h} style={{ padding: "0.6rem 0.75rem", textAlign: "left", color: "#64748b", fontWeight: 600, fontSize: "0.75rem", whiteSpace: "nowrap" }}>{h}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {summaryRows.length === 0 ? (
+                    <tr><td colSpan={11} style={{ padding: "3rem", textAlign: "center", color: "#94a3b8" }}>ไม่มีข้อมูล</td></tr>
+                  ) : summaryRows.map((r, i) => (
+                    <tr key={r.emp.id} style={{ borderBottom: "1px solid #f8fafc", background: i % 2 === 0 ? "#fff" : "#fafafa" }}>
+                      <td style={{ padding: "0.6rem 0.75rem" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                          <Avatar name={r.emp.name} index={i} />
+                          <span style={{ fontWeight: 600, color: "#0f172a", whiteSpace: "nowrap" }}>{r.emp.name}</span>
+                        </div>
+                      </td>
+                      <td style={{ padding: "0.6rem 0.75rem", color: "#64748b" }}>{r.emp.department || "-"}</td>
+                      <td style={{ padding: "0.6rem 0.75rem" }}><span style={{ color: "#16a34a", fontWeight: 700 }}>{r.attended}</span></td>
+                      <td style={{ padding: "0.6rem 0.75rem", color: r.lateCount > 0 ? "#dc2626" : "#94a3b8", fontWeight: 700 }}>{r.lateCount}</td>
+                      <td style={{ padding: "0.6rem 0.75rem", color: "#2563eb", fontWeight: 600 }}>{r.earlyArrival}</td>
+                      <td style={{ padding: "0.6rem 0.75rem", color: r.earlyDeparture > 0 ? "#dc2626" : "#94a3b8", fontWeight: 600 }}>{r.earlyDeparture}</td>
+                      <td style={{ padding: "0.6rem 0.75rem", color: "#16a34a", fontWeight: 600 }}>{r.overtime}</td>
+                      <td style={{ padding: "0.6rem 0.75rem", color: "#7c3aed", fontWeight: 600 }}>{r.leaveDays}</td>
+                      <td style={{ padding: "0.6rem 0.75rem", color: r.absent > 0 ? "#dc2626" : "#94a3b8", fontWeight: 700 }}>{r.absent}</td>
+                      <td style={{ padding: "0.6rem 0.75rem", color: "#d97706", fontWeight: 600 }}>{r.outingCount}</td>
+                      <td style={{ padding: "0.6rem 0.75rem", color: "#1d4ed8", fontWeight: 700 }}>{r.totalHours}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {reportType === "attendance" && (
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+                <thead>
+                  <tr style={{ background: "#f8fafc", borderBottom: "2px solid #f1f5f9" }}>
+                    {["พนักงาน", "วันที่", "เข้างาน", "กลับบ้าน", "รวม", "สถานะเข้า", "สถานะกลับ"].map(h => (
+                      <th key={h} style={{ padding: "0.6rem 0.75rem", textAlign: "left", color: "#64748b", fontWeight: 600, fontSize: "0.75rem", whiteSpace: "nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {attendance.filter(a => inMonth(a.check_in) && (!empFilter || a.employee_id === empFilter)).map((a, i) => {
+                    const li = checkLate(a.check_in, settings?.work_start);
+                    const ei = a.check_out ? checkEarly(a.check_out, settings?.work_end) : null;
+                    const hours = a.check_out ? ((new Date(a.check_out) - new Date(a.check_in)) / 3600000).toFixed(1) : "-";
+                    return (
+                      <tr key={a.id} style={{ borderBottom: "1px solid #f8fafc", background: i % 2 === 0 ? "#fff" : "#fafafa" }}>
+                        <td style={{ padding: "0.6rem 0.75rem", fontWeight: 600, color: "#0f172a" }}>{a.employees?.name || "-"}</td>
+                        <td style={{ padding: "0.6rem 0.75rem", color: "#475569" }}>{fmtDate(a.check_in)}</td>
+                        <td style={{ padding: "0.6rem 0.75rem", color: "#16a34a", fontWeight: 600 }}>{fmtTime(a.check_in)}</td>
+                        <td style={{ padding: "0.6rem 0.75rem", color: "#d97706", fontWeight: 600 }}>{a.check_out ? fmtTime(a.check_out) : "-"}</td>
+                        <td style={{ padding: "0.6rem 0.75rem", fontWeight: 600 }}>{hours} ชม.</td>
+                        <td style={{ padding: "0.6rem 0.75rem" }}>
+                          {li?.late ? <span style={{ background: "#fef2f2", color: "#dc2626", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>สาย {formatMinutes(li.minutes)}</span>
+                          : li?.early ? <span style={{ background: "#eff6ff", color: "#2563eb", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>เข้าก่อน {formatMinutes(li.minutes)}</span>
+                          : <span style={{ background: "#dcfce7", color: "#16a34a", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>ตรงเวลา</span>}
+                        </td>
+                        <td style={{ padding: "0.6rem 0.75rem" }}>
+                          {!a.check_out ? <span style={{ color: "#94a3b8", fontSize: "0.75rem" }}>ยังไม่กลับ</span>
+                          : ei?.early ? <span style={{ background: "#fef2f2", color: "#dc2626", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>ก่อน {formatMinutes(ei.minutes)}</span>
+                          : ei?.late ? <span style={{ background: "#dcfce7", color: "#16a34a", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>ช้า {formatMinutes(ei.minutes)}</span>
+                          : <span style={{ background: "#dcfce7", color: "#16a34a", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>ตรงเวลา</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+
+            {reportType === "late" && (
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+                <thead>
+                  <tr style={{ background: "#f8fafc", borderBottom: "2px solid #f1f5f9" }}>
+                    {["พนักงาน", "แผนก", "วันที่", "เวลาเข้า", "สาย"].map(h => (
+                      <th key={h} style={{ padding: "0.6rem 0.75rem", textAlign: "left", color: "#64748b", fontWeight: 600, fontSize: "0.75rem", whiteSpace: "nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {attendance.filter(a => inMonth(a.check_in) && (!empFilter || a.employee_id === empFilter)).filter(a => checkLate(a.check_in, settings?.work_start)?.late).map((a, i) => {
+                    const li = checkLate(a.check_in, settings?.work_start);
+                    return (
+                      <tr key={a.id} style={{ borderBottom: "1px solid #f8fafc", background: i % 2 === 0 ? "#fff" : "#fafafa" }}>
+                        <td style={{ padding: "0.6rem 0.75rem", fontWeight: 600 }}>{a.employees?.name || "-"}</td>
+                        <td style={{ padding: "0.6rem 0.75rem", color: "#64748b" }}>{a.employees?.department || "-"}</td>
+                        <td style={{ padding: "0.6rem 0.75rem", color: "#475569" }}>{fmtDate(a.check_in)}</td>
+                        <td style={{ padding: "0.6rem 0.75rem", color: "#dc2626", fontWeight: 700 }}>{fmtTime(a.check_in)}</td>
+                        <td style={{ padding: "0.6rem 0.75rem" }}><span style={{ background: "#fef2f2", color: "#dc2626", fontSize: "0.78rem", fontWeight: 700, padding: "0.25rem 0.6rem", borderRadius: "20px" }}>⚠️ {formatMinutes(li.minutes)}</span></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+
+            {reportType === "leave" && (
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+                <thead>
+                  <tr style={{ background: "#f8fafc", borderBottom: "2px solid #f1f5f9" }}>
+                    {["พนักงาน", "ประเภท", "ระยะเวลา", "จาก", "ถึง", "ชม.", "เหตุผล", "สถานะ"].map(h => (
+                      <th key={h} style={{ padding: "0.6rem 0.75rem", textAlign: "left", color: "#64748b", fontWeight: 600, fontSize: "0.75rem", whiteSpace: "nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {leaves.filter(l => inMonth(l.start_date) && (!empFilter || l.employee_id === empFilter)).map((l, i) => (
+                    <tr key={l.id} style={{ borderBottom: "1px solid #f8fafc", background: i % 2 === 0 ? "#fff" : "#fafafa" }}>
+                      <td style={{ padding: "0.6rem 0.75rem", fontWeight: 600 }}>{l.employees?.name || "-"}</td>
+                      <td style={{ padding: "0.6rem 0.75rem", color: "#7c3aed", fontWeight: 600 }}>{l.leave_type}</td>
+                      <td style={{ padding: "0.6rem 0.75rem", color: "#475569" }}>{l.duration_type}</td>
+                      <td style={{ padding: "0.6rem 0.75rem", color: "#475569", whiteSpace: "nowrap" }}>{fmtDate(l.start_date)}</td>
+                      <td style={{ padding: "0.6rem 0.75rem", color: "#475569", whiteSpace: "nowrap" }}>{fmtDate(l.end_date)}</td>
+                      <td style={{ padding: "0.6rem 0.75rem", fontWeight: 600 }}>{l.hours || 8}</td>
+                      <td style={{ padding: "0.6rem 0.75rem", color: "#64748b", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.reason}</td>
+                      <td style={{ padding: "0.6rem 0.75rem" }}>
+                        <span style={{
+                          background: l.status === "approved" ? "#dcfce7" : l.status === "rejected" ? "#fef2f2" : "#fef3c7",
+                          color: l.status === "approved" ? "#16a34a" : l.status === "rejected" ? "#dc2626" : "#d97706",
+                          fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.6rem", borderRadius: "20px"
+                        }}>{l.status === "approved" ? "อนุมัติ" : l.status === "rejected" ? "ไม่อนุมัติ" : "รออนุมัติ"}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {reportType === "outing" && (
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+                <thead>
+                  <tr style={{ background: "#f8fafc", borderBottom: "2px solid #f1f5f9" }}>
+                    {["พนักงาน", "วันที่", "เวลาออก", "เวลากลับ", "ปลายทาง", "เหตุผล"].map(h => (
+                      <th key={h} style={{ padding: "0.6rem 0.75rem", textAlign: "left", color: "#64748b", fontWeight: 600, fontSize: "0.75rem", whiteSpace: "nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {outings.filter(o => inMonth(o.out_time) && (!empFilter || o.employee_id === empFilter)).map((o, i) => (
+                    <tr key={o.id} style={{ borderBottom: "1px solid #f8fafc", background: i % 2 === 0 ? "#fff" : "#fafafa" }}>
+                      <td style={{ padding: "0.6rem 0.75rem", fontWeight: 600 }}>{o.employees?.name || "-"}</td>
+                      <td style={{ padding: "0.6rem 0.75rem", color: "#475569" }}>{fmtDate(o.out_time)}</td>
+                      <td style={{ padding: "0.6rem 0.75rem", color: "#d97706", fontWeight: 600 }}>{fmtTime(o.out_time)}</td>
+                      <td style={{ padding: "0.6rem 0.75rem", color: "#16a34a", fontWeight: 600 }}>{o.return_time ? fmtTime(o.return_time) : "ยังไม่กลับ"}</td>
+                      <td style={{ padding: "0.6rem 0.75rem", color: "#475569" }}>{o.destination || "-"}</td>
+                      <td style={{ padding: "0.6rem 0.75rem", color: "#64748b", maxWidth: 250, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.reason}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </Card>
       </div>
     </div>
+  );
+}
   );
 }
 
@@ -1508,6 +1727,125 @@ export default function HRApp() {
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
                     {stats.map(stat => <StatCard key={stat.label} stat={stat} />)}
                   </div>
+
+                  {currentUser.role === "admin" && (
+                    <>
+                      {/* Pending Approvals */}
+                      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
+                        {/* การลารออนุมัติ */}
+                        <Card>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                              <Umbrella size={18} color="#7c3aed" />
+                              <div style={{ fontWeight: 700, color: "#0f172a", fontSize: "0.95rem" }}>การลารออนุมัติ</div>
+                            </div>
+                            <span style={{ background: "#fef3c7", color: "#d97706", fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.6rem", borderRadius: "20px" }}>{leaves.filter(l => l.status === "pending").length} รายการ</span>
+                          </div>
+                          {leaves.filter(l => l.status === "pending").length === 0 ? (
+                            <div style={{ textAlign: "center", padding: "1.5rem", color: "#94a3b8", fontSize: "0.85rem" }}>ไม่มีรายการรออนุมัติ ✅</div>
+                          ) : (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", maxHeight: 400, overflowY: "auto" }}>
+                              {leaves.filter(l => l.status === "pending").map((l, i) => (
+                                <div key={l.id} style={{ background: "#f8fafc", borderRadius: "10px", padding: "0.75rem", display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+                                  <Avatar name={l.employees?.name} index={i} />
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontWeight: 600, fontSize: "0.85rem", color: "#0f172a" }}>{l.employees?.name}</div>
+                                    <div style={{ fontSize: "0.75rem", color: "#64748b" }}>{l.leave_type} • {l.duration_type} • {l.hours} ชม.</div>
+                                    <div style={{ fontSize: "0.72rem", color: "#94a3b8" }}>{fmtDate(l.start_date)} → {fmtDate(l.end_date)}</div>
+                                    {l.reason && <div style={{ fontSize: "0.72rem", color: "#475569", marginTop: "0.25rem", fontStyle: "italic" }}>"{l.reason.slice(0, 50)}{l.reason.length > 50 ? "..." : ""}"</div>}
+                                  </div>
+                                  <div style={{ display: "flex", gap: "0.3rem" }}>
+                                    <button onClick={async () => { await supabase.from("leaves").update({ status: "approved" }).eq("id", l.id); fetchData(); }} style={{ background: "#dcfce7", border: "none", borderRadius: "8px", padding: "0.4rem 0.6rem", cursor: "pointer", color: "#16a34a", display: "flex", alignItems: "center", gap: "0.25rem", fontFamily: "inherit", fontSize: "0.75rem", fontWeight: 700 }}>
+                                      <CheckCircle size={14} /> อนุมัติ
+                                    </button>
+                                    <button onClick={async () => { await supabase.from("leaves").update({ status: "rejected" }).eq("id", l.id); fetchData(); }} style={{ background: "#fef2f2", border: "none", borderRadius: "8px", padding: "0.4rem 0.6rem", cursor: "pointer", color: "#dc2626", display: "flex", alignItems: "center", gap: "0.25rem", fontFamily: "inherit", fontSize: "0.75rem", fontWeight: 700 }}>
+                                      <XCircle size={14} /> ปฏิเสธ
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </Card>
+
+                        {/* ออกนอกสถานที่ — กำลังออกอยู่ */}
+                        <Card>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                              <ArrowRightLeft size={18} color="#d97706" />
+                              <div style={{ fontWeight: 700, color: "#0f172a", fontSize: "0.95rem" }}>ออกนอกสถานที่ — ขณะนี้</div>
+                            </div>
+                            <span style={{ background: "#fef2f2", color: "#dc2626", fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.6rem", borderRadius: "20px" }}>{outings.filter(o => o.status === "out").length} คน</span>
+                          </div>
+                          {outings.filter(o => o.status === "out").length === 0 ? (
+                            <div style={{ textAlign: "center", padding: "1.5rem", color: "#94a3b8", fontSize: "0.85rem" }}>ไม่มีพนักงานออกนอกสถานที่ ✅</div>
+                          ) : (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", maxHeight: 400, overflowY: "auto" }}>
+                              {outings.filter(o => o.status === "out").map((o, i) => (
+                                <div key={o.id} style={{ background: "#fef9e7", border: "1px solid #fde68a", borderRadius: "10px", padding: "0.75rem", display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+                                  <Avatar name={o.employees?.name} index={i} />
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontWeight: 600, fontSize: "0.85rem", color: "#0f172a" }}>{o.employees?.name}</div>
+                                    <div style={{ fontSize: "0.75rem", color: "#64748b" }}>📍 {o.destination || "ไม่ระบุ"}</div>
+                                    <div style={{ fontSize: "0.72rem", color: "#d97706", fontWeight: 600 }}>ออกเมื่อ {fmtTime(o.out_time)} น.</div>
+                                    {o.reason && <div style={{ fontSize: "0.72rem", color: "#475569", marginTop: "0.25rem", fontStyle: "italic" }}>"{o.reason.slice(0, 40)}{o.reason.length > 40 ? "..." : ""}"</div>}
+                                  </div>
+                                  <button onClick={async () => { await supabase.from("outings").update({ return_time: new Date().toISOString(), status: "returned" }).eq("id", o.id); fetchData(); }} style={{ background: "#dcfce7", border: "none", borderRadius: "8px", padding: "0.4rem 0.6rem", cursor: "pointer", color: "#16a34a", display: "flex", alignItems: "center", gap: "0.25rem", fontFamily: "inherit", fontSize: "0.75rem", fontWeight: 700 }}>
+                                    <ArrowLeftRight size={14} /> กลับแล้ว
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </Card>
+                      </div>
+
+                      {/* มาสายวันนี้ */}
+                      <Card padding="1.25rem" style={{ marginBottom: "1.5rem" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                            <AlertCircle size={18} color="#dc2626" />
+                            <div style={{ fontWeight: 700, color: "#0f172a", fontSize: "0.95rem" }}>มาสายวันนี้</div>
+                          </div>
+                          <span style={{ background: "#fef2f2", color: "#dc2626", fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.6rem", borderRadius: "20px" }}>{todayAttendance.filter(a => checkLate(a.check_in, settings?.work_start)?.late).length} คน</span>
+                        </div>
+                        {todayAttendance.filter(a => checkLate(a.check_in, settings?.work_start)?.late).length === 0 ? (
+                          <div style={{ textAlign: "center", padding: "1.5rem", color: "#94a3b8", fontSize: "0.85rem" }}>ไม่มีพนักงานมาสายวันนี้ 🎉</div>
+                        ) : (
+                          <div style={{ overflowX: "auto" }}>
+                            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+                              <thead>
+                                <tr style={{ borderBottom: "2px solid #f1f5f9" }}>
+                                  {["พนักงาน", "แผนก", "เวลาเข้า", "สาย"].map(h => (
+                                    <th key={h} style={{ padding: "0.5rem 0.75rem", textAlign: "left", color: "#94a3b8", fontWeight: 600, fontSize: "0.75rem", whiteSpace: "nowrap" }}>{h}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {todayAttendance.filter(a => checkLate(a.check_in, settings?.work_start)?.late).map((a, i) => {
+                                  const li = checkLate(a.check_in, settings?.work_start);
+                                  return (
+                                    <tr key={a.id} style={{ borderBottom: "1px solid #f8fafc" }}>
+                                      <td style={{ padding: "0.65rem 0.75rem" }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                          <Avatar name={a.employees?.name} index={i} />
+                                          <span style={{ fontWeight: 600 }}>{a.employees?.name || "-"}</span>
+                                        </div>
+                                      </td>
+                                      <td style={{ padding: "0.65rem 0.75rem", color: "#64748b" }}>{a.employees?.department || "-"}</td>
+                                      <td style={{ padding: "0.65rem 0.75rem", color: "#dc2626", fontWeight: 700 }}>{fmtTime(a.check_in)}</td>
+                                      <td style={{ padding: "0.65rem 0.75rem" }}><span style={{ background: "#fef2f2", color: "#dc2626", fontSize: "0.78rem", fontWeight: 700, padding: "0.25rem 0.6rem", borderRadius: "20px" }}>⚠️ {formatMinutes(li.minutes)}</span></td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </Card>
+                    </>
+                  )}
+
                   <Card>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}><Activity size={18} color="#2563eb" /><div style={{ fontWeight: 700, color: "#0f172a", fontSize: "0.95rem" }}>กิจกรรมล่าสุด</div></div>
@@ -1552,7 +1890,7 @@ export default function HRApp() {
               {activePage === "attendance" && <AttendancePage employees={employees} activityLog={activityLog} currentUser={currentUser} settings={settings} onRefresh={fetchData} />}
               {activePage === "leave" && <LeavePage employees={employees} leaves={leaves} currentUser={currentUser} onRefresh={fetchData} />}
               {activePage === "outing" && <OutingPage employees={employees} outings={outings} currentUser={currentUser} onRefresh={fetchData} />}
-              {activePage === "report" && <ReportPage employees={employees} attendance={activityLog} leaves={leaves} outings={outings} />}
+              {activePage === "report" && <ReportPage employees={employees} attendance={activityLog} leaves={leaves} outings={outings} settings={settings} />}
               {activePage === "settings" && <SettingsPage settings={settings} onRefresh={fetchData} />}
             </>
           )}

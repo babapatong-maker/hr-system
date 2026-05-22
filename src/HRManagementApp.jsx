@@ -6,7 +6,7 @@ import {
   ChevronDown, ChevronRight, BarChart3, FileText,
   Shield, WifiOff, RefreshCw, UserPlus, DollarSign,
   Umbrella, AlertCircle, Activity, Home, X, Edit, Trash2, Save, Phone, Mail,
-  Plus, Calendar, ArrowRightLeft, ArrowLeftRight, TrendingUp, User, Lock, Eye, EyeOff, Key
+  Plus, Calendar, ArrowRightLeft, ArrowLeftRight, TrendingUp, User, Lock, Eye, EyeOff, Key, Menu
 } from "lucide-react";
 
 const supabase = createClient(
@@ -32,34 +32,150 @@ const fmtDate = (t) => t ? new Date(t).toLocaleDateString("th-TH", { day: "numer
 const todayISO = () => new Date().toISOString().split("T")[0];
 
 // คำนวณสถานะมาสาย / กลับก่อน
+// แปลงนาทีเป็น "X ชม. Y นาที" หรือ "Y นาที"
+function formatMinutes(mins) {
+  if (mins < 60) return `${mins} นาที`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m === 0 ? `${h} ชม.` : `${h} ชม. ${m} นาที`;
+}
+
+// ชุดคำให้กำลังใจ
+const QUOTES = {
+  early: [
+    "เก่งมากครับ! 🎉",
+    "วันนี้ดีเยี่ยม ✨",
+    "ขยันสุดๆ เลย 👏",
+    "มาเช้าเสมอ น่ายกย่อง 🌟",
+    "นี่แหละ ครูตัวอย่าง 💪",
+    "พลังบวกล้นเปี่ยม 🌞",
+    "เริ่มวันด้วยสไตล์! 🚀",
+    "วินัยดีมาก ☕",
+    "Good morning! ตื่นเช้าจริงๆ 🐓",
+  ],
+  onTime: [
+    "ตรงเวลาเป๊ะ! 👌",
+    "มืออาชีพมาก 💼",
+    "เป็นแบบอย่างที่ดี ✨",
+    "สมบูรณ์แบบเลย 🎯",
+  ],
+  late: [
+    "ไม่เป็นไร พรุ่งนี้เริ่มต้นใหม่ได้ 💪",
+    "การจราจรติด สู้ๆ นะครับ 🚗",
+    "วันนี้ตื่นยากใช่ไหม? ☕",
+    "พรุ่งนี้ลองตื่นเร็วขึ้นนะ 🌅",
+    "ไม่เป็นไร ทุกคนเคยสาย 🙂",
+    "เข้าใจครับ ชีวิตมีหลายเรื่อง 🌈",
+    "อย่ากดดันตัวเอง วันใหม่เริ่มได้ใหม่ 🌸",
+    "หายใจลึกๆ พร้อมเริ่มงานนะครับ 🧘",
+  ],
+  leaveEarly: [
+    "รีบไปธุระใช่ไหมครับ? 🏃",
+    "วันนี้ยุ่งล่ะสิ 📋",
+    "ดูแลสุขภาพด้วยนะครับ 💊",
+    "ไปไหนต่อเอ่ย? ✈️",
+    "เผื่อมีอะไรด่วน หายห่วงได้นะ 🌟",
+    "ขับรถระวังตัวด้วยครับ 🚗",
+    "หวังว่าทุกอย่างจะราบรื่นนะ 🙏",
+  ],
+  stayLate: [
+    "ขอบคุณที่เสียสละเวลาเพื่อโรงเรียนนะครับ 🙏",
+    "ทุ่มเทมากเลย ขอบคุณครับ ❤️",
+    "ครูตัวจริงเลย น่าประทับใจ 🌟",
+    "เหนื่อยมั้ย? พักเยอะๆ นะครับ 🛌",
+    "ขอบคุณจากใจ ครูคนเก่ง 💝",
+    "ความตั้งใจของครูสร้างอนาคตเด็ก 🌱",
+    "ทำงานหนักจัง ดูแลสุขภาพด้วย 🍵",
+    "หัวใจของโรงเรียนเลยครับ 💙",
+  ],
+  onTimeLeave: [
+    "วันนี้ทำงานเสร็จเรียบร้อย เก่งมาก ✅",
+    "Work-life balance ดีมากเลย ⚖️",
+    "พักผ่อนให้เต็มที่นะครับ 😊",
+    "เจอกันพรุ่งนี้นะครับ 👋",
+  ]
+};
+
+function randomQuote(type) {
+  const list = QUOTES[type] || [];
+  return list[Math.floor(Math.random() * list.length)] || "";
+}
+
+// ─── DEVICE FINGERPRINT ───────────────────────────────────────────────────────
+function getDeviceId() {
+  let id = localStorage.getItem("hr_device_id");
+  if (!id) {
+    // สร้าง fingerprint จาก browser info + random
+    const parts = [
+      navigator.userAgent,
+      navigator.language,
+      screen.width + "x" + screen.height,
+      new Date().getTimezoneOffset(),
+      navigator.hardwareConcurrency || "",
+      Math.random().toString(36).slice(2),
+      Date.now()
+    ].join("|");
+    // hash อย่างง่าย
+    let hash = 0;
+    for (let i = 0; i < parts.length; i++) {
+      hash = ((hash << 5) - hash) + parts.charCodeAt(i);
+      hash |= 0;
+    }
+    id = "dev-" + Math.abs(hash).toString(36) + "-" + Math.random().toString(36).slice(2, 10);
+    localStorage.setItem("hr_device_id", id);
+  }
+  return id;
+}
+
+function getDeviceName() {
+  const ua = navigator.userAgent;
+  let device = "Unknown";
+  if (/iPhone/.test(ua)) device = "iPhone";
+  else if (/iPad/.test(ua)) device = "iPad";
+  else if (/Android/.test(ua)) device = "Android";
+  else if (/Windows/.test(ua)) device = "Windows PC";
+  else if (/Macintosh/.test(ua)) device = "Mac";
+  else if (/Linux/.test(ua)) device = "Linux";
+  let browser = "Browser";
+  if (/Edg\//.test(ua)) browser = "Edge";
+  else if (/Chrome\//.test(ua)) browser = "Chrome";
+  else if (/Firefox\//.test(ua)) browser = "Firefox";
+  else if (/Safari\//.test(ua)) browser = "Safari";
+  return `${device} • ${browser}`;
+}
+
 function checkLate(checkInTime, workStart, grace = 0) {
   if (!checkInTime || !workStart) return null;
   const ci = new Date(checkInTime);
-  const ciH = ci.getUTCHours() + 7; // Asia/Bangkok
-  const ciM = ci.getUTCMinutes();
+  const thStr = ci.toLocaleString("en-US", { timeZone: "Asia/Bangkok", hour12: false, hour: "2-digit", minute: "2-digit" });
+  const [ciH, ciM] = thStr.split(":").map(Number);
   const [wh, wm] = workStart.split(":").map(Number);
   const ciMinutes = ciH * 60 + ciM;
-  const wsMinutes = wh * 60 + wm + grace;
+  const wsMinutes = wh * 60 + wm;
   if (ciMinutes > wsMinutes) {
-    const diff = ciMinutes - wsMinutes;
-    return { late: true, minutes: diff };
+    return { late: true, early: false, minutes: ciMinutes - wsMinutes };
   }
-  return { late: false, minutes: 0 };
+  if (ciMinutes < wsMinutes) {
+    return { late: false, early: true, minutes: wsMinutes - ciMinutes };
+  }
+  return { late: false, early: false, minutes: 0 };
 }
 
 function checkEarly(checkOutTime, workEnd) {
   if (!checkOutTime || !workEnd) return null;
   const co = new Date(checkOutTime);
-  const coH = co.getUTCHours() + 7;
-  const coM = co.getUTCMinutes();
+  const thStr = co.toLocaleString("en-US", { timeZone: "Asia/Bangkok", hour12: false, hour: "2-digit", minute: "2-digit" });
+  const [coH, coM] = thStr.split(":").map(Number);
   const [wh, wm] = workEnd.split(":").map(Number);
   const coMinutes = coH * 60 + coM;
   const weMinutes = wh * 60 + wm;
   if (coMinutes < weMinutes) {
-    const diff = weMinutes - coMinutes;
-    return { early: true, minutes: diff };
+    return { early: true, onTime: false, late: false, minutes: weMinutes - coMinutes };
   }
-  return { early: false, minutes: 0 };
+  if (coMinutes > weMinutes) {
+    return { early: false, onTime: false, late: true, minutes: coMinutes - weMinutes };
+  }
+  return { early: false, onTime: true, late: false, minutes: 0 };
 }
 
 const DEPT_OPTIONS = ["วิชาการ", "บริหาร", "พลศึกษา", "คณิตศาสตร์", "ภาษาไทย", "ศิลปะ", "วิทยาศาสตร์", "สังคมศึกษา", "ภาษาอังกฤษ", "การงานอาชีพ"];
@@ -165,17 +281,76 @@ function LoginPage({ onLogin }) {
   const handleLogin = async () => {
     if (!username || !password) { setError("กรุณากรอกชื่อผู้ใช้และรหัสผ่าน"); return; }
     setLoading(true); setError("");
+
+    // 1. ตรวจสอบ username/password
     const { data, error: err } = await supabase
       .from("employees")
       .select("*")
       .eq("username", username)
       .eq("password", password)
       .limit(1);
+
+    if (err) { setLoading(false); setError("เกิดข้อผิดพลาด: " + err.message); return; }
+    if (!data || data.length === 0) { setLoading(false); setError("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง"); return; }
+
+    const user = data[0];
+
+    // 2. ถ้าเป็น admin ข้ามการเช็ค device
+    if (user.role === "admin") {
+      setLoading(false);
+      localStorage.setItem("hr_user", JSON.stringify(user));
+      onLogin(user);
+      return;
+    }
+
+    // 3. เช็ค Device
+    const deviceId = getDeviceId();
+    const deviceName = getDeviceName();
+
+    // ดู device ที่ผูกกับ user นี้
+    const { data: userDevice } = await supabase
+      .from("user_devices")
+      .select("*")
+      .eq("employee_id", user.id)
+      .limit(1);
+
+    // ดูว่า device นี้ผูกกับ user คนอื่นหรือยัง
+    const { data: deviceOwner } = await supabase
+      .from("user_devices")
+      .select("*, employees(name)")
+      .eq("device_id", deviceId)
+      .limit(1);
+
+    if (userDevice && userDevice.length > 0) {
+      // user มี device ผูกแล้ว
+      if (userDevice[0].device_id !== deviceId) {
+        setLoading(false);
+        setError("⚠️ บัญชีนี้ถูกผูกกับเครื่องอื่นแล้ว กรุณาติดต่อ Admin เพื่อปลดล็อก");
+        return;
+      }
+      // อัปเดต last seen
+      await supabase.from("user_devices").update({ device_name: deviceName }).eq("employee_id", user.id);
+    } else {
+      // user ยังไม่มี device — ผูกครั้งแรก
+      if (deviceOwner && deviceOwner.length > 0) {
+        setLoading(false);
+        setError(`⚠️ เครื่องนี้ผูกกับ "${deviceOwner[0].employees?.name}" แล้ว ไม่สามารถใช้งานข้ามบัญชีได้`);
+        return;
+      }
+      // ผูก device ใหม่
+      const { error: insErr } = await supabase.from("user_devices").insert({
+        employee_id: user.id, device_id: deviceId, device_name: deviceName
+      });
+      if (insErr) {
+        setLoading(false);
+        setError("เกิดข้อผิดพลาด: " + insErr.message);
+        return;
+      }
+    }
+
     setLoading(false);
-    if (err) { setError("เกิดข้อผิดพลาด: " + err.message); return; }
-    if (!data || data.length === 0) { setError("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง"); return; }
-    localStorage.setItem("hr_user", JSON.stringify(data[0]));
-    onLogin(data[0]);
+    localStorage.setItem("hr_user", JSON.stringify(user));
+    onLogin(user);
   };
 
   return (
@@ -563,15 +738,33 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
             <div style={{ color: "#166534", fontSize: "0.85rem" }}>เวลา {doneTime} น.</div>
             {mode === "in" && (() => {
               const li = checkLate(new Date().toISOString(), settings?.work_start, settings?.late_grace_minutes);
-              return li?.late
-                ? <div style={{ marginTop: "0.5rem", background: "#fef2f2", border: "1px solid #fca5a5", color: "#dc2626", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>⚠️ มาสาย {li.minutes} นาที</div>
-                : <div style={{ marginTop: "0.5rem", color: "#16a34a", fontSize: "0.8rem", fontWeight: 600 }}>✓ มาตรงเวลา</div>;
+              let badge, quoteType;
+              if (li?.late) { badge = <div style={{ marginTop: "0.5rem", background: "#fef2f2", border: "1px solid #fca5a5", color: "#dc2626", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>⚠️ มาสาย {formatMinutes(li.minutes)}</div>; quoteType = "late"; }
+              else if (li?.early) { badge = <div style={{ marginTop: "0.5rem", background: "#eff6ff", border: "1px solid #93c5fd", color: "#2563eb", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>⏰ เข้าก่อนเวลา {formatMinutes(li.minutes)}</div>; quoteType = "early"; }
+              else { badge = <div style={{ marginTop: "0.5rem", color: "#16a34a", fontSize: "0.8rem", fontWeight: 600 }}>✓ มาตรงเวลา</div>; quoteType = "onTime"; }
+              return (
+                <>
+                  {badge}
+                  <div style={{ marginTop: "0.5rem", fontSize: "0.85rem", color: "#475569", fontStyle: "italic", textAlign: "center", padding: "0.5rem", background: "#f8fafc", borderRadius: "8px" }}>
+                    💬 {randomQuote(quoteType)}
+                  </div>
+                </>
+              );
             })()}
             {mode === "out" && (() => {
               const ei = checkEarly(new Date().toISOString(), settings?.work_end);
-              return ei?.early
-                ? <div style={{ marginTop: "0.5rem", background: "#fef2f2", border: "1px solid #fca5a5", color: "#dc2626", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>🚪 กลับก่อนเวลา {ei.minutes} นาที</div>
-                : <div style={{ marginTop: "0.5rem", color: "#16a34a", fontSize: "0.8rem", fontWeight: 600 }}>✓ กลับตามเวลา</div>;
+              let badge, quoteType;
+              if (ei?.early) { badge = <div style={{ marginTop: "0.5rem", background: "#fef2f2", border: "1px solid #fca5a5", color: "#dc2626", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>🚪 กลับก่อนเวลา {formatMinutes(ei.minutes)}</div>; quoteType = "leaveEarly"; }
+              else if (ei?.late) { badge = <div style={{ marginTop: "0.5rem", background: "#dcfce7", border: "1px solid #86efac", color: "#16a34a", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>✓ กลับช้ากว่าเวลา {formatMinutes(ei.minutes)}</div>; quoteType = "stayLate"; }
+              else { badge = <div style={{ marginTop: "0.5rem", color: "#16a34a", fontSize: "0.8rem", fontWeight: 600 }}>✓ กลับตรงเวลา</div>; quoteType = "onTimeLeave"; }
+              return (
+                <>
+                  {badge}
+                  <div style={{ marginTop: "0.5rem", fontSize: "0.85rem", color: "#475569", fontStyle: "italic", textAlign: "center", padding: "0.5rem", background: "#f8fafc", borderRadius: "8px" }}>
+                    💬 {randomQuote(quoteType)}
+                  </div>
+                </>
+              );
             })()}
           </div>
 
@@ -617,6 +810,22 @@ function EmployeePage({ employees, onRefresh }) {
   const [editEmp, setEditEmp] = useState(null);
   const [search, setSearch] = useState("");
   const [deleting, setDeleting] = useState(null);
+  const [devices, setDevices] = useState([]);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("user_devices").select("*");
+      setDevices(data || []);
+    })();
+  }, [employees]);
+
+  const handleUnlock = async (empId, empName) => {
+    if (!window.confirm(`ปลดล็อกเครื่องของ ${empName}?\nครูจะสามารถ Login จากเครื่องใหม่ได้ในครั้งถัดไป`)) return;
+    await supabase.from("user_devices").delete().eq("employee_id", empId);
+    const { data } = await supabase.from("user_devices").select("*");
+    setDevices(data || []);
+    alert("ปลดล็อกเรียบร้อย ✅");
+  };
   const filtered = employees.filter(e => e.name?.toLowerCase().includes(search.toLowerCase()) || e.department?.toLowerCase().includes(search.toLowerCase()));
 
   const handleDelete = async (id) => {
@@ -638,42 +847,56 @@ function EmployeePage({ employees, onRefresh }) {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
             <thead>
               <tr style={{ background: "#f8fafc", borderBottom: "2px solid #f1f5f9" }}>
-                {["#", "ชื่อ-นามสกุล", "Username", "แผนก", "ตำแหน่ง", "สิทธิ์", "เบอร์โทร", "จัดการ"].map(h => (
+                {["#", "ชื่อ-นามสกุล", "Username", "แผนก", "สิทธิ์", "เครื่อง", "จัดการ"].map(h => (
                   <th key={h} style={{ padding: "0.75rem 1rem", textAlign: "left", color: "#64748b", fontWeight: 600, fontSize: "0.78rem", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={8} style={{ padding: "3rem", textAlign: "center", color: "#94a3b8" }}>ไม่พบข้อมูล</td></tr>
-              ) : filtered.map((emp, i) => (
-                <tr key={emp.id} style={{ borderBottom: "1px solid #f8fafc" }}>
-                  <td style={{ padding: "0.75rem 1rem", color: "#94a3b8", fontSize: "0.78rem" }}>{i + 1}</td>
-                  <td style={{ padding: "0.75rem 1rem" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-                      <Avatar name={emp.name} index={i} />
-                      <span style={{ fontWeight: 600, color: "#0f172a" }}>{emp.name}</span>
-                    </div>
-                  </td>
-                  <td style={{ padding: "0.75rem 1rem", color: "#475569", fontFamily: "monospace", fontSize: "0.8rem" }}>{emp.username || "-"}</td>
-                  <td style={{ padding: "0.75rem 1rem" }}><span style={{ background: "#eff6ff", color: "#2563eb", fontSize: "0.75rem", fontWeight: 600, padding: "0.2rem 0.6rem", borderRadius: "20px" }}>{emp.department || "-"}</span></td>
-                  <td style={{ padding: "0.75rem 1rem", color: "#475569" }}>{emp.position || "-"}</td>
-                  <td style={{ padding: "0.75rem 1rem" }}>
-                    {emp.role === "admin"
-                      ? <span style={{ background: "#fef3c7", color: "#d97706", fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>Admin</span>
-                      : <span style={{ color: "#94a3b8", fontSize: "0.78rem" }}>พนักงาน</span>}
-                  </td>
-                  <td style={{ padding: "0.75rem 1rem", color: "#64748b" }}>{emp.phone || "-"}</td>
-                  <td style={{ padding: "0.75rem 1rem" }}>
-                    <div style={{ display: "flex", gap: "0.4rem" }}>
-                      <button onClick={() => { setEditEmp(emp); setShowModal(true); }} style={iconBtn("#eff6ff", "#2563eb")}><Edit size={15} /></button>
-                      <button onClick={() => handleDelete(emp.id)} disabled={deleting === emp.id} style={iconBtn("#fef2f2", "#dc2626")}>
-                        {deleting === emp.id ? <RefreshCw size={15} style={{ animation: "spin 1s linear infinite" }} /> : <Trash2 size={15} />}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                <tr><td colSpan={7} style={{ padding: "3rem", textAlign: "center", color: "#94a3b8" }}>ไม่พบข้อมูล</td></tr>
+              ) : filtered.map((emp, i) => {
+                const device = devices.find(d => d.employee_id === emp.id);
+                return (
+                  <tr key={emp.id} style={{ borderBottom: "1px solid #f8fafc" }}>
+                    <td style={{ padding: "0.75rem 1rem", color: "#94a3b8", fontSize: "0.78rem" }}>{i + 1}</td>
+                    <td style={{ padding: "0.75rem 1rem" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                        <Avatar name={emp.name} index={i} />
+                        <span style={{ fontWeight: 600, color: "#0f172a" }}>{emp.name}</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: "0.75rem 1rem", color: "#475569", fontFamily: "monospace", fontSize: "0.8rem" }}>{emp.username || "-"}</td>
+                    <td style={{ padding: "0.75rem 1rem" }}><span style={{ background: "#eff6ff", color: "#2563eb", fontSize: "0.75rem", fontWeight: 600, padding: "0.2rem 0.6rem", borderRadius: "20px" }}>{emp.department || "-"}</span></td>
+                    <td style={{ padding: "0.75rem 1rem" }}>
+                      {emp.role === "admin"
+                        ? <span style={{ background: "#fef3c7", color: "#d97706", fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>Admin</span>
+                        : <span style={{ color: "#94a3b8", fontSize: "0.78rem" }}>พนักงาน</span>}
+                    </td>
+                    <td style={{ padding: "0.75rem 1rem" }}>
+                      {emp.role === "admin"
+                        ? <span style={{ color: "#94a3b8", fontSize: "0.75rem" }}>— ไม่ผูก —</span>
+                        : device
+                        ? <div>
+                            <div style={{ fontSize: "0.75rem", color: "#475569", fontWeight: 600 }}>🔒 {device.device_name}</div>
+                            <div style={{ fontSize: "0.68rem", color: "#94a3b8" }}>{new Date(device.created_at).toLocaleDateString("th-TH")}</div>
+                          </div>
+                        : <span style={{ color: "#94a3b8", fontSize: "0.75rem" }}>ยังไม่ Login</span>}
+                    </td>
+                    <td style={{ padding: "0.75rem 1rem" }}>
+                      <div style={{ display: "flex", gap: "0.4rem" }}>
+                        {device && emp.role !== "admin" && (
+                          <button onClick={() => handleUnlock(emp.id, emp.name)} title="ปลดล็อกเครื่อง" style={iconBtn("#fef3c7", "#d97706")}><Key size={15} /></button>
+                        )}
+                        <button onClick={() => { setEditEmp(emp); setShowModal(true); }} style={iconBtn("#eff6ff", "#2563eb")}><Edit size={15} /></button>
+                        <button onClick={() => handleDelete(emp.id)} disabled={deleting === emp.id} style={iconBtn("#fef2f2", "#dc2626")}>
+                          {deleting === emp.id ? <RefreshCw size={15} style={{ animation: "spin 1s linear infinite" }} /> : <Trash2 size={15} />}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -736,13 +959,22 @@ function AttendancePage({ employees, activityLog, currentUser, settings, onRefre
                     <td style={{ padding: "0.65rem 0.75rem" }}>
                       <div style={{ display: "flex", gap: "0.25rem", flexWrap: "wrap" }}>
                         {lateInfo?.late && (
-                          <span style={{ background: "#fef2f2", color: "#dc2626", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>⚠️ สาย {lateInfo.minutes} น.</span>
+                          <span style={{ background: "#fef2f2", color: "#dc2626", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>⚠️ สาย {formatMinutes(lateInfo.minutes)}</span>
                         )}
-                        {!lateInfo?.late && lateInfo && (
+                        {lateInfo?.early && (
+                          <span style={{ background: "#eff6ff", color: "#2563eb", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>⏰ เข้าก่อน {formatMinutes(lateInfo.minutes)}</span>
+                        )}
+                        {!lateInfo?.late && !lateInfo?.early && lateInfo && (
                           <span style={{ background: "#dcfce7", color: "#16a34a", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>✓ ตรงเวลา</span>
                         )}
                         {earlyInfo?.early && (
-                          <span style={{ background: "#fef2f2", color: "#dc2626", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>🚪 กลับก่อน {earlyInfo.minutes} น.</span>
+                          <span style={{ background: "#fef2f2", color: "#dc2626", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>🚪 กลับก่อน {formatMinutes(earlyInfo.minutes)}</span>
+                        )}
+                        {earlyInfo?.onTime && (
+                          <span style={{ background: "#dcfce7", color: "#16a34a", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>✓ กลับตรงเวลา</span>
+                        )}
+                        {earlyInfo?.late && (
+                          <span style={{ background: "#dcfce7", color: "#16a34a", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>✓ กลับช้า {formatMinutes(earlyInfo.minutes)}</span>
                         )}
                       </div>
                     </td>
@@ -1042,6 +1274,14 @@ export default function HRApp() {
   const [outings, setOutings] = useState([]);
   const [settings, setSettings] = useState({ work_start: "08:00", work_end: "16:30", late_grace_minutes: 0 });
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(typeof window !== "undefined" ? window.innerWidth < 768 : false);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -1095,7 +1335,7 @@ export default function HRApp() {
     return [
       {
         label: "วันนี้",
-        value: myAttToday ? (myLateInfo?.late ? `⚠️ สาย ${myLateInfo.minutes} น.` : "✓ ตรงเวลา") : "—",
+        value: myAttToday ? (myLateInfo?.late ? `⚠️ สาย ${formatMinutes(myLateInfo.minutes)}` : "✓ ตรงเวลา") : "—",
         icon: myLateInfo?.late ? AlertCircle : CheckCircle,
         color: myLateInfo?.late ? "#dc2626" : (myAttToday ? "#059669" : "#94a3b8"),
         bg: myLateInfo?.late ? "#fef2f2" : (myAttToday ? "#ecfdf5" : "#f8fafc"),
@@ -1103,7 +1343,11 @@ export default function HRApp() {
       },
       {
         label: "การกลับ",
-        value: myAttToday?.check_out ? (myEarlyInfo?.early ? `🚪 ก่อน ${myEarlyInfo.minutes} น.` : "✓ ตรงเวลา") : "—",
+        value: myAttToday?.check_out
+          ? (myEarlyInfo?.early ? `🚪 ก่อน ${formatMinutes(myEarlyInfo.minutes)}`
+            : myEarlyInfo?.late ? `✓ ช้า ${formatMinutes(myEarlyInfo.minutes)}`
+            : "✓ ตรงเวลา")
+          : "—",
         icon: myEarlyInfo?.early ? AlertCircle : CheckCircle,
         color: myEarlyInfo?.early ? "#dc2626" : (myAttToday?.check_out ? "#059669" : "#94a3b8"),
         bg: myEarlyInfo?.early ? "#fef2f2" : (myAttToday?.check_out ? "#ecfdf5" : "#f8fafc"),
@@ -1123,42 +1367,80 @@ export default function HRApp() {
     <div style={{ fontFamily: "'Sarabun', 'Noto Sans Thai', sans-serif", background: "#f8fafc", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap'); * { box-sizing: border-box; margin: 0; padding: 0; } @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
 
-      <header style={{ background: "#fff", borderBottom: "1px solid #e2e8f0", height: 60, display: "flex", alignItems: "center", padding: "0 1.25rem", gap: "1rem", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 1px 8px rgba(0,0,0,0.06)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", minWidth: 180 }}>
-          <div style={{ width: 34, height: 34, borderRadius: "10px", background: "linear-gradient(135deg, #2563eb, #1d4ed8)", display: "flex", alignItems: "center", justifyContent: "center" }}><Shield size={18} color="#fff" /></div>
-          <div>
+      <header style={{ background: "#fff", borderBottom: "1px solid #e2e8f0", height: 60, display: "flex", alignItems: "center", padding: "0 1rem", gap: "0.75rem", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 1px 8px rgba(0,0,0,0.06)" }}>
+        {isMobile && (
+          <button onClick={() => setSidebarOpen(true)} style={{ background: "#f1f5f9", border: "none", borderRadius: "10px", padding: "0.5rem", cursor: "pointer", color: "#475569", display: "flex" }}>
+            <Menu size={20} />
+          </button>
+        )}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", minWidth: 0, flex: isMobile ? 1 : "0 0 auto" }}>
+          <div style={{ width: 34, height: 34, borderRadius: "10px", background: "linear-gradient(135deg, #2563eb, #1d4ed8)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Shield size={18} color="#fff" /></div>
+          <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#0f172a", lineHeight: 1.1 }}>HR System</div>
-            <div style={{ fontSize: "0.65rem", color: "#64748b" }}>โรงเรียนนิมิตศึกษา</div>
+            <div style={{ fontSize: "0.65rem", color: "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>โรงเรียนนิมิตศึกษา</div>
           </div>
         </div>
-        <div style={{ flex: 1 }} />
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#0f172a" }}>{currentUser.name}</div>
-            <div style={{ fontSize: "0.7rem", color: "#64748b" }}>
-              {currentUser.role === "admin" ? "👑 Admin" : "พนักงาน"} • {currentUser.department}
+        {!isMobile && <div style={{ flex: 1 }} />}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginLeft: "auto" }}>
+          {!isMobile && (
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#0f172a" }}>{currentUser.name}</div>
+              <div style={{ fontSize: "0.7rem", color: "#64748b" }}>
+                {currentUser.role === "admin" ? "👑 Admin" : "พนักงาน"} • {currentUser.department}
+              </div>
             </div>
-          </div>
-          <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #2563eb, #7c3aed)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "0.9rem" }}>{currentUser.name?.[0]}</div>
+          )}
+          <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #2563eb, #7c3aed)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "0.9rem", flexShrink: 0 }}>{currentUser.name?.[0]}</div>
           <button onClick={handleLogout} title="ออกจากระบบ" style={{ background: "#fef2f2", border: "1.5px solid #fca5a5", borderRadius: "10px", padding: "0.45rem 0.65rem", cursor: "pointer", color: "#dc2626", display: "flex", alignItems: "center", gap: "0.3rem", fontFamily: "inherit", fontSize: "0.78rem", fontWeight: 600 }}>
             <LogOut size={14} />
           </button>
         </div>
       </header>
 
-      <div style={{ display: "flex", flex: 1 }}>
-        <aside style={{ width: 230, background: "#fff", borderRight: "1px solid #e2e8f0", padding: "1rem 0.75rem", display: "flex", flexDirection: "column", gap: "0.25rem", overflowY: "auto", position: "sticky", top: 60, height: "calc(100vh - 60px)" }}>
-          <div style={{ background: "linear-gradient(135deg, #eff6ff, #f0f9ff)", border: "1px solid #bfdbfe", borderRadius: "12px", padding: "0.75rem", marginBottom: "0.75rem", textAlign: "center" }}>
-            <div style={{ fontSize: "1.4rem", fontWeight: 800, color: "#1d4ed8" }}>{currentTime.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Bangkok" })}</div>
-            <div style={{ fontSize: "0.72rem", color: "#64748b" }}>{currentTime.toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Bangkok" })}</div>
+      <div style={{ display: "flex", flex: 1, position: "relative" }}>
+        {/* Mobile Overlay */}
+        {isMobile && sidebarOpen && (
+          <div onClick={() => setSidebarOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 90, top: 60 }} />
+        )}
+
+        <aside style={{
+          width: 260,
+          background: "#fff",
+          borderRight: "1px solid #e2e8f0",
+          padding: "1rem 0.75rem",
+          display: "flex",
+          flexDirection: "column",
+          gap: "0.35rem",
+          overflowY: "auto",
+          position: isMobile ? "fixed" : "sticky",
+          top: 60,
+          left: isMobile ? (sidebarOpen ? 0 : -280) : 0,
+          height: "calc(100vh - 60px)",
+          zIndex: 95,
+          transition: "left 0.3s ease",
+          boxShadow: isMobile && sidebarOpen ? "4px 0 20px rgba(0,0,0,0.15)" : "none"
+        }}>
+          <div style={{ background: "linear-gradient(135deg, #eff6ff, #f0f9ff)", border: "1px solid #bfdbfe", borderRadius: "12px", padding: "0.85rem", marginBottom: "0.75rem", textAlign: "center" }}>
+            <div style={{ fontSize: "1.6rem", fontWeight: 800, color: "#1d4ed8" }}>{currentTime.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Bangkok" })}</div>
+            <div style={{ fontSize: "0.75rem", color: "#64748b" }}>{currentTime.toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Bangkok" })}</div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.4rem", marginBottom: "1rem" }}>
-            <button onClick={openCheckIn} style={{ background: "linear-gradient(135deg, #2563eb, #1d4ed8)", border: "none", borderRadius: "10px", padding: "0.6rem", color: "#fff", fontWeight: 700, fontSize: "0.78rem", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.3rem", boxShadow: "0 4px 14px rgba(37,99,235,0.3)", fontFamily: "inherit" }}>
-              <LogIn size={16} /> เข้างาน
+          {isMobile && (
+            <div style={{ background: "#f8fafc", borderRadius: "10px", padding: "0.65rem", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg, #2563eb, #7c3aed)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "0.85rem" }}>{currentUser.name?.[0]}</div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{currentUser.name}</div>
+                <div style={{ fontSize: "0.7rem", color: "#64748b" }}>{currentUser.role === "admin" ? "👑 Admin" : "พนักงาน"}</div>
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", marginBottom: "1rem" }}>
+            <button onClick={() => { openCheckIn(); setSidebarOpen(false); }} style={{ background: "linear-gradient(135deg, #2563eb, #1d4ed8)", border: "none", borderRadius: "12px", padding: "0.85rem 0.5rem", color: "#fff", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.35rem", boxShadow: "0 4px 14px rgba(37,99,235,0.3)", fontFamily: "inherit" }}>
+              <LogIn size={20} /> เข้างาน
             </button>
-            <button onClick={openCheckOut} style={{ background: "linear-gradient(135deg, #f59e0b, #d97706)", border: "none", borderRadius: "10px", padding: "0.6rem", color: "#fff", fontWeight: 700, fontSize: "0.78rem", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.3rem", boxShadow: "0 4px 14px rgba(245,158,11,0.3)", fontFamily: "inherit" }}>
-              <LogOut size={16} /> กลับบ้าน
+            <button onClick={() => { openCheckOut(); setSidebarOpen(false); }} style={{ background: "linear-gradient(135deg, #f59e0b, #d97706)", border: "none", borderRadius: "12px", padding: "0.85rem 0.5rem", color: "#fff", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.35rem", boxShadow: "0 4px 14px rgba(245,158,11,0.3)", fontFamily: "inherit" }}>
+              <LogOut size={20} /> กลับบ้าน
             </button>
           </div>
 
@@ -1166,14 +1448,36 @@ export default function HRApp() {
             const Icon = item.icon;
             const isActive = activePage === item.key;
             return (
-              <button key={item.key} onClick={() => setActivePage(item.key)} style={{ width: "100%", display: "flex", alignItems: "center", gap: "0.6rem", padding: "0.6rem 0.75rem", borderRadius: "10px", border: "none", background: isActive ? "#eff6ff" : "transparent", color: isActive ? "#2563eb" : "#475569", cursor: "pointer", fontSize: "0.875rem", fontWeight: isActive ? 700 : 500, fontFamily: "inherit", textAlign: "left" }}>
-                <Icon size={17} /><span>{item.label}</span>
+              <button key={item.key} onClick={() => { setActivePage(item.key); setSidebarOpen(false); }} style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.75rem",
+                padding: "0.85rem 0.85rem",
+                borderRadius: "12px",
+                border: "none",
+                background: isActive ? "linear-gradient(135deg, #eff6ff, #dbeafe)" : "transparent",
+                color: isActive ? "#1d4ed8" : "#475569",
+                cursor: "pointer",
+                fontSize: "0.95rem",
+                fontWeight: isActive ? 700 : 600,
+                fontFamily: "inherit",
+                textAlign: "left",
+                transition: "all 0.15s",
+                minHeight: 48
+              }}
+                onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = "#f8fafc"; }}
+                onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = "transparent"; }}
+              >
+                <Icon size={20} />
+                <span style={{ flex: 1 }}>{item.label}</span>
+                {isActive && <ChevronRight size={16} />}
               </button>
             );
           })}
         </aside>
 
-        <main style={{ flex: 1, padding: "1.5rem", overflowY: "auto" }}>
+        <main style={{ flex: 1, padding: isMobile ? "1rem" : "1.5rem", overflowY: "auto", width: "100%", minWidth: 0 }}>
           {loading ? (
             <div style={{ textAlign: "center", padding: "3rem", color: "#64748b" }}>
               <RefreshCw size={32} style={{ animation: "spin 1s linear infinite", margin: "0 auto 1rem" }} />

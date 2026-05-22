@@ -1427,8 +1427,6 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
     </div>
   );
 }
-  );
-}
 
 function SettingsPage({ settings, onRefresh }) {
   const [form, setForm] = useState({

@@ -29,7 +29,20 @@ function haversineDistance(lat1, lng1, lat2, lng2) {
 
 const fmtTime = (t) => t ? new Date(t).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" }) : "-";
 const fmtDate = (t) => t ? new Date(t).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit", timeZone: "Asia/Bangkok" }) : "-";
-const todayISO = () => new Date().toISOString().split("T")[0];
+// วันที่ของวันนี้ในเวลาไทย (Asia/Bangkok)
+const todayISO = () => {
+  const now = new Date();
+  // ใช้ฟอร์แมต en-CA จะได้ YYYY-MM-DD
+  return now.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
+};
+
+// คืนค่า start/end ของวันนี้ในเวลาไทยเป็น ISO timestamp
+const todayRange = () => {
+  const dateStr = todayISO(); // เช่น "2026-05-22"
+  const start = new Date(dateStr + "T00:00:00+07:00").toISOString();
+  const end = new Date(dateStr + "T23:59:59+07:00").toISOString();
+  return { start, end };
+};
 
 // คำนวณสถานะมาสาย / กลับก่อน
 // แปลงนาทีเป็น "X ชม. Y นาที" หรือ "Y นาที"
@@ -179,11 +192,14 @@ function checkEarly(checkOutTime, workEnd) {
 }
 
 const DEPT_OPTIONS = ["วิชาการ", "บริหาร", "พลศึกษา", "คณิตศาสตร์", "ภาษาไทย", "ศิลปะ", "วิทยาศาสตร์", "สังคมศึกษา", "ภาษาอังกฤษ", "การงานอาชีพ"];
+const DUTY_OPTIONS = ["ไม่มีเวร", "เวรรถ", "แลกชิพ", "เวรหน้าประตู"];
+const DAY_NAMES = ["", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์"];
 
 const navItems = [
   { icon: Home, label: "หน้าหลัก", key: "dashboard", roles: ["admin", "employee"] },
   { icon: Users, label: "ข้อมูลพนักงาน", key: "employee", roles: ["admin"] },
   { icon: Clock, label: "ลงเวลาเข้า-ออก", key: "attendance", roles: ["admin", "employee"] },
+  { icon: Calendar, label: "ตารางสอน", key: "schedule", roles: ["admin", "employee"] },
   { icon: Umbrella, label: "การลา", key: "leave", roles: ["admin", "employee"] },
   { icon: ArrowRightLeft, label: "ขอออกนอกสถานที่", key: "outing", roles: ["admin", "employee"] },
   { icon: BarChart3, label: "รายงาน", key: "report", roles: ["admin"] },
@@ -481,7 +497,8 @@ function LeaveModal({ employees, currentUser, onClose, onSave }) {
     employee_id: currentUser?.id || "",
     leave_type: "ลาป่วย", duration_type: "เต็มวัน",
     start_date: todayISO(), end_date: todayISO(),
-    start_time: "08:30", end_time: "16:30", hours: 8, reason: ""
+    start_time: "08:30", end_time: "16:30", hours: 8, reason: "",
+    substitute_id: ""
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -501,7 +518,8 @@ function LeaveModal({ employees, currentUser, onClose, onSave }) {
     if (!form.employee_id) { setError("กรุณาเลือกพนักงาน"); return; }
     if (!form.reason.trim()) { setError("กรุณากรอกเหตุผล"); return; }
     setSaving(true);
-    const { error } = await supabase.from("leaves").insert(form);
+    const payload = { ...form, substitute_id: form.substitute_id || null };
+    const { error } = await supabase.from("leaves").insert(payload);
     setSaving(false);
     if (error) { setError(error.message); return; }
     onSave();
@@ -555,6 +573,16 @@ function LeaveModal({ employees, currentUser, onClose, onSave }) {
         <Field label="เหตุผล *">
           <textarea value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} rows={3} style={{ ...inputStyle, resize: "vertical" }} placeholder="กรอกเหตุผลการลา..." />
         </Field>
+
+        <Field label="👨‍🏫 ครูสอนแทน (ถ้ามี)">
+          <select value={form.substitute_id} onChange={e => setForm(f => ({ ...f, substitute_id: e.target.value }))} style={selectStyle}>
+            <option value="">-- ไม่ระบุ --</option>
+            {employees.filter(e => e.id !== currentUser?.id).map(e => (
+              <option key={e.id} value={e.id}>{e.name} — {e.department}</option>
+            ))}
+          </select>
+        </Field>
+
         <ButtonRow onCancel={onClose} onSave={handleSave} saving={saving} />
       </div>
     </Modal>
@@ -611,6 +639,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
   const [doneStatus, setDoneStatus] = useState(null); // {late|early|onTime|leaveEarly|stayLate|onTimeLeave, minutes}
   const [selectedEmp, setSelectedEmp] = useState(currentUser?.id || "");
   const [openAttendance, setOpenAttendance] = useState(null);
+  const [duty, setDuty] = useState("ไม่มีเวร");
 
   useEffect(() => {
     // ดึงสถิติของพนักงานคนนี้ (เดือนปัจจุบัน)
@@ -642,8 +671,8 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
   useEffect(() => {
     if (mode === "out" && selectedEmp) {
       (async () => {
-        const today = todayISO();
-        const { data } = await supabase.from("attendance").select("*").eq("employee_id", selectedEmp).is("check_out", null).gte("check_in", today).order("check_in", { ascending: false }).limit(1);
+        const { start, end } = todayRange();
+        const { data } = await supabase.from("attendance").select("*").eq("employee_id", selectedEmp).is("check_out", null).gte("check_in", start).lte("check_in", end).order("check_in", { ascending: false }).limit(1);
         setOpenAttendance(data?.[0] || null);
       })();
     }
@@ -677,7 +706,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
   const handleSubmit = async () => {
     if (!isInZone || done || !selectedEmp) return;
     if (mode === "in") {
-      const { error } = await supabase.from("attendance").insert({ employee_id: selectedEmp, latitude: coords?.lat, longitude: coords?.lng, distance_from_school: distance });
+      const { error } = await supabase.from("attendance").insert({ employee_id: selectedEmp, latitude: coords?.lat, longitude: coords?.lng, distance_from_school: distance, duty: duty });
       if (!error) finish();
     } else {
       if (!openAttendance) return;
@@ -716,9 +745,18 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
 
   return (
     <Modal title={mode === "in" ? "ลงเวลาเข้างาน" : "ลงเวลากลับบ้าน"} subtitle={`📍 รัศมี ${GEOFENCE_RADIUS} เมตรจากโรงเรียน`} onClose={onClose} icon={mode === "in" ? LogIn : LogOut} color={mode === "in" ? "#1d4ed8" : "#d97706"}>
-      <div style={{ ...inputStyle, background: "#eff6ff", color: "#1d4ed8", marginBottom: "1.25rem", textAlign: "center", fontWeight: 700, border: "1.5px solid #bfdbfe" }}>
+      <div style={{ ...inputStyle, background: "#eff6ff", color: "#1d4ed8", marginBottom: "1rem", textAlign: "center", fontWeight: 700, border: "1.5px solid #bfdbfe" }}>
         👤 {currentUser?.name}
       </div>
+
+      {mode === "in" && (
+        <div style={{ marginBottom: "1.25rem" }}>
+          <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "#475569", display: "block", marginBottom: "0.35rem" }}>🚦 เวรวันนี้</label>
+          <select value={duty} onChange={e => setDuty(e.target.value)} style={selectStyle}>
+            {DUTY_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </div>
+      )}
 
       {mode === "out" && selectedEmp && !openAttendance && (
         <div style={{ background: "#fef2f2", border: "1.5px solid #fca5a5", borderRadius: "12px", padding: "0.75rem", marginBottom: "1.25rem", textAlign: "center", color: "#dc2626", fontSize: "0.85rem", fontWeight: 600 }}>⚠️ ยังไม่ได้ลงเวลาเข้างานวันนี้</div>
@@ -1030,14 +1068,14 @@ function LeavePage({ employees, leaves, currentUser, onRefresh }) {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
             <thead>
               <tr style={{ borderBottom: "2px solid #f1f5f9" }}>
-                {["พนักงาน", "ประเภท", "ระยะเวลา", "จากวันที่", "ถึงวันที่", "ชม.", "เหตุผล", "สถานะ", "จัดการ"].map(h => (
+                {["พนักงาน", "ประเภท", "ระยะเวลา", "วันที่", "ชม.", "ครูสอนแทน", "สถานะ", "จัดการ"].map(h => (
                   <th key={h} style={{ padding: "0.5rem 0.75rem", textAlign: "left", color: "#94a3b8", fontWeight: 600, fontSize: "0.75rem", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={9} style={{ padding: "3rem", textAlign: "center", color: "#94a3b8" }}>ไม่มีข้อมูลการลา</td></tr>
+                <tr><td colSpan={8} style={{ padding: "3rem", textAlign: "center", color: "#94a3b8" }}>ไม่มีข้อมูลการลา</td></tr>
               ) : filtered.map((row, i) => (
                 <tr key={row.id} style={{ borderBottom: "1px solid #f8fafc", background: i % 2 === 0 ? "#fff" : "#fafafa" }}>
                   <td style={{ padding: "0.65rem 0.75rem" }}>
@@ -1048,10 +1086,16 @@ function LeavePage({ employees, leaves, currentUser, onRefresh }) {
                   </td>
                   <td style={{ padding: "0.65rem 0.75rem", color: "#475569" }}>{row.leave_type}</td>
                   <td style={{ padding: "0.65rem 0.75rem", color: "#475569" }}>{row.duration_type}</td>
-                  <td style={{ padding: "0.65rem 0.75rem", color: "#475569", whiteSpace: "nowrap" }}>{fmtDate(row.start_date)}</td>
-                  <td style={{ padding: "0.65rem 0.75rem", color: "#475569", whiteSpace: "nowrap" }}>{fmtDate(row.end_date)}</td>
+                  <td style={{ padding: "0.65rem 0.75rem", color: "#475569", whiteSpace: "nowrap" }}>
+                    {fmtDate(row.start_date)}
+                    {row.duration_type === "หลายวัน" && row.end_date && row.end_date !== row.start_date && ` - ${fmtDate(row.end_date)}`}
+                  </td>
                   <td style={{ padding: "0.65rem 0.75rem", color: "#475569", fontWeight: 600 }}>{row.hours || 8}</td>
-                  <td style={{ padding: "0.65rem 0.75rem", color: "#64748b", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.reason || "-"}</td>
+                  <td style={{ padding: "0.65rem 0.75rem", color: "#475569" }}>
+                    {row.substitute?.name
+                      ? <span style={{ background: "#f5f3ff", color: "#7c3aed", fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>👨‍🏫 {row.substitute.name}</span>
+                      : <span style={{ color: "#94a3b8", fontSize: "0.78rem" }}>—</span>}
+                  </td>
                   <td style={{ padding: "0.65rem 0.75rem" }}>{stsBadge(row.status)}</td>
                   <td style={{ padding: "0.65rem 0.75rem" }}>
                     <div style={{ display: "flex", gap: "0.3rem" }}>
@@ -1180,6 +1224,12 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
         const li = checkLate(a.check_in, settings?.work_start);
         if (li?.late) csv += `${a.employees?.name || "-"},${fmtDate(a.check_in)},${fmtTime(a.check_in)},${li.minutes}\n`;
       });
+    } else if (reportType === "earlyLeave") {
+      csv = "พนักงาน,วันที่,เวลากลับ,กลับก่อน(นาที)\n";
+      attendance.filter(a => inMonth(a.check_in) && a.check_out && (!empFilter || a.employee_id === empFilter)).forEach(a => {
+        const ei = checkEarly(a.check_out, settings?.work_end);
+        if (ei?.early) csv += `${a.employees?.name || "-"},${fmtDate(a.check_in)},${fmtTime(a.check_out)},${ei.minutes}\n`;
+      });
     } else if (reportType === "leave") {
       csv = "พนักงาน,ประเภท,ระยะเวลา,วันที่เริ่ม,ถึง,ชั่วโมง,เหตุผล,สถานะ\n";
       leaves.filter(l => inMonth(l.start_date) && (!empFilter || l.employee_id === empFilter)).forEach(l => {
@@ -1203,6 +1253,7 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
     { key: "summary", label: "สรุปภาพรวม", icon: BarChart3, color: "#2563eb" },
     { key: "attendance", label: "การเข้า-ออก", icon: Clock, color: "#059669" },
     { key: "late", label: "มาสาย", icon: AlertCircle, color: "#dc2626" },
+    { key: "earlyLeave", label: "กลับก่อน", icon: LogOut, color: "#f59e0b" },
     { key: "leave", label: "การลา", icon: Umbrella, color: "#7c3aed" },
     { key: "outing", label: "ออกนอก รร.", icon: ArrowRightLeft, color: "#d97706" },
   ];
@@ -1428,6 +1479,151 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
   );
 }
 
+// ─── SCHEDULE PAGE ────────────────────────────────────────────────────────────
+function SchedulePage({ employees, currentUser, onRefresh }) {
+  const [schedules, setSchedules] = useState([]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [empView, setEmpView] = useState(currentUser?.role === "admin" ? "" : currentUser?.id);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("teaching_schedule").select("*, employees(name, department)").order("day_of_week").order("period");
+      setSchedules(data || []);
+    })();
+  }, []);
+
+  const refresh = async () => {
+    const { data } = await supabase.from("teaching_schedule").select("*, employees(name, department)").order("day_of_week").order("period");
+    setSchedules(data || []);
+  };
+
+  const filtered = empView ? schedules.filter(s => s.employee_id === empView) : schedules;
+  const today = new Date().getDay(); // 0=อาทิตย์, 1=จันทร์,...
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("ลบรายการนี้?")) return;
+    await supabase.from("teaching_schedule").delete().eq("id", id);
+    refresh();
+  };
+
+  return (
+    <div>
+      <PageHeader title="ตารางสอน" count={filtered.length} onAdd={currentUser?.role === "admin" ? () => setShowAdd(true) : null} addLabel="เพิ่มคาบ" />
+
+      <Card>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem", alignItems: "end" }}>
+          <Field label="ดูตารางสอนของ">
+            <select value={empView} onChange={e => setEmpView(e.target.value)} style={{ ...selectStyle, width: "auto", minWidth: 250 }}>
+              {currentUser?.role === "admin" && <option value="">ทั้งหมด</option>}
+              {employees.map(e => <option key={e.id} value={e.id}>{e.name} — {e.department}</option>)}
+            </select>
+          </Field>
+          {today >= 1 && today <= 5 && (
+            <div style={{ marginLeft: "auto", padding: "0.65rem 1rem", background: "#eff6ff", borderRadius: "10px", fontSize: "0.85rem", color: "#1d4ed8", fontWeight: 600 }}>
+              📅 วันนี้: {DAY_NAMES[today]}
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {/* แสดงเป็น Grid ตาม วัน-คาบ */}
+      <div style={{ marginTop: "1rem" }}>
+        {[1, 2, 3, 4, 5].map(day => {
+          const daySchedules = filtered.filter(s => s.day_of_week === day);
+          if (daySchedules.length === 0) return null;
+          const isToday = day === today;
+          return (
+            <Card key={day} padding="1rem" >
+              <div style={{ marginBottom: "0.75rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <div style={{ fontSize: "1rem", fontWeight: 800, color: isToday ? "#2563eb" : "#0f172a" }}>
+                  {isToday && "📍 "}วัน{DAY_NAMES[day]}
+                </div>
+                {isToday && <span style={{ background: "#dcfce7", color: "#16a34a", fontSize: "0.7rem", fontWeight: 700, padding: "0.15rem 0.5rem", borderRadius: "20px" }}>วันนี้</span>}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "0.6rem" }}>
+                {daySchedules.map(s => (
+                  <div key={s.id} style={{ background: isToday ? "#eff6ff" : "#f8fafc", border: `1.5px solid ${isToday ? "#bfdbfe" : "#e2e8f0"}`, borderRadius: "10px", padding: "0.75rem", position: "relative" }}>
+                    <div style={{ fontSize: "0.7rem", color: "#64748b", fontWeight: 600 }}>คาบที่ {s.period}</div>
+                    <div style={{ fontSize: "0.95rem", fontWeight: 700, color: "#0f172a", marginTop: "0.25rem" }}>{s.subject}</div>
+                    {s.class_room && <div style={{ fontSize: "0.75rem", color: "#475569", marginTop: "0.15rem" }}>🏫 {s.class_room}</div>}
+                    {s.start_time && <div style={{ fontSize: "0.72rem", color: "#94a3b8", marginTop: "0.15rem" }}>⏰ {s.start_time?.slice(0,5)} - {s.end_time?.slice(0,5)}</div>}
+                    {!empView && <div style={{ fontSize: "0.72rem", color: "#7c3aed", marginTop: "0.15rem", fontWeight: 600 }}>👤 {s.employees?.name}</div>}
+                    {currentUser?.role === "admin" && (
+                      <button onClick={() => handleDelete(s.id)} style={{ position: "absolute", top: "0.4rem", right: "0.4rem", background: "#fef2f2", border: "none", borderRadius: "6px", padding: "0.25rem", cursor: "pointer", color: "#dc2626" }}><Trash2 size={12} /></button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </Card>
+          );
+        })}
+        {filtered.length === 0 && (
+          <Card><div style={{ textAlign: "center", padding: "2rem", color: "#94a3b8" }}>ยังไม่มีตารางสอน {currentUser?.role === "admin" && "— กดปุ่ม 'เพิ่มคาบ' เพื่อสร้าง"}</div></Card>
+        )}
+      </div>
+
+      {showAdd && <ScheduleModal employees={employees} onClose={() => setShowAdd(false)} onSave={() => { setShowAdd(false); refresh(); }} />}
+    </div>
+  );
+}
+
+function ScheduleModal({ employees, onClose, onSave }) {
+  const [form, setForm] = useState({
+    employee_id: "", day_of_week: 1, period: 1, subject: "", class_room: "", start_time: "08:30", end_time: "09:20"
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSave = async () => {
+    if (!form.employee_id) { setError("กรุณาเลือกครู"); return; }
+    if (!form.subject.trim()) { setError("กรุณากรอกวิชา"); return; }
+    setSaving(true);
+    const { error } = await supabase.from("teaching_schedule").insert(form);
+    setSaving(false);
+    if (error) { setError(error.message); return; }
+    onSave();
+  };
+
+  return (
+    <Modal title="เพิ่มตารางสอน" onClose={onClose} icon={Calendar} color="#7c3aed">
+      <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+        {error && <ErrorBox>{error}</ErrorBox>}
+        <Field label="ครู *">
+          <select value={form.employee_id} onChange={e => setForm(f => ({ ...f, employee_id: e.target.value }))} style={selectStyle}>
+            <option value="">-- เลือกครู --</option>
+            {employees.map(e => <option key={e.id} value={e.id}>{e.name} — {e.department}</option>)}
+          </select>
+        </Field>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+          <Field label="วัน">
+            <select value={form.day_of_week} onChange={e => setForm(f => ({ ...f, day_of_week: parseInt(e.target.value) }))} style={selectStyle}>
+              {[1,2,3,4,5].map(d => <option key={d} value={d}>วัน{DAY_NAMES[d]}</option>)}
+            </select>
+          </Field>
+          <Field label="คาบที่">
+            <input type="number" min="1" max="12" value={form.period} onChange={e => setForm(f => ({ ...f, period: parseInt(e.target.value) || 1 }))} style={inputStyle} />
+          </Field>
+        </div>
+        <Field label="วิชา *">
+          <input value={form.subject} onChange={e => setForm(f => ({ ...f, subject: e.target.value }))} placeholder="เช่น คณิตศาสตร์ ป.4" style={inputStyle} />
+        </Field>
+        <Field label="ห้องเรียน">
+          <input value={form.class_room} onChange={e => setForm(f => ({ ...f, class_room: e.target.value }))} placeholder="เช่น ป.4/1" style={inputStyle} />
+        </Field>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+          <Field label="เวลาเริ่ม">
+            <input type="time" value={form.start_time} onChange={e => setForm(f => ({ ...f, start_time: e.target.value }))} style={inputStyle} />
+          </Field>
+          <Field label="เวลาสิ้นสุด">
+            <input type="time" value={form.end_time} onChange={e => setForm(f => ({ ...f, end_time: e.target.value }))} style={inputStyle} />
+          </Field>
+        </div>
+        <ButtonRow onCancel={onClose} onSave={handleSave} saving={saving} />
+      </div>
+    </Modal>
+  );
+}
+
 function SettingsPage({ settings, onRefresh }) {
   const [form, setForm] = useState({
     work_start: settings?.work_start?.slice(0, 5) || "08:00",
@@ -1534,7 +1730,7 @@ export default function HRApp() {
     if (emps) setEmployees(emps);
     const { data: att } = await supabase.from("attendance").select("*, employees(name, department)").order("check_in", { ascending: false }).limit(100);
     if (att) setActivityLog(att);
-    const { data: lvs } = await supabase.from("leaves").select("*, employees(name, department)").order("created_at", { ascending: false });
+    const { data: lvs } = await supabase.from("leaves").select("*, employees!leaves_employee_id_fkey(name, department), substitute:employees!leaves_substitute_id_fkey(name)").order("created_at", { ascending: false });
     if (lvs) setLeaves(lvs);
     const { data: outs } = await supabase.from("outings").select("*, employees(name, department)").order("out_time", { ascending: false });
     if (outs) setOutings(outs);
@@ -1553,10 +1749,12 @@ export default function HRApp() {
 
   if (!currentUser) return <LoginPage onLogin={setCurrentUser} />;
 
-  const todayAttendance = activityLog.filter(a => new Date(a.check_in).toDateString() === new Date().toDateString());
+  const todayDateStr = todayISO();
+  const isToday = (dt) => new Date(dt).toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }) === todayDateStr;
+  const todayAttendance = activityLog.filter(a => isToday(a.check_in));
   const currentlyOut = outings.filter(o => o.status === "out").length;
   const pendingLeaves = leaves.filter(l => l.status === "pending").length;
-  const myAttToday = activityLog.find(a => a.employee_id === currentUser.id && new Date(a.check_in).toDateString() === new Date().toDateString());
+  const myAttToday = activityLog.find(a => a.employee_id === currentUser.id && isToday(a.check_in));
 
   const stats = currentUser.role === "admin" ? [
     { label: "พนักงานทั้งหมด", value: employees.length, icon: Users, color: "#2563eb", bg: "#eff6ff", trend: "ข้อมูลจริง" },
@@ -1889,6 +2087,7 @@ export default function HRApp() {
               {activePage === "leave" && <LeavePage employees={employees} leaves={leaves} currentUser={currentUser} onRefresh={fetchData} />}
               {activePage === "outing" && <OutingPage employees={employees} outings={outings} currentUser={currentUser} onRefresh={fetchData} />}
               {activePage === "report" && <ReportPage employees={employees} attendance={activityLog} leaves={leaves} outings={outings} settings={settings} />}
+              {activePage === "schedule" && <SchedulePage employees={employees} currentUser={currentUser} onRefresh={fetchData} />}
               {activePage === "settings" && <SettingsPage settings={settings} onRefresh={fetchData} />}
             </>
           )}

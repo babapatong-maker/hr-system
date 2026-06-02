@@ -162,6 +162,24 @@ function parseDutyName(settingValue) {
   return settingValue.slice(DUTY_SETTING_PREFIX.length);
 }
 
+function defaultEmployeePayrollConfig() {
+  return {
+    daily_rate: 0,
+    overtime_rate: 0,
+    substitute_rate: 0,
+    leave_deduct_types: "ลาป่วย,ลากิจ",
+  };
+}
+
+function legacyToEmployeeConfigs(legacyConfig) {
+  return Object.fromEntries(
+    Object.entries(legacyConfig.dailyTeacherRates || {}).map(([employeeId, rate]) => [
+      employeeId,
+      { ...defaultEmployeePayrollConfig(), daily_rate: parseMoney(rate) },
+    ]),
+  );
+}
+
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -487,7 +505,7 @@ function LoginPage({ onLogin }) {
         </div>
 
         <div style={{ marginTop: "1.5rem", padding: "0.75rem", background: "#eff6ff", borderRadius: "10px", fontSize: "0.78rem", color: "#1d4ed8", textAlign: "center" }}>
-          💡 ทดสอบ: username <strong>admin</strong> / password <strong>admin123</strong>
+          💡 ทดสอบ: username <strong>admin1</strong> / password <strong>admin123</strong>
         </div>
       </div>
     </div>
@@ -1758,12 +1776,19 @@ function ScheduleModal({ employees, onClose, onSave }) {
 
 function PayrollPage({ employees, attendance, leaves, settings }) {
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
-  const [config, setConfig] = useState({ dutyRates: { ...DEFAULT_DUTY_RATES }, dailyTeacherRates: {} });
+  const [config, setConfig] = useState({ dutyRates: { ...DEFAULT_DUTY_RATES }, employeeConfigs: {} });
   const [settingsRows, setSettingsRows] = useState([]);
+  const [savedPayrollRows, setSavedPayrollRows] = useState([]);
+  const [selectedPayrollEmployee, setSelectedPayrollEmployee] = useState("");
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const legacyConfig = loadLegacyPayrollConfig();
+
+  async function loadSavedPayroll(targetMonth) {
+    const { data } = await supabase.from("payroll").select("*").eq("month", targetMonth).order("total", { ascending: false });
+    setSavedPayrollRows(data || []);
+  }
 
   useEffect(() => {
     let active = true;
@@ -1774,31 +1799,40 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
       if (!active) return;
 
       if (error) {
-        setConfig(legacyConfig);
+        setConfig({ dutyRates: legacyConfig.dutyRates, employeeConfigs: legacyToEmployeeConfigs(legacyConfig) });
         setLoadingConfig(false);
         return;
       }
 
-      const nextConfig = { dutyRates: { ...DEFAULT_DUTY_RATES }, dailyTeacherRates: {} };
+      const nextConfig = { dutyRates: { ...DEFAULT_DUTY_RATES }, employeeConfigs: {} };
       (data || []).forEach(row => {
         const dutyName = parseDutyName(row.leave_deduct_types);
         if (dutyName && dutyName in DEFAULT_DUTY_RATES) {
           nextConfig.dutyRates[dutyName] = row.duty_rate ?? 0;
         } else if (row.employee_id) {
-          nextConfig.dailyTeacherRates[row.employee_id] = row.daily_rate ?? 0;
+          nextConfig.employeeConfigs[row.employee_id] = {
+            daily_rate: row.daily_rate ?? 0,
+            overtime_rate: row.overtime_rate ?? 0,
+            substitute_rate: row.substitute_rate ?? 0,
+            leave_deduct_types: row.leave_deduct_types || "ลาป่วย,ลากิจ",
+          };
         }
       });
 
       const hasSupabaseConfig = Object.values(nextConfig.dutyRates).some(rate => parseMoney(rate) > 0)
-        || Object.values(nextConfig.dailyTeacherRates).some(rate => parseMoney(rate) > 0);
+        || Object.values(nextConfig.employeeConfigs).some(row => parseMoney(row.daily_rate) > 0 || parseMoney(row.overtime_rate) > 0 || parseMoney(row.substitute_rate) > 0);
 
-      setConfig(hasSupabaseConfig ? nextConfig : legacyConfig);
+      setConfig(hasSupabaseConfig ? nextConfig : { dutyRates: legacyConfig.dutyRates, employeeConfigs: legacyToEmployeeConfigs(legacyConfig) });
       setSettingsRows(data || []);
       setLoadingConfig(false);
     })();
 
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    loadSavedPayroll(month);
+  }, [month]);
 
   const monthAttendance = attendance.filter(row => inMonthValue(row.check_in, month));
   const monthLeaves = leaves.filter(row => inMonthValue(row.start_date, month) && row.status === "approved");
@@ -1808,14 +1842,15 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
     const dow = new Date(monthStart.getFullYear(), monthStart.getMonth(), d).getDay();
     return dow !== 0 && dow !== 6;
   }).length;
-  const configuredDailyTeachers = Object.entries(config.dailyTeacherRates).filter(([, rate]) => parseMoney(rate) > 0).length;
+  const configuredDailyTeachers = Object.values(config.employeeConfigs).filter(row => parseMoney(row?.daily_rate) > 0).length;
   const allRows = employees.map(emp => {
     const employeeAttendance = monthAttendance.filter(row => row.employee_id === emp.id);
     const attendanceDays = new Set(employeeAttendance.map(row => getDateKey(row.check_in))).size;
     const dutyCounts = DUTY_OPTIONS.reduce((acc, dutyName) => ({ ...acc, [dutyName]: 0 }), {});
     const lateCount = employeeAttendance.filter(row => checkLate(row.check_in, settings?.work_start, settings?.late_grace_minutes)?.late).length;
     const employeeLeaves = monthLeaves.filter(row => row.employee_id === emp.id);
-    const leaveTypes = settingsRows.find(row => row.employee_id === emp.id)?.leave_deduct_types || "ลาป่วย,ลากิจ";
+    const employeeConfig = config.employeeConfigs[emp.id] || defaultEmployeePayrollConfig();
+    const leaveTypes = employeeConfig.leave_deduct_types || "ลาป่วย,ลากิจ";
     const deductableLeaveTypes = leaveTypes.split(",").map(item => item.trim()).filter(Boolean);
     const leaveDeductDays = employeeLeaves
       .filter(row => deductableLeaveTypes.includes(row.leave_type))
@@ -1831,10 +1866,9 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
       dutyCounts[dutyName] += 1;
     });
 
-    const dailyRate = parseMoney(config.dailyTeacherRates[emp.id]);
-    const employeeSettings = settingsRows.find(row => row.employee_id === emp.id);
-    const overtimeRate = parseMoney(employeeSettings?.overtime_rate);
-    const substituteRate = parseMoney(employeeSettings?.substitute_rate);
+    const dailyRate = parseMoney(employeeConfig.daily_rate);
+    const overtimeRate = parseMoney(employeeConfig.overtime_rate);
+    const substituteRate = parseMoney(employeeConfig.substitute_rate);
     const dutyPay = DUTY_OPTIONS.reduce((sum, dutyName) => sum + dutyCounts[dutyName] * parseMoney(config.dutyRates[dutyName]), 0);
     const baseSalary = attendanceDays * dailyRate;
     const overtimePay = overtimeHours * overtimeRate;
@@ -1880,8 +1914,36 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
   const updateDailyRate = (employeeId, value) => {
     setConfig(current => ({
       ...current,
-      dailyTeacherRates: { ...current.dailyTeacherRates, [employeeId]: value },
+      employeeConfigs: {
+        ...current.employeeConfigs,
+        [employeeId]: {
+          ...(current.employeeConfigs[employeeId] || defaultEmployeePayrollConfig()),
+          daily_rate: value,
+        },
+      },
     }));
+  };
+
+  const updateEmployeeSetting = (employeeId, key, value) => {
+    setConfig(current => ({
+      ...current,
+      employeeConfigs: {
+        ...current.employeeConfigs,
+        [employeeId]: {
+          ...(current.employeeConfigs[employeeId] || defaultEmployeePayrollConfig()),
+          [key]: value,
+        },
+      },
+    }));
+  };
+
+  const toggleLeaveDeductType = (employeeId, leaveType) => {
+    const currentConfig = config.employeeConfigs[employeeId] || defaultEmployeePayrollConfig();
+    const selectedTypes = (currentConfig.leave_deduct_types || "").split(",").map(item => item.trim()).filter(Boolean);
+    const nextTypes = selectedTypes.includes(leaveType)
+      ? selectedTypes.filter(item => item !== leaveType)
+      : [...selectedTypes, leaveType];
+    updateEmployeeSetting(employeeId, "leave_deduct_types", nextTypes.join(","));
   };
 
   const handleSave = async () => {
@@ -1910,18 +1972,27 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
 
     for (const emp of employees) {
       const existing = employeeRows.find(row => row.employee_id === emp.id);
-      const nextRate = parseMoney(config.dailyTeacherRates[emp.id]);
+      const employeeConfig = { ...defaultEmployeePayrollConfig(), ...(config.employeeConfigs[emp.id] || {}) };
+      const hasMeaningfulConfig = parseMoney(employeeConfig.daily_rate) > 0
+        || parseMoney(employeeConfig.overtime_rate) > 0
+        || parseMoney(employeeConfig.substitute_rate) > 0
+        || (employeeConfig.leave_deduct_types || "").trim() !== "ลาป่วย,ลากิจ";
 
       if (existing) {
-        await supabase.from("salary_settings").update({ daily_rate: nextRate }).eq("id", existing.id);
-      } else if (nextRate > 0) {
+        await supabase.from("salary_settings").update({
+          daily_rate: parseMoney(employeeConfig.daily_rate),
+          overtime_rate: parseMoney(employeeConfig.overtime_rate),
+          substitute_rate: parseMoney(employeeConfig.substitute_rate),
+          leave_deduct_types: employeeConfig.leave_deduct_types || "ลาป่วย,ลากิจ",
+        }).eq("id", existing.id);
+      } else if (hasMeaningfulConfig) {
         await supabase.from("salary_settings").insert({
           employee_id: emp.id,
-          daily_rate: nextRate,
+          daily_rate: parseMoney(employeeConfig.daily_rate),
           duty_rate: 0,
-          substitute_rate: 0,
-          overtime_rate: 0,
-          leave_deduct_types: "ลาป่วย,ลากิจ",
+          substitute_rate: parseMoney(employeeConfig.substitute_rate),
+          overtime_rate: parseMoney(employeeConfig.overtime_rate),
+          leave_deduct_types: employeeConfig.leave_deduct_types || "ลาป่วย,ลากิจ",
         });
       }
     }
@@ -1959,25 +2030,32 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
 
     const { data: latestRows } = await supabase.from("salary_settings").select("*").order("created_at", { ascending: true });
     setSettingsRows(latestRows || []);
+    await loadSavedPayroll(month);
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
 
   const exportCSV = () => {
-    let csv = "พนักงาน,แผนก,วันมาทำงาน,อัตราครูรายวัน,ค่ารายวัน,ไม่มีเวร,เวรรถ,แลกชิพ,เวรหน้าประตู,ค่าเวร,รวมทั้งสิ้น\n";
+    let csv = "พนักงาน,แผนก,วันมาทำงาน,อัตราครูรายวัน,ค่ารายวัน,ไม่มีเวร,เวรรถ,แลกชิพ,เวรหน้าประตู,ค่าเวร,OT(ชม.),ค่า OT,สอนแทน,ค่าสอนแทน,หักลา(วัน),หักเงิน,รวมทั้งสิ้น\n";
     summaryRows.forEach(row => {
       csv += [
         row.emp.name,
         row.emp.department || "",
         row.attendanceDays,
         row.dailyRate,
-        row.dailyPay,
+        row.baseSalary,
         row.dutyCounts["ไม่มีเวร"],
         row.dutyCounts["เวรรถ"],
         row.dutyCounts["แลกชิพ"],
         row.dutyCounts["เวรหน้าประตู"],
         row.dutyPay,
+        row.overtimeHours,
+        row.overtimePay,
+        row.substituteCount,
+        row.substitutePay,
+        row.leaveDeductDays,
+        row.deductions,
         row.totalPay,
       ].join(",") + "\n";
     });
@@ -2054,13 +2132,120 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
                   type="number"
                   min="0"
                   step="0.01"
-                  value={config.dailyTeacherRates[emp.id] ?? ""}
+                  value={config.employeeConfigs[emp.id]?.daily_rate ?? ""}
                   onChange={e => updateDailyRate(emp.id, e.target.value)}
                   placeholder="วันละเท่าไร"
                   style={inputStyle}
                 />
               </div>
             ))}
+          </div>
+        </Card>
+      </div>
+
+      <Card padding="1rem">
+        <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.9rem" }}>ตั้งค่าเพิ่มเติมรายคน</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "0.85rem" }}>
+          {employees.map(emp => {
+            const employeeConfig = config.employeeConfigs[emp.id] || defaultEmployeePayrollConfig();
+            const selectedLeaveTypes = (employeeConfig.leave_deduct_types || "").split(",").map(item => item.trim()).filter(Boolean);
+            return (
+              <div key={emp.id} style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.85rem" }}>
+                <div style={{ fontWeight: 700, color: "#0f172a" }}>{emp.name}</div>
+                <div style={{ fontSize: "0.72rem", color: "#64748b", marginBottom: "0.75rem" }}>{emp.department || "ไม่ระบุแผนก"}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                  <Field label="ค่า OT / ชั่วโมง">
+                    <input type="number" min="0" step="0.01" value={employeeConfig.overtime_rate ?? 0} onChange={e => updateEmployeeSetting(emp.id, "overtime_rate", e.target.value)} style={inputStyle} />
+                  </Field>
+                  <Field label="ค่าสอนแทน / ครั้ง">
+                    <input type="number" min="0" step="0.01" value={employeeConfig.substitute_rate ?? 0} onChange={e => updateEmployeeSetting(emp.id, "substitute_rate", e.target.value)} style={inputStyle} />
+                  </Field>
+                </div>
+                <div style={{ marginTop: "0.75rem" }}>
+                  <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "#475569", marginBottom: "0.5rem" }}>ประเภทลาที่หักเงิน</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.45rem" }}>
+                    {["ลาป่วย", "ลากิจ", "ลาพักร้อน", "ลาคลอด", "ลาบวช"].map(type => {
+                      const checked = selectedLeaveTypes.includes(type);
+                      return (
+                        <button
+                          key={type}
+                          onClick={() => toggleLeaveDeductType(emp.id, type)}
+                          style={{
+                            border: `1px solid ${checked ? "#2563eb" : "#cbd5e1"}`,
+                            background: checked ? "#eff6ff" : "#fff",
+                            color: checked ? "#1d4ed8" : "#475569",
+                            borderRadius: "999px",
+                            padding: "0.35rem 0.65rem",
+                            fontSize: "0.75rem",
+                            fontWeight: 700,
+                            cursor: "pointer",
+                            fontFamily: "inherit",
+                          }}
+                        >
+                          {type}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div style={{ fontSize: "0.7rem", color: "#94a3b8", marginTop: "0.45rem" }}>ถ้าไม่เลือกเลย ระบบจะไม่หักเงินจากวันลา</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
+      <div style={{ marginTop: "1rem" }}>
+        <Card padding="0">
+          <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a" }}>ข้อมูลเงินเดือนที่บันทึกไว้แล้ว</div>
+              <div style={{ fontSize: "0.8rem", color: "#64748b" }}>snapshot จากตาราง payroll ของเดือน {month}</div>
+            </div>
+            <Field label="ดูเฉพาะพนักงาน">
+              <select value={selectedPayrollEmployee} onChange={e => setSelectedPayrollEmployee(e.target.value)} style={{ ...selectStyle, width: "auto", minWidth: 220 }}>
+                <option value="">ทั้งหมด</option>
+                {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+              </select>
+            </Field>
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+              <thead>
+                <tr style={{ background: "#f8fafc", borderBottom: "2px solid #f1f5f9" }}>
+                  {["พนักงาน", "มาทำงาน", "สาย", "เวร", "OT", "หักลา", "หักเงิน", "รวมสุทธิ"].map(h => (
+                    <th key={h} style={{ padding: "0.65rem 0.75rem", textAlign: "left", color: "#64748b", fontWeight: 600, fontSize: "0.75rem", whiteSpace: "nowrap" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {savedPayrollRows.filter(row => !selectedPayrollEmployee || row.employee_id === selectedPayrollEmployee).length === 0 ? (
+                  <tr><td colSpan={8} style={{ padding: "3rem", textAlign: "center", color: "#94a3b8" }}>ยังไม่มี snapshot ที่บันทึกไว้สำหรับเดือนนี้</td></tr>
+                ) : savedPayrollRows.filter(row => !selectedPayrollEmployee || row.employee_id === selectedPayrollEmployee).map((row, index) => {
+                  const emp = employees.find(item => item.id === row.employee_id);
+                  return (
+                    <tr key={row.id} style={{ borderBottom: "1px solid #f8fafc", background: index % 2 === 0 ? "#fff" : "#fafafa" }}>
+                      <td style={{ padding: "0.65rem 0.75rem" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                          <Avatar name={emp?.name} index={index} />
+                          <div>
+                            <div style={{ fontWeight: 700, color: "#0f172a" }}>{emp?.name || "ไม่พบชื่อ"}</div>
+                            <div style={{ fontSize: "0.72rem", color: "#64748b" }}>{emp?.department || "-"}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ padding: "0.65rem 0.75rem", fontWeight: 700 }}>{row.work_days} วัน</td>
+                      <td style={{ padding: "0.65rem 0.75rem", color: row.late_count > 0 ? "#dc2626" : "#94a3b8", fontWeight: 700 }}>{row.late_count}</td>
+                      <td style={{ padding: "0.65rem 0.75rem", color: "#2563eb", fontWeight: 700 }}>{row.duty_count}</td>
+                      <td style={{ padding: "0.65rem 0.75rem", color: "#16a34a", fontWeight: 700 }}>{row.overtime_hours} ชม.</td>
+                      <td style={{ padding: "0.65rem 0.75rem", color: "#7c3aed", fontWeight: 700 }}>{row.leave_deduct_days} วัน</td>
+                      <td style={{ padding: "0.65rem 0.75rem", color: "#dc2626", fontWeight: 700 }}>{formatMoney(row.deductions)}</td>
+                      <td style={{ padding: "0.65rem 0.75rem", color: "#d97706", fontWeight: 800 }}>{formatMoney(row.total)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </Card>
       </div>
@@ -2080,14 +2265,14 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.84rem" }}>
               <thead>
                 <tr style={{ background: "#f8fafc", borderBottom: "2px solid #f1f5f9" }}>
-                  {["พนักงาน", "วันทำงาน", "อัตรารายวัน", "ค่ารายวัน", "สรุปเวร", "ค่าเวร", "รวม"].map(h => (
+                  {["พนักงาน", "วันทำงาน", "อัตรารายวัน", "ค่ารายวัน", "สรุปเวร", "ค่าเวร", "OT", "สอนแทน", "หักลา", "รวม"].map(h => (
                     <th key={h} style={{ padding: "0.65rem 0.75rem", textAlign: "left", color: "#64748b", fontWeight: 600, fontSize: "0.75rem", whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {summaryRows.length === 0 ? (
-                  <tr><td colSpan={7} style={{ padding: "3rem", textAlign: "center", color: "#94a3b8" }}>ยังไม่มีข้อมูลสำหรับเดือนนี้</td></tr>
+                  <tr><td colSpan={10} style={{ padding: "3rem", textAlign: "center", color: "#94a3b8" }}>ยังไม่มีข้อมูลสำหรับเดือนนี้</td></tr>
                 ) : summaryRows.map((row, index) => {
                   const dutySummary = DUTY_OPTIONS.filter(dutyName => dutyName !== "ไม่มีเวร" && row.dutyCounts[dutyName] > 0);
                   return (
@@ -2120,6 +2305,9 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
                         )}
                       </td>
                       <td style={{ padding: "0.65rem 0.75rem", color: "#7c3aed", fontWeight: 700 }}>{formatMoney(row.dutyPay)}</td>
+                      <td style={{ padding: "0.65rem 0.75rem", color: row.overtimePay > 0 ? "#16a34a" : "#94a3b8", fontWeight: 700 }}>{row.overtimeHours > 0 ? `${row.overtimeHours.toFixed(1)} ชม. / ${formatMoney(row.overtimePay)}` : "—"}</td>
+                      <td style={{ padding: "0.65rem 0.75rem", color: row.substitutePay > 0 ? "#2563eb" : "#94a3b8", fontWeight: 700 }}>{row.substituteCount > 0 ? `${row.substituteCount} ครั้ง / ${formatMoney(row.substitutePay)}` : "—"}</td>
+                      <td style={{ padding: "0.65rem 0.75rem", color: row.deductions > 0 ? "#dc2626" : "#94a3b8", fontWeight: 700 }}>{row.leaveDeductDays > 0 ? `${row.leaveDeductDays.toFixed(1)} วัน / ${formatMoney(row.deductions)}` : "—"}</td>
                       <td style={{ padding: "0.65rem 0.75rem", color: "#d97706", fontWeight: 800 }}>{formatMoney(row.totalPay)}</td>
                     </tr>
                   );

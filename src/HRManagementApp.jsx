@@ -1843,6 +1843,9 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
     return dow !== 0 && dow !== 6;
   }).length;
   const configuredDailyTeachers = Object.values(config.employeeConfigs).filter(row => parseMoney(row?.daily_rate) > 0).length;
+  const selectedEmployeeId = selectedPayrollEmployee || employees[0]?.id || "";
+  const selectedEmployee = employees.find(emp => emp.id === selectedEmployeeId) || null;
+  const selectedEmployeeConfig = config.employeeConfigs[selectedEmployeeId] || defaultEmployeePayrollConfig();
   const allRows = employees.map(emp => {
     const employeeAttendance = monthAttendance.filter(row => row.employee_id === emp.id);
     const attendanceDays = new Set(employeeAttendance.map(row => getDateKey(row.check_in))).size;
@@ -2122,54 +2125,43 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
         </Card>
 
         <Card>
-          <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.9rem" }}>ตั้งค่าครูรายวัน</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", maxHeight: 360, overflowY: "auto", paddingRight: "0.25rem" }}>
-            {employees.map(emp => (
-              <div key={emp.id} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "0.75rem" }}>
-                <div style={{ fontWeight: 700, color: "#0f172a", fontSize: "0.9rem" }}>{emp.name}</div>
-                <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "0.55rem" }}>{emp.department || "ไม่ระบุแผนก"}</div>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={config.employeeConfigs[emp.id]?.daily_rate ?? ""}
-                  onChange={e => updateDailyRate(emp.id, e.target.value)}
-                  placeholder="วันละเท่าไร"
-                  style={inputStyle}
-                />
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
+          <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.9rem" }}>ตั้งค่าเงินเดือนรายคน</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.9rem" }}>
+            <Field label="เลือกพนักงาน">
+              <select value={selectedEmployeeId} onChange={e => setSelectedPayrollEmployee(e.target.value)} style={selectStyle}>
+                {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name} — {emp.department || "ไม่ระบุแผนก"}</option>)}
+              </select>
+            </Field>
 
-      <Card padding="1rem">
-        <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.9rem" }}>ตั้งค่าเพิ่มเติมรายคน</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "0.85rem" }}>
-          {employees.map(emp => {
-            const employeeConfig = config.employeeConfigs[emp.id] || defaultEmployeePayrollConfig();
-            const selectedLeaveTypes = (employeeConfig.leave_deduct_types || "").split(",").map(item => item.trim()).filter(Boolean);
-            return (
-              <div key={emp.id} style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.85rem" }}>
-                <div style={{ fontWeight: 700, color: "#0f172a" }}>{emp.name}</div>
-                <div style={{ fontSize: "0.72rem", color: "#64748b", marginBottom: "0.75rem" }}>{emp.department || "ไม่ระบุแผนก"}</div>
+            {selectedEmployee && (
+              <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.9rem", display: "flex", flexDirection: "column", gap: "0.9rem" }}>
+                <div>
+                  <div style={{ fontWeight: 800, color: "#0f172a", fontSize: "1rem" }}>{selectedEmployee.name}</div>
+                  <div style={{ fontSize: "0.78rem", color: "#64748b" }}>{selectedEmployee.department || "ไม่ระบุแผนก"}</div>
+                </div>
+
+                <Field label="ค่าจ้างรายวัน">
+                  <input type="number" min="0" step="0.01" value={selectedEmployeeConfig.daily_rate ?? ""} onChange={e => updateDailyRate(selectedEmployee.id, e.target.value)} placeholder="วันละเท่าไร" style={inputStyle} />
+                </Field>
+
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
                   <Field label="ค่า OT / ชั่วโมง">
-                    <input type="number" min="0" step="0.01" value={employeeConfig.overtime_rate ?? 0} onChange={e => updateEmployeeSetting(emp.id, "overtime_rate", e.target.value)} style={inputStyle} />
+                    <input type="number" min="0" step="0.01" value={selectedEmployeeConfig.overtime_rate ?? 0} onChange={e => updateEmployeeSetting(selectedEmployee.id, "overtime_rate", e.target.value)} style={inputStyle} />
                   </Field>
                   <Field label="ค่าสอนแทน / ครั้ง">
-                    <input type="number" min="0" step="0.01" value={employeeConfig.substitute_rate ?? 0} onChange={e => updateEmployeeSetting(emp.id, "substitute_rate", e.target.value)} style={inputStyle} />
+                    <input type="number" min="0" step="0.01" value={selectedEmployeeConfig.substitute_rate ?? 0} onChange={e => updateEmployeeSetting(selectedEmployee.id, "substitute_rate", e.target.value)} style={inputStyle} />
                   </Field>
                 </div>
-                <div style={{ marginTop: "0.75rem" }}>
+
+                <div>
                   <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "#475569", marginBottom: "0.5rem" }}>ประเภทลาที่หักเงิน</div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "0.45rem" }}>
                     {["ลาป่วย", "ลากิจ", "ลาพักร้อน", "ลาคลอด", "ลาบวช"].map(type => {
-                      const checked = selectedLeaveTypes.includes(type);
+                      const checked = (selectedEmployeeConfig.leave_deduct_types || "").split(",").map(item => item.trim()).filter(Boolean).includes(type);
                       return (
                         <button
                           key={type}
-                          onClick={() => toggleLeaveDeductType(emp.id, type)}
+                          onClick={() => toggleLeaveDeductType(selectedEmployee.id, type)}
                           style={{
                             border: `1px solid ${checked ? "#2563eb" : "#cbd5e1"}`,
                             background: checked ? "#eff6ff" : "#fff",
@@ -2187,13 +2179,13 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
                       );
                     })}
                   </div>
-                  <div style={{ fontSize: "0.7rem", color: "#94a3b8", marginTop: "0.45rem" }}>ถ้าไม่เลือกเลย ระบบจะไม่หักเงินจากวันลา</div>
+                  <div style={{ fontSize: "0.7rem", color: "#94a3b8", marginTop: "0.45rem" }}>เลือกชื่อก่อน แล้วค่อยกรอกค่าของคนนั้นได้เลย</div>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      </Card>
+            )}
+          </div>
+        </Card>
+      </div>
 
       <div style={{ marginTop: "1rem" }}>
         <Card padding="0">

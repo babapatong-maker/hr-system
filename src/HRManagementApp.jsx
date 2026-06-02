@@ -162,6 +162,17 @@ function parseDutyName(settingValue) {
   return settingValue.slice(DUTY_SETTING_PREFIX.length);
 }
 
+function getPeriodSubstitutes(value) {
+  if (!value) return Array.from({ length: 6 }, () => "");
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) {
+      return Array.from({ length: 6 }, (_, index) => parsed[index] || "");
+    }
+  } catch {}
+  return Array.from({ length: 6 }, () => "");
+}
+
 function defaultEmployeePayrollConfig() {
   return {
     daily_rate: 0,
@@ -591,17 +602,20 @@ function EmployeeModal({ employee, onClose, onSave }) {
 
 // ─── LEAVE MODAL ──────────────────────────────────────────────────────────────
 function LeaveModal({ employees, currentUser, onClose, onSave }) {
+  const emptyPeriodSubs = Array.from({ length: 6 }, () => "");
   const [form, setForm] = useState({
     employee_id: currentUser?.id || "",
     leave_type: "ลาป่วย", duration_type: "เต็มวัน",
     start_date: todayISO(), end_date: todayISO(),
     start_time: "08:30", end_time: "16:30", hours: 8, reason: "",
     substitute_id: "",
+    substitute_note: JSON.stringify(emptyPeriodSubs),
     document_url: ""
   });
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+  const [periodSubs, setPeriodSubs] = useState(emptyPeriodSubs);
 
   // Auto-calculate days/hours
   useEffect(() => {
@@ -618,8 +632,13 @@ function LeaveModal({ employees, currentUser, onClose, onSave }) {
     if (!form.employee_id) { setError("กรุณาเลือกพนักงาน"); return; }
     if (!form.reason.trim()) { setError("กรุณากรอกเหตุผล"); return; }
     if (uploading) { setError("กรุณารอให้ระบบแนบรูปให้เสร็จก่อน"); return; }
+    if (periodSubs.some(value => !value)) { setError("กรุณาเลือกครูสอนแทนครบทั้ง 6 คาบ"); return; }
     setSaving(true);
-    const payload = { ...form, substitute_id: form.substitute_id || null };
+    const payload = {
+      ...form,
+      substitute_id: periodSubs[0] || null,
+      substitute_note: JSON.stringify(periodSubs),
+    };
     const { error } = await supabase.from("leaves").insert(payload);
     setSaving(false);
     if (error) { setError(error.message); return; }
@@ -696,12 +715,26 @@ function LeaveModal({ employees, currentUser, onClose, onSave }) {
         </Field>
 
         <Field label="👨‍🏫 ครูสอนแทน (ถ้ามี)">
-          <select value={form.substitute_id} onChange={e => setForm(f => ({ ...f, substitute_id: e.target.value }))} style={selectStyle}>
-            <option value="">-- ไม่ระบุ --</option>
-            {employees.filter(e => e.id !== currentUser?.id).map(e => (
-              <option key={e.id} value={e.id}>{e.name} — {e.department}</option>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+            {Array.from({ length: 6 }, (_, index) => (
+              <div key={index}>
+                <label style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: 600, display: "block", marginBottom: "0.3rem" }}>
+                  คาบ {index + 1}
+                </label>
+                <select
+                  value={periodSubs[index]}
+                  onChange={e => setPeriodSubs(current => current.map((item, itemIndex) => itemIndex === index ? e.target.value : item))}
+                  style={selectStyle}
+                >
+                  <option value="">-- เลือกครูแทน --</option>
+                  {employees.filter(e => e.id !== currentUser?.id).map(e => (
+                    <option key={e.id} value={e.id}>{e.name} — {e.department}</option>
+                  ))}
+                </select>
+              </div>
             ))}
-          </select>
+          </div>
+          <div style={{ fontSize: "0.72rem", color: "#94a3b8", marginTop: "0.4rem" }}>ต้องเลือกครูสอนแทนครบทั้ง 6 คาบก่อนบันทึก</div>
         </Field>
 
         <Field label="แนบใบนัดหมอ / ใบรับรองแพทย์">
@@ -1234,9 +1267,24 @@ function LeavePage({ employees, leaves, currentUser, onRefresh }) {
                   </td>
                   <td style={{ padding: "0.65rem 0.75rem", color: "#475569", fontWeight: 600 }}>{row.hours || 8}</td>
                   <td style={{ padding: "0.65rem 0.75rem", color: "#475569" }}>
-                    {row.substitute?.name
-                      ? <span style={{ background: "#f5f3ff", color: "#7c3aed", fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>👨‍🏫 {row.substitute.name}</span>
-                      : <span style={{ color: "#94a3b8", fontSize: "0.78rem" }}>—</span>}
+                    {(() => {
+                      const periodSubs = getPeriodSubstitutes(row.substitute_note);
+                      const filledSubs = periodSubs.filter(Boolean);
+                      if (filledSubs.length === 0 && !row.substitute?.name) return <span style={{ color: "#94a3b8", fontSize: "0.78rem" }}>—</span>;
+
+                      return (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.3rem", maxWidth: 260 }}>
+                          {periodSubs.map((subId, periodIndex) => {
+                            const subEmp = employees.find(emp => emp.id === subId);
+                            return (
+                              <span key={`${row.id}-${periodIndex}`} style={{ background: subEmp ? "#f5f3ff" : "#f8fafc", color: subEmp ? "#7c3aed" : "#94a3b8", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.45rem", borderRadius: "20px", whiteSpace: "nowrap" }}>
+                                {`ค${periodIndex + 1} ${subEmp?.name?.split(" ")[0] || "-"}`}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td style={{ padding: "0.65rem 0.75rem" }}>
                     {row.document_url

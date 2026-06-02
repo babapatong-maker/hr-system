@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+﻿import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import {
   Users, Building2, Clock, CheckCircle, XCircle, MapPin,
@@ -1951,6 +1951,8 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
     };
   });
   const summaryRows = allRows.filter(row => row.attendanceDays > 0 || row.dailyRate > 0 || row.dutyPay > 0 || row.deductions > 0 || row.overtimePay > 0);
+  const selectedSummaryRow = allRows.find(row => row.emp.id === selectedEmployeeId) || null;
+  const selectedSavedPayroll = savedPayrollRows.find(row => row.employee_id === selectedEmployeeId) || null;
 
   const totalPayout = summaryRows.reduce((sum, row) => sum + row.totalPay, 0);
   const totalAttendanceDays = summaryRows.reduce((sum, row) => sum + row.attendanceDays, 0);
@@ -2120,7 +2122,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
 
   return (
     <div>
-      <PageHeader title="เงินเดือน" count={summaryRows.length} />
+      <PageHeader title="เงินเดือน" count={selectedEmployee ? 1 : 0} />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "1rem", marginBottom: "1rem" }}>
         <StatCard stat={{ label: "คนที่มีข้อมูลเดือนนี้", value: summaryRows.length, icon: Users, color: "#2563eb", bg: "#eff6ff", trend: month }} />
@@ -2136,9 +2138,16 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
           </div>
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "end", gap: "1rem", flexWrap: "wrap" }}>
-            <Field label="เดือน">
-              <input type="month" value={month} onChange={e => setMonth(e.target.value)} style={{ ...inputStyle, width: "auto" }} />
-            </Field>
+            <div style={{ display: "flex", gap: "0.85rem", flexWrap: "wrap", alignItems: "end" }}>
+              <Field label="เดือน">
+                <input type="month" value={month} onChange={e => setMonth(e.target.value)} style={{ ...inputStyle, width: "auto" }} />
+              </Field>
+              <Field label="เลือกพนักงาน">
+                <select value={selectedEmployeeId} onChange={e => setSelectedPayrollEmployee(e.target.value)} style={{ ...selectStyle, minWidth: 260 }}>
+                  {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name} — {emp.department || "ไม่ระบุแผนก"}</option>)}
+                </select>
+              </Field>
+            </div>
             <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
               <button onClick={exportCSV} style={{ ...btnSecondary, flex: "none", padding: "0.8rem 1rem" }}>
                 <FileText size={16} /> Export CSV
@@ -2151,10 +2160,60 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
           </div>
         </div>
       </Card>
-
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem", marginTop: "1rem" }}>
         <Card>
-          <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.9rem" }}>ตั้งค่าอัตราเวร</div>
+          <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.3rem" }}>ตั้งค่าเงินเดือนรายคน</div>
+          <div style={{ fontSize: "0.8rem", color: "#64748b", marginBottom: "0.9rem" }}>เลือกชื่อแล้วกรอกค่าของคนนั้นได้เลย</div>
+          {selectedEmployee && (
+            <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.9rem", display: "flex", flexDirection: "column", gap: "0.9rem" }}>
+              <div>
+                <div style={{ fontWeight: 800, color: "#0f172a", fontSize: "1rem" }}>{selectedEmployee.name}</div>
+                <div style={{ fontSize: "0.78rem", color: "#64748b" }}>{selectedEmployee.department || "ไม่ระบุแผนก"}</div>
+              </div>
+              <Field label="ค่าจ้างรายวัน">
+                <input type="number" min="0" step="0.01" value={selectedEmployeeConfig.daily_rate ?? ""} onChange={e => updateDailyRate(selectedEmployee.id, e.target.value)} placeholder="วันละเท่าไร" style={inputStyle} />
+              </Field>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                <Field label="ค่า OT / ชั่วโมง">
+                  <input type="number" min="0" step="0.01" value={selectedEmployeeConfig.overtime_rate ?? 0} onChange={e => updateEmployeeSetting(selectedEmployee.id, "overtime_rate", e.target.value)} style={inputStyle} />
+                </Field>
+                <Field label="ค่าสอนแทน / ครั้ง">
+                  <input type="number" min="0" step="0.01" value={selectedEmployeeConfig.substitute_rate ?? 0} onChange={e => updateEmployeeSetting(selectedEmployee.id, "substitute_rate", e.target.value)} style={inputStyle} />
+                </Field>
+              </div>
+              <div>
+                <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "#475569", marginBottom: "0.5rem" }}>ประเภทลาที่หักเงิน</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.45rem" }}>
+                  {["ลาป่วย", "ลากิจ", "ลาพักร้อน", "ลาคลอด", "ลาบวช"].map(type => {
+                    const checked = (selectedEmployeeConfig.leave_deduct_types || "").split(",").map(item => item.trim()).filter(Boolean).includes(type);
+                    return (
+                      <button
+                        key={type}
+                        onClick={() => toggleLeaveDeductType(selectedEmployee.id, type)}
+                        style={{
+                          border: `1px solid ${checked ? "#2563eb" : "#cbd5e1"}`,
+                          background: checked ? "#eff6ff" : "#fff",
+                          color: checked ? "#1d4ed8" : "#475569",
+                          borderRadius: "999px",
+                          padding: "0.35rem 0.65rem",
+                          fontSize: "0.75rem",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                        }}
+                      >
+                        {type}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+        </Card>
+        <Card>
+          <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.3rem" }}>ตั้งค่าอัตราเวร</div>
+          <div style={{ fontSize: "0.8rem", color: "#64748b", marginBottom: "0.9rem" }}>ค่านี้ใช้ร่วมกันทั้งระบบ เอาไว้คูณกับจำนวนเวรของคนที่เลือก</div>
           {loadingConfig && <div style={{ color: "#64748b", fontSize: "0.8rem", marginBottom: "0.75rem" }}>กำลังโหลดค่าจาก Supabase...</div>}
           <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
             {DUTY_OPTIONS.map(dutyName => (
@@ -2171,70 +2230,61 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
             ))}
           </div>
         </Card>
-
         <Card>
-          <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.9rem" }}>ตั้งค่าเงินเดือนรายคน</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.9rem" }}>
-            <Field label="เลือกพนักงาน">
-              <select value={selectedEmployeeId} onChange={e => setSelectedPayrollEmployee(e.target.value)} style={selectStyle}>
-                {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name} — {emp.department || "ไม่ระบุแผนก"}</option>)}
-              </select>
-            </Field>
-
-            {selectedEmployee && (
-              <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.9rem", display: "flex", flexDirection: "column", gap: "0.9rem" }}>
-                <div>
-                  <div style={{ fontWeight: 800, color: "#0f172a", fontSize: "1rem" }}>{selectedEmployee.name}</div>
-                  <div style={{ fontSize: "0.78rem", color: "#64748b" }}>{selectedEmployee.department || "ไม่ระบุแผนก"}</div>
+          <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.3rem" }}>สรุปของคนที่เลือก</div>
+          <div style={{ fontSize: "0.8rem", color: "#64748b", marginBottom: "0.9rem" }}>ดึงจากข้อมูลลงเวลา ลา และเวรของเดือนนี้อัตโนมัติ</div>
+          {!selectedSummaryRow ? (
+            <div style={{ color: "#94a3b8", fontSize: "0.84rem" }}>ยังไม่มีข้อมูลของพนักงานคนนี้</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.75rem" }}>
+                <div style={{ background: "#eff6ff", borderRadius: "12px", padding: "0.85rem" }}>
+                  <div style={{ fontSize: "0.72rem", color: "#1d4ed8", fontWeight: 700 }}>มาทำงาน</div>
+                  <div style={{ fontSize: "1.25rem", color: "#0f172a", fontWeight: 800 }}>{selectedSummaryRow.attendanceDays} วัน</div>
                 </div>
-
-                <Field label="ค่าจ้างรายวัน">
-                  <input type="number" min="0" step="0.01" value={selectedEmployeeConfig.daily_rate ?? ""} onChange={e => updateDailyRate(selectedEmployee.id, e.target.value)} placeholder="วันละเท่าไร" style={inputStyle} />
-                </Field>
-
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-                  <Field label="ค่า OT / ชั่วโมง">
-                    <input type="number" min="0" step="0.01" value={selectedEmployeeConfig.overtime_rate ?? 0} onChange={e => updateEmployeeSetting(selectedEmployee.id, "overtime_rate", e.target.value)} style={inputStyle} />
-                  </Field>
-                  <Field label="ค่าสอนแทน / ครั้ง">
-                    <input type="number" min="0" step="0.01" value={selectedEmployeeConfig.substitute_rate ?? 0} onChange={e => updateEmployeeSetting(selectedEmployee.id, "substitute_rate", e.target.value)} style={inputStyle} />
-                  </Field>
-                </div>
-
-                <div>
-                  <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "#475569", marginBottom: "0.5rem" }}>ประเภทลาที่หักเงิน</div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.45rem" }}>
-                    {["ลาป่วย", "ลากิจ", "ลาพักร้อน", "ลาคลอด", "ลาบวช"].map(type => {
-                      const checked = (selectedEmployeeConfig.leave_deduct_types || "").split(",").map(item => item.trim()).filter(Boolean).includes(type);
-                      return (
-                        <button
-                          key={type}
-                          onClick={() => toggleLeaveDeductType(selectedEmployee.id, type)}
-                          style={{
-                            border: `1px solid ${checked ? "#2563eb" : "#cbd5e1"}`,
-                            background: checked ? "#eff6ff" : "#fff",
-                            color: checked ? "#1d4ed8" : "#475569",
-                            borderRadius: "999px",
-                            padding: "0.35rem 0.65rem",
-                            fontSize: "0.75rem",
-                            fontWeight: 700,
-                            cursor: "pointer",
-                            fontFamily: "inherit",
-                          }}
-                        >
-                          {type}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div style={{ fontSize: "0.7rem", color: "#94a3b8", marginTop: "0.45rem" }}>เลือกชื่อก่อน แล้วค่อยกรอกค่าของคนนั้นได้เลย</div>
+                <div style={{ background: "#f5f3ff", borderRadius: "12px", padding: "0.85rem" }}>
+                  <div style={{ fontSize: "0.72rem", color: "#7c3aed", fontWeight: 700 }}>รวมเงินเบื้องต้น</div>
+                  <div style={{ fontSize: "1.25rem", color: "#0f172a", fontWeight: 800 }}>{formatMoney(selectedSummaryRow.totalPay)}</div>
                 </div>
               </div>
-            )}
-          </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.75rem" }}>
+                <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.8rem" }}>
+                  <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "0.2rem" }}>ค่ารายวัน</div>
+                  <div style={{ fontWeight: 800, color: "#16a34a" }}>{formatMoney(selectedSummaryRow.baseSalary)}</div>
+                </div>
+                <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.8rem" }}>
+                  <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "0.2rem" }}>ค่าเวร</div>
+                  <div style={{ fontWeight: 800, color: "#7c3aed" }}>{formatMoney(selectedSummaryRow.dutyPay)}</div>
+                </div>
+                <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.8rem" }}>
+                  <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "0.2rem" }}>OT</div>
+                  <div style={{ fontWeight: 800, color: "#16a34a" }}>{selectedSummaryRow.overtimeHours.toFixed(1)} ชม. / {formatMoney(selectedSummaryRow.overtimePay)}</div>
+                </div>
+                <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.8rem" }}>
+                  <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "0.2rem" }}>สอนแทน</div>
+                  <div style={{ fontWeight: 800, color: "#2563eb" }}>{selectedSummaryRow.substituteCount} ครั้ง / {formatMoney(selectedSummaryRow.substitutePay)}</div>
+                </div>
+              </div>
+              <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "12px", padding: "0.85rem" }}>
+                <div style={{ fontSize: "0.78rem", color: "#9a3412", fontWeight: 700, marginBottom: "0.4rem" }}>สรุปเวรของคนนี้</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.45rem" }}>
+                  {DUTY_OPTIONS.filter(dutyName => dutyName !== "ไม่มีเวร").map(dutyName => (
+                    <span key={dutyName} style={{ background: "#fff", color: "#9a3412", border: "1px solid #fdba74", borderRadius: "999px", padding: "0.28rem 0.55rem", fontSize: "0.74rem", fontWeight: 700 }}>
+                      {dutyName} {selectedSummaryRow.dutyCounts[dutyName] || 0} วัน
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "12px", padding: "0.85rem" }}>
+                <div style={{ fontSize: "0.78rem", color: "#b91c1c", fontWeight: 700, marginBottom: "0.25rem" }}>หักลาและขาดงาน</div>
+                <div style={{ fontSize: "0.82rem", color: "#7f1d1d" }}>
+                  หักลา {selectedSummaryRow.leaveDeductDays.toFixed(1)} วัน, ขาดงาน {selectedSummaryRow.absentDays.toFixed(1)} วัน, หักเงิน {formatMoney(selectedSummaryRow.deductions)}
+                </div>
+              </div>
+            </div>
+          )}
         </Card>
       </div>
-
       <div style={{ marginTop: "1rem" }}>
         <Card padding="0">
           <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
@@ -2242,63 +2292,43 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
               <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a" }}>ข้อมูลเงินเดือนที่บันทึกไว้แล้ว</div>
               <div style={{ fontSize: "0.8rem", color: "#64748b" }}>snapshot จากตาราง payroll ของเดือน {month}</div>
             </div>
-            <Field label="ดูเฉพาะพนักงาน">
-              <select value={selectedPayrollEmployee} onChange={e => setSelectedPayrollEmployee(e.target.value)} style={{ ...selectStyle, width: "auto", minWidth: 220 }}>
-                <option value="">ทั้งหมด</option>
-                {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
-              </select>
-            </Field>
+            <div style={{ background: "#eff6ff", borderRadius: "999px", padding: "0.35rem 0.8rem", color: "#1d4ed8", fontWeight: 700, fontSize: "0.8rem" }}>
+              {selectedEmployee?.name || "ยังไม่ได้เลือกพนักงาน"}
+            </div>
           </div>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
-              <thead>
-                <tr style={{ background: "#f8fafc", borderBottom: "2px solid #f1f5f9" }}>
-                  {["พนักงาน", "มาทำงาน", "สาย", "เวร", "OT", "หักลา", "หักเงิน", "รวมสุทธิ"].map(h => (
-                    <th key={h} style={{ padding: "0.65rem 0.75rem", textAlign: "left", color: "#64748b", fontWeight: 600, fontSize: "0.75rem", whiteSpace: "nowrap" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {savedPayrollRows.filter(row => !selectedPayrollEmployee || row.employee_id === selectedPayrollEmployee).length === 0 ? (
-                  <tr><td colSpan={8} style={{ padding: "3rem", textAlign: "center", color: "#94a3b8" }}>ยังไม่มี snapshot ที่บันทึกไว้สำหรับเดือนนี้</td></tr>
-                ) : savedPayrollRows.filter(row => !selectedPayrollEmployee || row.employee_id === selectedPayrollEmployee).map((row, index) => {
-                  const emp = employees.find(item => item.id === row.employee_id);
-                  return (
-                    <tr key={row.id} style={{ borderBottom: "1px solid #f8fafc", background: index % 2 === 0 ? "#fff" : "#fafafa" }}>
-                      <td style={{ padding: "0.65rem 0.75rem" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                          <Avatar name={emp?.name} index={index} />
-                          <div>
-                            <div style={{ fontWeight: 700, color: "#0f172a" }}>{emp?.name || "ไม่พบชื่อ"}</div>
-                            <div style={{ fontSize: "0.72rem", color: "#64748b" }}>{emp?.department || "-"}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td style={{ padding: "0.65rem 0.75rem", fontWeight: 700 }}>{row.work_days} วัน</td>
-                      <td style={{ padding: "0.65rem 0.75rem", color: row.late_count > 0 ? "#dc2626" : "#94a3b8", fontWeight: 700 }}>{row.late_count}</td>
-                      <td style={{ padding: "0.65rem 0.75rem", color: "#2563eb", fontWeight: 700 }}>{row.duty_count}</td>
-                      <td style={{ padding: "0.65rem 0.75rem", color: "#16a34a", fontWeight: 700 }}>{row.overtime_hours} ชม.</td>
-                      <td style={{ padding: "0.65rem 0.75rem", color: "#7c3aed", fontWeight: 700 }}>{row.leave_deduct_days} วัน</td>
-                      <td style={{ padding: "0.65rem 0.75rem", color: "#dc2626", fontWeight: 700 }}>{formatMoney(row.deductions)}</td>
-                      <td style={{ padding: "0.65rem 0.75rem", color: "#d97706", fontWeight: 800 }}>{formatMoney(row.total)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div style={{ padding: "1rem 1.25rem" }}>
+            {!selectedSavedPayroll ? (
+              <div style={{ color: "#94a3b8", fontSize: "0.84rem" }}>ยังไม่มี snapshot ที่บันทึกไว้ของพนักงานคนนี้ในเดือน {month}</div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.75rem" }}>
+                {[
+                  ["มาทำงาน", `${selectedSavedPayroll.work_days} วัน`],
+                  ["มาสาย", `${selectedSavedPayroll.late_count} ครั้ง`],
+                  ["เวร", `${selectedSavedPayroll.duty_count} ครั้ง`],
+                  ["OT", `${selectedSavedPayroll.overtime_hours} ชม.`],
+                  ["หักลา", `${selectedSavedPayroll.leave_deduct_days} วัน`],
+                  ["หักเงิน", formatMoney(selectedSavedPayroll.deductions)],
+                  ["รวมสุทธิ", formatMoney(selectedSavedPayroll.total)],
+                ].map(([label, value]) => (
+                  <div key={label} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.8rem" }}>
+                    <div style={{ fontSize: "0.74rem", color: "#64748b", marginBottom: "0.2rem" }}>{label}</div>
+                    <div style={{ fontWeight: 800, color: "#0f172a" }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </Card>
       </div>
-
       <div style={{ marginTop: "1rem" }}>
         <Card padding="0">
           <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
             <div>
               <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a" }}>สรุปเงินเดือนเบื้องต้น</div>
-              <div style={{ fontSize: "0.8rem", color: "#64748b" }}>รวมวันมาทำงาน, เวรที่ลงไว้ และอัตราที่ตั้งในหน้านี้</div>
+              <div style={{ fontSize: "0.8rem", color: "#64748b" }}>แสดงเฉพาะพนักงานที่กำลังเลือกอยู่ เพื่อลดพื้นที่และกรอกง่ายขึ้น</div>
             </div>
             <div style={{ background: "#fff7ed", borderRadius: "999px", padding: "0.35rem 0.8rem", color: "#d97706", fontWeight: 700, fontSize: "0.8rem" }}>
-              รวม {formatMoney(totalPayout)}
+              {selectedSummaryRow ? `รวม ${formatMoney(selectedSummaryRow.totalPay)}` : `รวม ${formatMoney(totalPayout)}`}
             </div>
           </div>
           <div style={{ overflowX: "auto" }}>
@@ -2311,26 +2341,26 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
                 </tr>
               </thead>
               <tbody>
-                {summaryRows.length === 0 ? (
+                {!selectedSummaryRow ? (
                   <tr><td colSpan={10} style={{ padding: "3rem", textAlign: "center", color: "#94a3b8" }}>ยังไม่มีข้อมูลสำหรับเดือนนี้</td></tr>
-                ) : summaryRows.map((row, index) => {
-                  const dutySummary = DUTY_OPTIONS.filter(dutyName => dutyName !== "ไม่มีเวร" && row.dutyCounts[dutyName] > 0);
+                ) : (() => {
+                  const dutySummary = DUTY_OPTIONS.filter(dutyName => dutyName !== "ไม่มีเวร" && selectedSummaryRow.dutyCounts[dutyName] > 0);
                   return (
-                    <tr key={row.emp.id} style={{ borderBottom: "1px solid #f8fafc", background: index % 2 === 0 ? "#fff" : "#fafafa" }}>
+                    <tr style={{ borderBottom: "1px solid #f8fafc", background: "#fff" }}>
                       <td style={{ padding: "0.65rem 0.75rem" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                          <Avatar name={row.emp.name} index={index} />
+                          <Avatar name={selectedSummaryRow.emp.name} index={0} />
                           <div>
-                            <div style={{ fontWeight: 700, color: "#0f172a" }}>{row.emp.name}</div>
-                            <div style={{ fontSize: "0.72rem", color: "#64748b" }}>{row.emp.department || "ไม่ระบุแผนก"}</div>
+                            <div style={{ fontWeight: 700, color: "#0f172a" }}>{selectedSummaryRow.emp.name}</div>
+                            <div style={{ fontSize: "0.72rem", color: "#64748b" }}>{selectedSummaryRow.emp.department || "ไม่ระบุแผนก"}</div>
                           </div>
                         </div>
                       </td>
-                      <td style={{ padding: "0.65rem 0.75rem", fontWeight: 700, color: "#0f172a" }}>{row.attendanceDays} วัน</td>
-                      <td style={{ padding: "0.65rem 0.75rem", color: row.dailyRate > 0 ? "#2563eb" : "#94a3b8", fontWeight: 600 }}>
-                        {row.dailyRate > 0 ? formatMoney(row.dailyRate) : "—"}
+                      <td style={{ padding: "0.65rem 0.75rem", fontWeight: 700, color: "#0f172a" }}>{selectedSummaryRow.attendanceDays} วัน</td>
+                      <td style={{ padding: "0.65rem 0.75rem", color: selectedSummaryRow.dailyRate > 0 ? "#2563eb" : "#94a3b8", fontWeight: 600 }}>
+                        {selectedSummaryRow.dailyRate > 0 ? formatMoney(selectedSummaryRow.dailyRate) : "—"}
                       </td>
-                      <td style={{ padding: "0.65rem 0.75rem", color: "#16a34a", fontWeight: 700 }}>{formatMoney(row.baseSalary)}</td>
+                      <td style={{ padding: "0.65rem 0.75rem", color: "#16a34a", fontWeight: 700 }}>{formatMoney(selectedSummaryRow.baseSalary)}</td>
                       <td style={{ padding: "0.65rem 0.75rem" }}>
                         {dutySummary.length === 0 ? (
                           <span style={{ color: "#94a3b8", fontSize: "0.78rem" }}>ไม่มีเวรที่จ่ายเพิ่ม</span>
@@ -2338,20 +2368,26 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
                           <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
                             {dutySummary.map(dutyName => (
                               <span key={dutyName} style={{ background: "#eff6ff", color: "#1d4ed8", borderRadius: "999px", padding: "0.22rem 0.55rem", fontSize: "0.72rem", fontWeight: 700 }}>
-                                {dutyName} {row.dutyCounts[dutyName]} วัน
+                                {dutyName} {selectedSummaryRow.dutyCounts[dutyName]} วัน
                               </span>
                             ))}
                           </div>
                         )}
                       </td>
-                      <td style={{ padding: "0.65rem 0.75rem", color: "#7c3aed", fontWeight: 700 }}>{formatMoney(row.dutyPay)}</td>
-                      <td style={{ padding: "0.65rem 0.75rem", color: row.overtimePay > 0 ? "#16a34a" : "#94a3b8", fontWeight: 700 }}>{row.overtimeHours > 0 ? `${row.overtimeHours.toFixed(1)} ชม. / ${formatMoney(row.overtimePay)}` : "—"}</td>
-                      <td style={{ padding: "0.65rem 0.75rem", color: row.substitutePay > 0 ? "#2563eb" : "#94a3b8", fontWeight: 700 }}>{row.substituteCount > 0 ? `${row.substituteCount} ครั้ง / ${formatMoney(row.substitutePay)}` : "—"}</td>
-                      <td style={{ padding: "0.65rem 0.75rem", color: row.deductions > 0 ? "#dc2626" : "#94a3b8", fontWeight: 700 }}>{row.leaveDeductDays > 0 ? `${row.leaveDeductDays.toFixed(1)} วัน / ${formatMoney(row.deductions)}` : "—"}</td>
-                      <td style={{ padding: "0.65rem 0.75rem", color: "#d97706", fontWeight: 800 }}>{formatMoney(row.totalPay)}</td>
+                      <td style={{ padding: "0.65rem 0.75rem", color: "#7c3aed", fontWeight: 700 }}>{formatMoney(selectedSummaryRow.dutyPay)}</td>
+                      <td style={{ padding: "0.65rem 0.75rem", color: selectedSummaryRow.overtimePay > 0 ? "#16a34a" : "#94a3b8", fontWeight: 700 }}>
+                        {selectedSummaryRow.overtimeHours > 0 ? `${selectedSummaryRow.overtimeHours.toFixed(1)} ชม. / ${formatMoney(selectedSummaryRow.overtimePay)}` : "—"}
+                      </td>
+                      <td style={{ padding: "0.65rem 0.75rem", color: selectedSummaryRow.substitutePay > 0 ? "#2563eb" : "#94a3b8", fontWeight: 700 }}>
+                        {selectedSummaryRow.substituteCount > 0 ? `${selectedSummaryRow.substituteCount} ครั้ง / ${formatMoney(selectedSummaryRow.substitutePay)}` : "—"}
+                      </td>
+                      <td style={{ padding: "0.65rem 0.75rem", color: selectedSummaryRow.deductions > 0 ? "#dc2626" : "#94a3b8", fontWeight: 700 }}>
+                        {selectedSummaryRow.leaveDeductDays > 0 ? `${selectedSummaryRow.leaveDeductDays.toFixed(1)} วัน / ${formatMoney(selectedSummaryRow.deductions)}` : "—"}
+                      </td>
+                      <td style={{ padding: "0.65rem 0.75rem", color: "#d97706", fontWeight: 800 }}>{formatMoney(selectedSummaryRow.totalPay)}</td>
                     </tr>
                   );
-                })}
+                })()}
               </tbody>
             </table>
           </div>

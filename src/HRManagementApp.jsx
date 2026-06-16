@@ -19,10 +19,11 @@ const SCHOOL_LNG = 100.652199;
 const GEOFENCE_RADIUS = 200;
 const DEFAULT_DUTY_RATES = {
   "ไม่มีเวร": 0,
-  "เวรรถ": 0,
+  "เวรรถ": 30,
   "แลกชิพ": 0,
   "เวรหน้าประตู": 0,
 };
+const FREE_PERIOD_VALUE = "__FREE_PERIOD__";
 const DUTY_SETTING_PREFIX = "__DUTY__:";
 
 function haversineDistance(lat1, lng1, lat2, lng2) {
@@ -175,9 +176,9 @@ function getPeriodSubstitutes(value) {
 
 function defaultEmployeePayrollConfig() {
   return {
-    daily_rate: 0,
+    daily_rate: 500,
     overtime_rate: 0,
-    substitute_rate: 0,
+    substitute_rate: 50,
     leave_deduct_types: "ลาป่วย,ลากิจ",
   };
 }
@@ -632,12 +633,13 @@ function LeaveModal({ employees, currentUser, onClose, onSave }) {
     if (!form.employee_id) { setError("กรุณาเลือกพนักงาน"); return; }
     if (!form.reason.trim()) { setError("กรุณากรอกเหตุผล"); return; }
     if (uploading) { setError("กรุณารอให้ระบบแนบรูปให้เสร็จก่อน"); return; }
-    if (periodSubs.some(value => !value)) { setError("กรุณาเลือกครูสอนแทนครบทั้ง 6 คาบ"); return; }
+    if (periodSubs.some(value => !value)) { setError("กรุณาเลือกให้ครบทุกคาบ ว่าจะมีคนสอนแทนหรือเป็นคาบว่าง"); return; }
     setSaving(true);
+    const normalizedPeriodSubs = periodSubs.map(value => value === FREE_PERIOD_VALUE ? "" : value);
     const payload = {
       ...form,
-      substitute_id: periodSubs[0] || null,
-      substitute_note: JSON.stringify(periodSubs),
+      substitute_id: normalizedPeriodSubs.find(Boolean) || null,
+      substitute_note: JSON.stringify(normalizedPeriodSubs),
     };
     const { error } = await supabase.from("leaves").insert(payload);
     setSaving(false);
@@ -726,7 +728,8 @@ function LeaveModal({ employees, currentUser, onClose, onSave }) {
                   onChange={e => setPeriodSubs(current => current.map((item, itemIndex) => itemIndex === index ? e.target.value : item))}
                   style={selectStyle}
                 >
-                  <option value="">-- เลือกครูแทน --</option>
+                  <option value="">-- เลือกก่อน --</option>
+                  <option value={FREE_PERIOD_VALUE}>คาบว่าง / ไม่ต้องสอนแทน</option>
                   {employees.filter(e => e.id !== currentUser?.id).map(e => (
                     <option key={e.id} value={e.id}>{e.name} — {e.department}</option>
                   ))}
@@ -734,7 +737,7 @@ function LeaveModal({ employees, currentUser, onClose, onSave }) {
               </div>
             ))}
           </div>
-          <div style={{ fontSize: "0.72rem", color: "#94a3b8", marginTop: "0.4rem" }}>ต้องเลือกครูสอนแทนครบทั้ง 6 คาบก่อนบันทึก</div>
+          <div style={{ fontSize: "0.72rem", color: "#94a3b8", marginTop: "0.4rem" }}>ทุกคาบต้องเลือกให้ชัดว่าเป็นคาบว่าง หรือมีครูสอนแทนใคร</div>
         </Field>
 
         <Field label="แนบใบนัดหมอ / ใบรับรองแพทย์">
@@ -1278,7 +1281,7 @@ function LeavePage({ employees, leaves, currentUser, onRefresh }) {
                             const subEmp = employees.find(emp => emp.id === subId);
                             return (
                               <span key={`${row.id}-${periodIndex}`} style={{ background: subEmp ? "#f5f3ff" : "#f8fafc", color: subEmp ? "#7c3aed" : "#94a3b8", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.45rem", borderRadius: "20px", whiteSpace: "nowrap" }}>
-                                {`ค${periodIndex + 1} ${subEmp?.name?.split(" ")[0] || "-"}`}
+                                {`ค${periodIndex + 1} ${subEmp?.name?.split(" ")[0] || "ว่าง"}`}
                               </span>
                             );
                           })}
@@ -1828,6 +1831,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
   const [settingsRows, setSettingsRows] = useState([]);
   const [savedPayrollRows, setSavedPayrollRows] = useState([]);
   const [selectedPayrollEmployee, setSelectedPayrollEmployee] = useState("");
+  const [employeeSearch, setEmployeeSearch] = useState("");
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -1861,7 +1865,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
           nextConfig.employeeConfigs[row.employee_id] = {
             daily_rate: row.daily_rate ?? 0,
             overtime_rate: row.overtime_rate ?? 0,
-            substitute_rate: row.substitute_rate ?? 0,
+            substitute_rate: row.substitute_rate || 50,
             leave_deduct_types: row.leave_deduct_types || "ลาป่วย,ลากิจ",
           };
         }
@@ -1891,7 +1895,13 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
     return dow !== 0 && dow !== 6;
   }).length;
   const configuredDailyTeachers = Object.values(config.employeeConfigs).filter(row => parseMoney(row?.daily_rate) > 0).length;
-  const selectedEmployeeId = selectedPayrollEmployee || employees[0]?.id || "";
+  const filteredEmployees = employees.filter(emp => {
+    const search = employeeSearch.trim().toLowerCase();
+    if (!search) return true;
+    return `${emp.name || ""} ${emp.department || ""}`.toLowerCase().includes(search);
+  });
+  const employeeOptions = filteredEmployees.length > 0 ? filteredEmployees : employees;
+  const selectedEmployeeId = selectedPayrollEmployee || employeeOptions[0]?.id || employees[0]?.id || "";
   const selectedEmployee = employees.find(emp => emp.id === selectedEmployeeId) || null;
   const selectedEmployeeConfig = config.employeeConfigs[selectedEmployeeId] || defaultEmployeePayrollConfig();
   const allRows = employees.map(emp => {
@@ -1919,11 +1929,14 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
 
     const dailyRate = parseMoney(employeeConfig.daily_rate);
     const overtimeRate = parseMoney(employeeConfig.overtime_rate);
-    const substituteRate = parseMoney(employeeConfig.substitute_rate);
+    const substituteRate = parseMoney(employeeConfig.substitute_rate) || 50;
     const dutyPay = DUTY_OPTIONS.reduce((sum, dutyName) => sum + dutyCounts[dutyName] * parseMoney(config.dutyRates[dutyName]), 0);
     const baseSalary = attendanceDays * dailyRate;
     const overtimePay = overtimeHours * overtimeRate;
-    const substituteCount = employeeLeaves.filter(row => row.substitute_id).length;
+    const substituteCount = monthLeaves.reduce((sum, row) => {
+      const periodSubs = getPeriodSubstitutes(row.substitute_note);
+      return sum + periodSubs.filter(subId => subId === emp.id).length;
+    }, 0);
     const substitutePay = substituteCount * substituteRate;
     const deductions = leaveDeductDays * dailyRate;
     const totalPay = baseSalary + dutyPay + overtimePay + substitutePay - deductions;
@@ -1953,6 +1966,9 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
   const summaryRows = allRows.filter(row => row.attendanceDays > 0 || row.dailyRate > 0 || row.dutyPay > 0 || row.deductions > 0 || row.overtimePay > 0);
   const selectedSummaryRow = allRows.find(row => row.emp.id === selectedEmployeeId) || null;
   const selectedSavedPayroll = savedPayrollRows.find(row => row.employee_id === selectedEmployeeId) || null;
+  const selectedDutySummary = selectedSummaryRow
+    ? DUTY_OPTIONS.filter(dutyName => dutyName !== "ไม่มีเวร" && selectedSummaryRow.dutyCounts[dutyName] > 0)
+    : [];
 
   const totalPayout = summaryRows.reduce((sum, row) => sum + row.totalPay, 0);
   const totalAttendanceDays = summaryRows.reduce((sum, row) => sum + row.attendanceDays, 0);
@@ -2089,34 +2105,99 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const exportCSV = () => {
-    let csv = "พนักงาน,แผนก,วันมาทำงาน,อัตราครูรายวัน,ค่ารายวัน,ไม่มีเวร,เวรรถ,แลกชิพ,เวรหน้าประตู,ค่าเวร,OT(ชม.),ค่า OT,สอนแทน,ค่าสอนแทน,หักลา(วัน),หักเงิน,รวมทั้งสิ้น\n";
-    summaryRows.forEach(row => {
-      csv += [
-        row.emp.name,
-        row.emp.department || "",
-        row.attendanceDays,
-        row.dailyRate,
-        row.baseSalary,
-        row.dutyCounts["ไม่มีเวร"],
-        row.dutyCounts["เวรรถ"],
-        row.dutyCounts["แลกชิพ"],
-        row.dutyCounts["เวรหน้าประตู"],
-        row.dutyPay,
-        row.overtimeHours,
-        row.overtimePay,
-        row.substituteCount,
-        row.substitutePay,
-        row.leaveDeductDays,
-        row.deductions,
-        row.totalPay,
-      ].join(",") + "\n";
-    });
-    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+  const exportExcel = () => {
+    const escapeHtml = (value) => String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\"/g, "&quot;");
+
+    const rowsHtml = summaryRows.map(row => {
+      const dutySummary = DUTY_OPTIONS
+        .filter(dutyName => dutyName !== "ไม่มีเวร" && row.dutyCounts[dutyName] > 0)
+        .map(dutyName => `${dutyName} ${row.dutyCounts[dutyName]} วัน`)
+        .join(", ") || "ไม่มีเวรที่จ่ายเพิ่ม";
+
+      return `
+        <tr>
+          <td>${escapeHtml(row.emp.name)}</td>
+          <td>${escapeHtml(row.emp.department || "")}</td>
+          <td>${row.attendanceDays}</td>
+          <td>${row.dailyRate}</td>
+          <td>${row.baseSalary.toFixed(2)}</td>
+          <td>${row.dutyCounts["เวรรถ"]}</td>
+          <td>${row.dutyCounts["แลกชิพ"]}</td>
+          <td>${row.dutyCounts["เวรหน้าประตู"]}</td>
+          <td>${escapeHtml(dutySummary)}</td>
+          <td>${row.dutyPay.toFixed(2)}</td>
+          <td>${row.overtimeHours.toFixed(1)}</td>
+          <td>${row.overtimePay.toFixed(2)}</td>
+          <td>${row.substituteCount}</td>
+          <td>${row.substitutePay.toFixed(2)}</td>
+          <td>${row.leaveDeductDays.toFixed(1)}</td>
+          <td>${row.deductions.toFixed(2)}</td>
+          <td>${row.totalPay.toFixed(2)}</td>
+        </tr>
+      `;
+    }).join("");
+
+    const html = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office"
+            xmlns:x="urn:schemas-microsoft-com:office:excel"
+            xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta charset="UTF-8" />
+        <xml>
+          <x:ExcelWorkbook>
+            <x:ExcelWorksheets>
+              <x:ExcelWorksheet>
+                <x:Name>สรุปเงินเดือน</x:Name>
+                <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
+              </x:ExcelWorksheet>
+            </x:ExcelWorksheets>
+          </x:ExcelWorkbook>
+        </xml>
+        <style>
+          table { border-collapse: collapse; font-family: Tahoma, sans-serif; }
+          th, td { border: 1px solid #cbd5e1; padding: 8px; }
+          th { background: #eff6ff; font-weight: 700; }
+        </style>
+      </head>
+      <body>
+        <table>
+          <tr>
+            <th colspan="17" style="font-size:18px;background:#dbeafe;">สรุปเงินเดือน เดือน ${escapeHtml(month)}</th>
+          </tr>
+          <tr>
+            <th>พนักงาน</th>
+            <th>แผนก</th>
+            <th>มาทำงาน (วัน)</th>
+            <th>อัตรารายวัน</th>
+            <th>ค่ารายวัน</th>
+            <th>เวรรถ (วัน)</th>
+            <th>แลกชิพ (วัน)</th>
+            <th>เวรหน้าประตู (วัน)</th>
+            <th>สรุปเวร</th>
+            <th>ค่าเวร</th>
+            <th>OT (ชม.)</th>
+            <th>ค่า OT</th>
+            <th>สอนแทน (คาบ)</th>
+            <th>ค่าสอนแทน</th>
+            <th>หักลา (วัน)</th>
+            <th>หักเงิน</th>
+            <th>รวมสุทธิ</th>
+          </tr>
+          ${rowsHtml}
+        </table>
+      </body>
+      </html>
+    `;
+
+    const blob = new Blob(["\ufeff" + html], { type: "application/vnd.ms-excel;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `สรุปเงินเดือน_${month}.csv`;
+    link.download = `สรุปเงินเดือน_${month}.xls`;
     link.click();
   };
 
@@ -2134,7 +2215,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
       <Card>
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "12px", padding: "0.85rem", color: "#1d4ed8", fontSize: "0.85rem" }}>
-            อัตราเงินเวร, อัตราครูรายวัน และ snapshot เงินเดือนรายเดือนจะถูกบันทึกลง Supabase
+            เลือกพนักงาน 1 คน แล้วดูรายการคิดเงินเดือนของคนนั้นได้เลย ข้อมูลจะบันทึกลง Supabase เหมือนเดิม
           </div>
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "end", gap: "1rem", flexWrap: "wrap" }}>
@@ -2142,15 +2223,18 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
               <Field label="เดือน">
                 <input type="month" value={month} onChange={e => setMonth(e.target.value)} style={{ ...inputStyle, width: "auto" }} />
               </Field>
+              <Field label="ค้นหาพนักงาน">
+                <input value={employeeSearch} onChange={e => setEmployeeSearch(e.target.value)} placeholder="พิมพ์ชื่อหรือแผนก" style={{ ...inputStyle, minWidth: 220 }} />
+              </Field>
               <Field label="เลือกพนักงาน">
                 <select value={selectedEmployeeId} onChange={e => setSelectedPayrollEmployee(e.target.value)} style={{ ...selectStyle, minWidth: 260 }}>
-                  {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name} — {emp.department || "ไม่ระบุแผนก"}</option>)}
+                  {employeeOptions.map(emp => <option key={emp.id} value={emp.id}>{emp.name} — {emp.department || "ไม่ระบุแผนก"}</option>)}
                 </select>
               </Field>
             </div>
             <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-              <button onClick={exportCSV} style={{ ...btnSecondary, flex: "none", padding: "0.8rem 1rem" }}>
-                <FileText size={16} /> Export CSV
+              <button onClick={exportExcel} style={{ ...btnSecondary, flex: "none", padding: "0.8rem 1rem" }}>
+                <FileText size={16} /> สรุปออก Excel
               </button>
               <button onClick={handleSave} disabled={loadingConfig || saving} style={{ ...btnPrimary, flex: "none", padding: "0.8rem 1rem", background: saved ? "#16a34a" : "linear-gradient(135deg, #2563eb, #1d4ed8)", color: "#fff", cursor: loadingConfig || saving ? "not-allowed" : "pointer" }}>
                 {saving ? <RefreshCw size={16} style={{ animation: "spin 1s linear infinite" }} /> : saved ? <CheckCircle size={16} /> : <Save size={16} />}
@@ -2177,9 +2261,9 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
                 <Field label="ค่า OT / ชั่วโมง">
                   <input type="number" min="0" step="0.01" value={selectedEmployeeConfig.overtime_rate ?? 0} onChange={e => updateEmployeeSetting(selectedEmployee.id, "overtime_rate", e.target.value)} style={inputStyle} />
                 </Field>
-                <Field label="ค่าสอนแทน / ครั้ง">
-                  <input type="number" min="0" step="0.01" value={selectedEmployeeConfig.substitute_rate ?? 0} onChange={e => updateEmployeeSetting(selectedEmployee.id, "substitute_rate", e.target.value)} style={inputStyle} />
-                </Field>
+                  <Field label="ค่าสอนแทน / คาบ">
+                    <input type="number" min="0" step="0.01" value={selectedEmployeeConfig.substitute_rate ?? 0} onChange={e => updateEmployeeSetting(selectedEmployee.id, "substitute_rate", e.target.value)} style={inputStyle} />
+                  </Field>
               </div>
               <div>
                 <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "#475569", marginBottom: "0.5rem" }}>ประเภทลาที่หักเงิน</div>
@@ -2267,13 +2351,17 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
               </div>
               <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "12px", padding: "0.85rem" }}>
                 <div style={{ fontSize: "0.78rem", color: "#9a3412", fontWeight: 700, marginBottom: "0.4rem" }}>สรุปเวรของคนนี้</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.45rem" }}>
-                  {DUTY_OPTIONS.filter(dutyName => dutyName !== "ไม่มีเวร").map(dutyName => (
-                    <span key={dutyName} style={{ background: "#fff", color: "#9a3412", border: "1px solid #fdba74", borderRadius: "999px", padding: "0.28rem 0.55rem", fontSize: "0.74rem", fontWeight: 700 }}>
-                      {dutyName} {selectedSummaryRow.dutyCounts[dutyName] || 0} วัน
-                    </span>
-                  ))}
-                </div>
+                {selectedDutySummary.length === 0 ? (
+                  <div style={{ fontSize: "0.8rem", color: "#9a3412" }}>ยังไม่มีเวรที่จ่ายเพิ่มในเดือนนี้</div>
+                ) : (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.45rem" }}>
+                    {selectedDutySummary.map(dutyName => (
+                      <span key={dutyName} style={{ background: "#fff", color: "#9a3412", border: "1px solid #fdba74", borderRadius: "999px", padding: "0.28rem 0.55rem", fontSize: "0.74rem", fontWeight: 700 }}>
+                        {dutyName} {selectedSummaryRow.dutyCounts[dutyName]} วัน
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
               <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "12px", padding: "0.85rem" }}>
                 <div style={{ fontSize: "0.78rem", color: "#b91c1c", fontWeight: 700, marginBottom: "0.25rem" }}>หักลาและขาดงาน</div>
@@ -2324,72 +2412,42 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
         <Card padding="0">
           <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
             <div>
-              <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a" }}>สรุปเงินเดือนเบื้องต้น</div>
-              <div style={{ fontSize: "0.8rem", color: "#64748b" }}>แสดงเฉพาะพนักงานที่กำลังเลือกอยู่ เพื่อลดพื้นที่และกรอกง่ายขึ้น</div>
+              <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a" }}>รายการที่ใช้คิดเงินเดือน</div>
+              <div style={{ fontSize: "0.8rem", color: "#64748b" }}>ดูรายการบวกและรายการหักของพนักงานคนนี้ในบล็อกเดียว</div>
             </div>
             <div style={{ background: "#fff7ed", borderRadius: "999px", padding: "0.35rem 0.8rem", color: "#d97706", fontWeight: 700, fontSize: "0.8rem" }}>
               {selectedSummaryRow ? `รวม ${formatMoney(selectedSummaryRow.totalPay)}` : `รวม ${formatMoney(totalPayout)}`}
             </div>
           </div>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.84rem" }}>
-              <thead>
-                <tr style={{ background: "#f8fafc", borderBottom: "2px solid #f1f5f9" }}>
-                  {["พนักงาน", "วันทำงาน", "อัตรารายวัน", "ค่ารายวัน", "สรุปเวร", "ค่าเวร", "OT", "สอนแทน", "หักลา", "รวม"].map(h => (
-                    <th key={h} style={{ padding: "0.65rem 0.75rem", textAlign: "left", color: "#64748b", fontWeight: 600, fontSize: "0.75rem", whiteSpace: "nowrap" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {!selectedSummaryRow ? (
-                  <tr><td colSpan={10} style={{ padding: "3rem", textAlign: "center", color: "#94a3b8" }}>ยังไม่มีข้อมูลสำหรับเดือนนี้</td></tr>
-                ) : (() => {
-                  const dutySummary = DUTY_OPTIONS.filter(dutyName => dutyName !== "ไม่มีเวร" && selectedSummaryRow.dutyCounts[dutyName] > 0);
-                  return (
-                    <tr style={{ borderBottom: "1px solid #f8fafc", background: "#fff" }}>
-                      <td style={{ padding: "0.65rem 0.75rem" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                          <Avatar name={selectedSummaryRow.emp.name} index={0} />
-                          <div>
-                            <div style={{ fontWeight: 700, color: "#0f172a" }}>{selectedSummaryRow.emp.name}</div>
-                            <div style={{ fontSize: "0.72rem", color: "#64748b" }}>{selectedSummaryRow.emp.department || "ไม่ระบุแผนก"}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td style={{ padding: "0.65rem 0.75rem", fontWeight: 700, color: "#0f172a" }}>{selectedSummaryRow.attendanceDays} วัน</td>
-                      <td style={{ padding: "0.65rem 0.75rem", color: selectedSummaryRow.dailyRate > 0 ? "#2563eb" : "#94a3b8", fontWeight: 600 }}>
-                        {selectedSummaryRow.dailyRate > 0 ? formatMoney(selectedSummaryRow.dailyRate) : "—"}
-                      </td>
-                      <td style={{ padding: "0.65rem 0.75rem", color: "#16a34a", fontWeight: 700 }}>{formatMoney(selectedSummaryRow.baseSalary)}</td>
-                      <td style={{ padding: "0.65rem 0.75rem" }}>
-                        {dutySummary.length === 0 ? (
-                          <span style={{ color: "#94a3b8", fontSize: "0.78rem" }}>ไม่มีเวรที่จ่ายเพิ่ม</span>
-                        ) : (
-                          <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
-                            {dutySummary.map(dutyName => (
-                              <span key={dutyName} style={{ background: "#eff6ff", color: "#1d4ed8", borderRadius: "999px", padding: "0.22rem 0.55rem", fontSize: "0.72rem", fontWeight: 700 }}>
-                                {dutyName} {selectedSummaryRow.dutyCounts[dutyName]} วัน
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                      <td style={{ padding: "0.65rem 0.75rem", color: "#7c3aed", fontWeight: 700 }}>{formatMoney(selectedSummaryRow.dutyPay)}</td>
-                      <td style={{ padding: "0.65rem 0.75rem", color: selectedSummaryRow.overtimePay > 0 ? "#16a34a" : "#94a3b8", fontWeight: 700 }}>
-                        {selectedSummaryRow.overtimeHours > 0 ? `${selectedSummaryRow.overtimeHours.toFixed(1)} ชม. / ${formatMoney(selectedSummaryRow.overtimePay)}` : "—"}
-                      </td>
-                      <td style={{ padding: "0.65rem 0.75rem", color: selectedSummaryRow.substitutePay > 0 ? "#2563eb" : "#94a3b8", fontWeight: 700 }}>
-                        {selectedSummaryRow.substituteCount > 0 ? `${selectedSummaryRow.substituteCount} ครั้ง / ${formatMoney(selectedSummaryRow.substitutePay)}` : "—"}
-                      </td>
-                      <td style={{ padding: "0.65rem 0.75rem", color: selectedSummaryRow.deductions > 0 ? "#dc2626" : "#94a3b8", fontWeight: 700 }}>
-                        {selectedSummaryRow.leaveDeductDays > 0 ? `${selectedSummaryRow.leaveDeductDays.toFixed(1)} วัน / ${formatMoney(selectedSummaryRow.deductions)}` : "—"}
-                      </td>
-                      <td style={{ padding: "0.65rem 0.75rem", color: "#d97706", fontWeight: 800 }}>{formatMoney(selectedSummaryRow.totalPay)}</td>
-                    </tr>
-                  );
-                })()}
-              </tbody>
-            </table>
+          <div style={{ padding: "1rem 1.25rem" }}>
+            {!selectedSummaryRow ? (
+              <div style={{ color: "#94a3b8", fontSize: "0.84rem" }}>ยังไม่มีข้อมูลสำหรับเดือนนี้</div>
+            ) : (
+              <div style={{ display: "grid", gap: "0.75rem" }}>
+                {[
+                  { label: "ค่าจ้างรายวัน", detail: `${selectedSummaryRow.attendanceDays} วัน x ${formatMoney(selectedSummaryRow.dailyRate)}`, value: formatMoney(selectedSummaryRow.baseSalary), color: "#16a34a" },
+                  { label: "ค่าเวร", detail: selectedDutySummary.length > 0 ? selectedDutySummary.map(dutyName => `${dutyName} ${selectedSummaryRow.dutyCounts[dutyName]} วัน`).join(", ") : "ไม่มีเวรที่จ่ายเพิ่ม", value: formatMoney(selectedSummaryRow.dutyPay), color: "#7c3aed" },
+                  { label: "OT", detail: `${selectedSummaryRow.overtimeHours.toFixed(1)} ชม.`, value: formatMoney(selectedSummaryRow.overtimePay), color: "#0f766e" },
+                  { label: "สอนแทน", detail: `${selectedSummaryRow.substituteCount} คาบ`, value: formatMoney(selectedSummaryRow.substitutePay), color: "#2563eb" },
+                  { label: "หักลา", detail: `${selectedSummaryRow.leaveDeductDays.toFixed(1)} วัน`, value: `- ${formatMoney(selectedSummaryRow.deductions)}`, color: "#dc2626" },
+                ].map(item => (
+                  <div key={item.label} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "0.75rem", alignItems: "center", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.85rem 1rem" }}>
+                    <div>
+                      <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "#0f172a" }}>{item.label}</div>
+                      <div style={{ fontSize: "0.76rem", color: "#64748b", marginTop: "0.18rem" }}>{item.detail}</div>
+                    </div>
+                    <div style={{ fontSize: "0.95rem", fontWeight: 800, color: item.color, whiteSpace: "nowrap" }}>{item.value}</div>
+                  </div>
+                ))}
+                <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "0.75rem", alignItems: "center", background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "12px", padding: "0.95rem 1rem" }}>
+                  <div>
+                    <div style={{ fontSize: "0.84rem", fontWeight: 800, color: "#9a3412" }}>รวมสุทธิ</div>
+                    <div style={{ fontSize: "0.76rem", color: "#b45309", marginTop: "0.18rem" }}>ยอดก่อนบันทึกของพนักงานคนนี้</div>
+                  </div>
+                  <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#d97706", whiteSpace: "nowrap" }}>{formatMoney(selectedSummaryRow.totalPay)}</div>
+                </div>
+              </div>
+            )}
           </div>
         </Card>
       </div>

@@ -175,6 +175,31 @@ function parseDutyName(settingValue) {
   return settingValue.slice(DUTY_SETTING_PREFIX.length);
 }
 
+function parseEmployeePayrollMeta(value) {
+  const fallback = { leave_deduct_types: "ลาป่วย,ลากิจ", teacher_level: "", pay_type: "daily" };
+  if (!value || value.startsWith?.(DUTY_SETTING_PREFIX)) return fallback;
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === "object") {
+      return {
+        ...fallback,
+        leave_deduct_types: parsed.leave_deduct_types || parsed.leaveDeductTypes || fallback.leave_deduct_types,
+        teacher_level: parsed.teacher_level || parsed.teacherLevel || "",
+        pay_type: parsed.pay_type || parsed.payType || "daily",
+      };
+    }
+  } catch {}
+  return { ...fallback, leave_deduct_types: value };
+}
+
+function formatEmployeePayrollMeta(config) {
+  return JSON.stringify({
+    leave_deduct_types: config.leave_deduct_types || "ลาป่วย,ลากิจ",
+    teacher_level: config.teacher_level || "",
+    pay_type: config.pay_type || "daily",
+  });
+}
+
 function parsePayrollNote(value) {
   if (!value) return { duty_note: "", adjustment_add: 0, adjustment_deduct: 0, adjustment_note: "" };
   try {
@@ -184,6 +209,11 @@ function parsePayrollNote(value) {
       adjustment_add: parseMoney(parsed.adjustment_add),
       adjustment_deduct: parseMoney(parsed.adjustment_deduct),
       adjustment_note: parsed.adjustment_note || "",
+      override_rate: parsed.override_rate ?? "",
+      override_base_salary: parsed.override_base_salary ?? "",
+      override_duty_pay: parsed.override_duty_pay ?? "",
+      override_substitute_pay: parsed.override_substitute_pay ?? "",
+      override_leave_deductions: parsed.override_leave_deductions ?? "",
     };
   } catch {
     return { duty_note: value, adjustment_add: 0, adjustment_deduct: 0, adjustment_note: "" };
@@ -238,6 +268,8 @@ function getSubstitutePayForLeave(row, employeeId) {
 function defaultEmployeePayrollConfig() {
   return {
     daily_rate: 500,
+    pay_type: "daily",
+    teacher_level: "",
     overtime_rate: 0,
     substitute_rate: 50,
     leave_deduct_types: "ลาป่วย,ลากิจ",
@@ -592,20 +624,57 @@ function EmployeeModal({ employee, onClose, onSave }) {
     position: employee?.position || "", email: employee?.email || "", phone: employee?.phone || "",
     username: employee?.username || "", password: employee?.password || "", role: employee?.role || "employee",
   });
+  const [payrollConfig, setPayrollConfig] = useState(defaultEmployeePayrollConfig());
+  const [salarySettingId, setSalarySettingId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [showPass, setShowPass] = useState(false);
 
+  useEffect(() => {
+    if (!employee?.id) return;
+    let active = true;
+    (async () => {
+      const { data } = await supabase.from("salary_settings").select("*").eq("employee_id", employee.id).limit(1);
+      const row = data?.[0];
+      if (!active || !row) return;
+      const meta = parseEmployeePayrollMeta(row.leave_deduct_types);
+      setSalarySettingId(row.id);
+      setPayrollConfig({
+        ...defaultEmployeePayrollConfig(),
+        daily_rate: row.daily_rate || 500,
+        overtime_rate: row.overtime_rate ?? 0,
+        substitute_rate: row.substitute_rate || 50,
+        ...meta,
+      });
+    })();
+    return () => { active = false; };
+  }, [employee?.id]);
+
   const handleSave = async () => {
     if (!form.name.trim()) { setError("กรุณากรอกชื่อ"); return; }
     if (!form.department.trim()) { setError("กรุณาเลือกแผนก"); return; }
+    if (!payrollConfig.teacher_level) { setError("กรุณาเลือกระดับครู"); return; }
     setSaving(true);
     const payload = { ...form, email: form.email || null, username: form.username || null, password: form.password || null };
     const result = employee?.id
       ? await supabase.from("employees").update(payload).eq("id", employee.id)
-      : await supabase.from("employees").insert(payload);
+      : await supabase.from("employees").insert(payload).select("*").single();
+    if (result.error) { setSaving(false); setError(result.error.message); return; }
+
+    const employeeId = employee?.id || result.data?.id;
+    const salaryPayload = {
+      employee_id: employeeId,
+      daily_rate: parseMoney(payrollConfig.daily_rate),
+      duty_rate: 0,
+      substitute_rate: parseMoney(payrollConfig.substitute_rate) || 50,
+      overtime_rate: 0,
+      leave_deduct_types: formatEmployeePayrollMeta(payrollConfig),
+    };
+    const salaryResult = salarySettingId
+      ? await supabase.from("salary_settings").update(salaryPayload).eq("id", salarySettingId)
+      : await supabase.from("salary_settings").insert(salaryPayload);
     setSaving(false);
-    if (result.error) { setError(result.error.message); return; }
+    if (salaryResult.error) { setError(salaryResult.error.message); return; }
     onSave();
   };
 
@@ -629,6 +698,29 @@ function EmployeeModal({ employee, onClose, onSave }) {
             {DEPT_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
           </select>
         </Field>
+        <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.9rem", display: "grid", gap: "0.85rem" }}>
+          <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "#0f172a" }}>ข้อมูลเงินเดือนและการสอนแทน</div>
+          <Field label="ระดับครู *">
+            <select value={payrollConfig.teacher_level || ""} onChange={e => setPayrollConfig(f => ({ ...f, teacher_level: e.target.value }))} style={selectStyle}>
+              <option value="">-- เลือกระดับครู --</option>
+              {LEAVE_TEACHER_LEVELS.map(level => <option key={level} value={level}>ครู{level}</option>)}
+            </select>
+          </Field>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+            <Field label="ประเภทค่าจ้าง">
+              <select value={payrollConfig.pay_type || "daily"} onChange={e => setPayrollConfig(f => ({ ...f, pay_type: e.target.value }))} style={selectStyle}>
+                <option value="daily">รายวัน</option>
+                <option value="monthly">รายเดือน</option>
+              </select>
+            </Field>
+            <Field label={payrollConfig.pay_type === "monthly" ? "อัตราเงินเดือน" : "อัตราค่าจ้างรายวัน"}>
+              <input type="number" min="0" step="0.01" value={payrollConfig.daily_rate ?? 0} onChange={e => setPayrollConfig(f => ({ ...f, daily_rate: e.target.value }))} style={inputStyle} />
+            </Field>
+          </div>
+          <div style={{ fontSize: "0.74rem", color: "#64748b" }}>
+            ค่านี้จะถูกใช้ในหน้าเงินเดือนเพื่อคิดค่าจ้างและยอดหักลาอัตโนมัติ
+          </div>
+        </div>
 
         <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "10px", padding: "0.75rem", marginTop: "0.5rem" }}>
           <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#9a3412", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
@@ -679,6 +771,19 @@ function LeaveModal({ employees, currentUser, onClose, onSave }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [periodSubs, setPeriodSubs] = useState(emptyPeriodSubs);
+
+  useEffect(() => {
+    if (!form.employee_id) return;
+    let active = true;
+    (async () => {
+      const { data } = await supabase.from("salary_settings").select("leave_deduct_types").eq("employee_id", form.employee_id).limit(1);
+      const meta = parseEmployeePayrollMeta(data?.[0]?.leave_deduct_types);
+      if (active && meta.teacher_level) {
+        setForm(f => ({ ...f, teacher_level: meta.teacher_level }));
+      }
+    })();
+    return () => { active = false; };
+  }, [form.employee_id]);
 
   // Auto-calculate days/hours
   useEffect(() => {
@@ -1117,11 +1222,14 @@ function EmployeePage({ employees, onRefresh }) {
   const [search, setSearch] = useState("");
   const [deleting, setDeleting] = useState(null);
   const [devices, setDevices] = useState([]);
+  const [salaryRows, setSalaryRows] = useState([]);
 
   useEffect(() => {
     (async () => {
       const { data } = await supabase.from("user_devices").select("*");
       setDevices(data || []);
+      const { data: salaryData } = await supabase.from("salary_settings").select("*").not("employee_id", "is", null);
+      setSalaryRows(salaryData || []);
     })();
   }, [employees]);
 
@@ -1153,16 +1261,18 @@ function EmployeePage({ employees, onRefresh }) {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
             <thead>
               <tr style={{ background: "#f8fafc", borderBottom: "2px solid #f1f5f9" }}>
-                {["#", "ชื่อ-นามสกุล", "Username", "แผนก", "สิทธิ์", "เครื่อง", "จัดการ"].map(h => (
+                {["#", "ชื่อ-นามสกุล", "Username", "แผนก", "ระดับ", "ค่าจ้าง", "สิทธิ์", "เครื่อง", "จัดการ"].map(h => (
                   <th key={h} style={{ padding: "0.75rem 1rem", textAlign: "left", color: "#64748b", fontWeight: 600, fontSize: "0.78rem", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={7} style={{ padding: "3rem", textAlign: "center", color: "#94a3b8" }}>ไม่พบข้อมูล</td></tr>
+                <tr><td colSpan={9} style={{ padding: "3rem", textAlign: "center", color: "#94a3b8" }}>ไม่พบข้อมูล</td></tr>
               ) : filtered.map((emp, i) => {
                 const device = devices.find(d => d.employee_id === emp.id);
+                const salaryRow = salaryRows.find(row => row.employee_id === emp.id);
+                const salaryMeta = parseEmployeePayrollMeta(salaryRow?.leave_deduct_types);
                 return (
                   <tr key={emp.id} style={{ borderBottom: "1px solid #f8fafc" }}>
                     <td style={{ padding: "0.75rem 1rem", color: "#94a3b8", fontSize: "0.78rem" }}>{i + 1}</td>
@@ -1174,6 +1284,11 @@ function EmployeePage({ employees, onRefresh }) {
                     </td>
                     <td style={{ padding: "0.75rem 1rem", color: "#475569", fontFamily: "monospace", fontSize: "0.8rem" }}>{emp.username || "-"}</td>
                     <td style={{ padding: "0.75rem 1rem" }}><span style={{ background: "#eff6ff", color: "#2563eb", fontSize: "0.75rem", fontWeight: 600, padding: "0.2rem 0.6rem", borderRadius: "20px" }}>{emp.department || "-"}</span></td>
+                    <td style={{ padding: "0.75rem 1rem", color: "#475569", whiteSpace: "nowrap" }}>{salaryMeta.teacher_level ? `ครู${salaryMeta.teacher_level}` : "-"}</td>
+                    <td style={{ padding: "0.75rem 1rem", whiteSpace: "nowrap" }}>
+                      <div style={{ color: "#0f172a", fontWeight: 800 }}>{formatMoney(salaryRow?.daily_rate || 0)}</div>
+                      <div style={{ color: "#64748b", fontSize: "0.7rem" }}>{salaryMeta.pay_type === "monthly" ? "รายเดือน" : "รายวัน"}</div>
+                    </td>
                     <td style={{ padding: "0.75rem 1rem" }}>
                       {emp.role === "admin"
                         ? <span style={{ background: "#fef3c7", color: "#d97706", fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>Admin</span>
@@ -1927,6 +2042,11 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
         adjustment_add: parsedNote.adjustment_add || 0,
         adjustment_deduct: parsedNote.adjustment_deduct || 0,
         adjustment_note: parsedNote.adjustment_note || "",
+        override_rate: parsedNote.override_rate ?? "",
+        override_base_salary: parsedNote.override_base_salary ?? "",
+        override_duty_pay: parsedNote.override_duty_pay ?? "",
+        override_substitute_pay: parsedNote.override_substitute_pay ?? "",
+        override_leave_deductions: parsedNote.override_leave_deductions ?? "",
       };
     });
     setPayrollAdjustments(nextAdjustments);
@@ -1952,11 +2072,12 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
         if (dutyName && dutyName in DEFAULT_DUTY_RATES) {
           nextConfig.dutyRates[dutyName] = row.duty_rate ?? 0;
         } else if (row.employee_id) {
+          const meta = parseEmployeePayrollMeta(row.leave_deduct_types);
           nextConfig.employeeConfigs[row.employee_id] = {
             daily_rate: row.daily_rate || 500,
             overtime_rate: row.overtime_rate ?? 0,
             substitute_rate: row.substitute_rate || 50,
-            leave_deduct_types: row.leave_deduct_types || "ลาป่วย,ลากิจ",
+            ...meta,
           };
         }
       });
@@ -2014,9 +2135,16 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
       dutyCounts[dutyName] += 1;
     });
 
-    const dailyRate = parseMoney(employeeConfig.daily_rate);
-    const dutyPay = PAID_DUTY_OPTIONS.reduce((sum, dutyName) => sum + dutyCounts[dutyName] * parseMoney(config.dutyRates[dutyName]), 0);
-    const baseSalary = attendanceDays * dailyRate;
+    const adjustment = payrollAdjustments[emp.id] || {};
+    const configuredRate = parseMoney(employeeConfig.daily_rate);
+    const effectiveRate = adjustment.override_rate !== "" && adjustment.override_rate != null ? parseMoney(adjustment.override_rate) : configuredRate;
+    const payType = employeeConfig.pay_type || "daily";
+    const perDayRate = payType === "monthly" ? (workDays > 0 ? effectiveRate / workDays : 0) : effectiveRate;
+    const dailyRate = effectiveRate;
+    const calculatedDutyPay = PAID_DUTY_OPTIONS.reduce((sum, dutyName) => sum + dutyCounts[dutyName] * parseMoney(config.dutyRates[dutyName]), 0);
+    const dutyPay = adjustment.override_duty_pay !== "" && adjustment.override_duty_pay != null ? parseMoney(adjustment.override_duty_pay) : calculatedDutyPay;
+    const calculatedBaseSalary = payType === "monthly" ? effectiveRate : attendanceDays * effectiveRate;
+    const baseSalary = adjustment.override_base_salary !== "" && adjustment.override_base_salary != null ? parseMoney(adjustment.override_base_salary) : calculatedBaseSalary;
     const overtimePay = 0;
     const substituteItems = monthLeaves.flatMap(row => {
       const { teacherLevel, periods } = getLeaveSubstituteMeta(row.substitute_note);
@@ -2033,9 +2161,10 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
         .filter(Boolean);
     });
     const substituteCount = substituteItems.length;
-    const substitutePay = substituteItems.reduce((sum, item) => sum + item.amount, 0);
-    const leaveDeductions = leaveDeductDays * dailyRate;
-    const adjustment = payrollAdjustments[emp.id] || {};
+    const calculatedSubstitutePay = substituteItems.reduce((sum, item) => sum + item.amount, 0);
+    const substitutePay = adjustment.override_substitute_pay !== "" && adjustment.override_substitute_pay != null ? parseMoney(adjustment.override_substitute_pay) : calculatedSubstitutePay;
+    const calculatedLeaveDeductions = leaveDeductDays * perDayRate;
+    const leaveDeductions = adjustment.override_leave_deductions !== "" && adjustment.override_leave_deductions != null ? parseMoney(adjustment.override_leave_deductions) : calculatedLeaveDeductions;
     const adjustmentAdd = parseMoney(adjustment.adjustment_add);
     const adjustmentDeduct = parseMoney(adjustment.adjustment_deduct);
     const adjustmentNote = adjustment.adjustment_note || "";
@@ -2051,6 +2180,8 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
       dutyCounts,
       dutyCount,
       dailyRate,
+      payType,
+      perDayRate,
       baseSalary,
       dutyPay,
       totalPay,
@@ -2161,6 +2292,8 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
       const employeeConfig = { ...defaultEmployeePayrollConfig(), ...(config.employeeConfigs[emp.id] || {}) };
       const hasMeaningfulConfig = parseMoney(employeeConfig.daily_rate) > 0
         || parseMoney(employeeConfig.substitute_rate) > 0
+        || employeeConfig.teacher_level
+        || employeeConfig.pay_type !== "daily"
         || (employeeConfig.leave_deduct_types || "").trim() !== "ลาป่วย,ลากิจ";
 
       if (existing) {
@@ -2168,7 +2301,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
           daily_rate: parseMoney(employeeConfig.daily_rate),
           overtime_rate: 0,
           substitute_rate: parseMoney(employeeConfig.substitute_rate),
-          leave_deduct_types: employeeConfig.leave_deduct_types || "ลาป่วย,ลากิจ",
+          leave_deduct_types: formatEmployeePayrollMeta(employeeConfig),
         }).eq("id", existing.id);
       } else if (hasMeaningfulConfig) {
         await supabase.from("salary_settings").insert({
@@ -2177,7 +2310,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
           duty_rate: 0,
           substitute_rate: parseMoney(employeeConfig.substitute_rate),
           overtime_rate: 0,
-          leave_deduct_types: employeeConfig.leave_deduct_types || "ลาป่วย,ลากิจ",
+          leave_deduct_types: formatEmployeePayrollMeta(employeeConfig),
         });
       }
     }
@@ -2207,6 +2340,11 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
           adjustment_add: Number(row.adjustmentAdd.toFixed(2)),
           adjustment_deduct: Number(row.adjustmentDeduct.toFixed(2)),
           adjustment_note: row.adjustmentNote || "",
+          override_rate: payrollAdjustments[row.emp.id]?.override_rate ?? "",
+          override_base_salary: payrollAdjustments[row.emp.id]?.override_base_salary ?? "",
+          override_duty_pay: payrollAdjustments[row.emp.id]?.override_duty_pay ?? "",
+          override_substitute_pay: payrollAdjustments[row.emp.id]?.override_substitute_pay ?? "",
+          override_leave_deductions: payrollAdjustments[row.emp.id]?.override_leave_deductions ?? "",
         }),
       };
       const existing = payrollMap.get(row.emp.id);
@@ -2378,16 +2516,30 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
       </Card>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem", marginTop: "1rem" }}>
         <Card>
-          <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.3rem" }}>ตั้งค่าเงินเดือนรายคน</div>
-          <div style={{ fontSize: "0.8rem", color: "#64748b", marginBottom: "0.9rem" }}>เลือกชื่อแล้วกรอกค่าของคนนั้นได้เลย</div>
+          <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.3rem" }}>ข้อมูลเงินเดือนรายคน</div>
+          <div style={{ fontSize: "0.8rem", color: "#64748b", marginBottom: "0.9rem" }}>ค่าหลักดึงจากเมนูพนักงาน และแก้เฉพาะเดือนนี้ได้ด้านล่าง</div>
           {selectedEmployee && (
             <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.9rem", display: "flex", flexDirection: "column", gap: "0.9rem" }}>
               <div>
                 <div style={{ fontWeight: 800, color: "#0f172a", fontSize: "1rem" }}>{selectedEmployee.name}</div>
                 <div style={{ fontSize: "0.78rem", color: "#64748b" }}>{selectedEmployee.department || "ไม่ระบุแผนก"}</div>
               </div>
-              <Field label="ค่าจ้างรายวัน">
-                <input type="number" min="0" step="0.01" value={selectedEmployeeConfig.daily_rate ?? ""} onChange={e => updateDailyRate(selectedEmployee.id, e.target.value)} placeholder="วันละเท่าไร" style={inputStyle} />
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                <Field label="ประเภทค่าจ้าง">
+                  <select value={selectedEmployeeConfig.pay_type || "daily"} onChange={e => updateEmployeeSetting(selectedEmployee.id, "pay_type", e.target.value)} style={selectStyle}>
+                    <option value="daily">รายวัน</option>
+                    <option value="monthly">รายเดือน</option>
+                  </select>
+                </Field>
+                <Field label={selectedEmployeeConfig.pay_type === "monthly" ? "อัตราเงินเดือน" : "อัตราค่าจ้างรายวัน"}>
+                  <input type="number" min="0" step="0.01" value={selectedEmployeeConfig.daily_rate ?? ""} onChange={e => updateDailyRate(selectedEmployee.id, e.target.value)} placeholder="จำนวนเงิน" style={inputStyle} />
+                </Field>
+              </div>
+              <Field label="ระดับครู">
+                <select value={selectedEmployeeConfig.teacher_level || ""} onChange={e => updateEmployeeSetting(selectedEmployee.id, "teacher_level", e.target.value)} style={selectStyle}>
+                  <option value="">-- เลือกระดับครู --</option>
+                  {LEAVE_TEACHER_LEVELS.map(level => <option key={level} value={level}>ครู{level}</option>)}
+                </select>
               </Field>
               <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "10px", padding: "0.75rem", color: "#1d4ed8", fontSize: "0.82rem", fontWeight: 700 }}>
                 ค่าสอนแทนคิดอัตโนมัติ: จินตคณิต {formatMoney(25)}, คาบปกติ {formatMoney(50)}, อนุบาลทั้งวัน {formatMoney(KINDERGARTEN_SUBSTITUTE_DAY_RATE)}
@@ -2420,7 +2572,25 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
                 </div>
               </div>
               <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: "0.9rem" }}>
-                <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#475569", marginBottom: "0.65rem" }}>รายการปรับเงินเดือน</div>
+                <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#475569", marginBottom: "0.65rem" }}>แก้ยอดคำนวณเฉพาะเดือนนี้</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "0.75rem" }}>
+                  <Field label="แก้อัตราเงิน">
+                    <input type="number" min="0" step="0.01" value={selectedAdjustment.override_rate ?? ""} onChange={e => updatePayrollAdjustment(selectedEmployee.id, "override_rate", e.target.value)} placeholder={String(selectedEmployeeConfig.daily_rate ?? 0)} style={inputStyle} />
+                  </Field>
+                  <Field label="แก้ค่าจ้างรวม">
+                    <input type="number" min="0" step="0.01" value={selectedAdjustment.override_base_salary ?? ""} onChange={e => updatePayrollAdjustment(selectedEmployee.id, "override_base_salary", e.target.value)} placeholder={selectedSummaryRow ? selectedSummaryRow.baseSalary.toFixed(2) : "0"} style={inputStyle} />
+                  </Field>
+                  <Field label="แก้ค่าเวร">
+                    <input type="number" min="0" step="0.01" value={selectedAdjustment.override_duty_pay ?? ""} onChange={e => updatePayrollAdjustment(selectedEmployee.id, "override_duty_pay", e.target.value)} placeholder={selectedSummaryRow ? selectedSummaryRow.dutyPay.toFixed(2) : "0"} style={inputStyle} />
+                  </Field>
+                  <Field label="แก้ค่าสอนแทน">
+                    <input type="number" min="0" step="0.01" value={selectedAdjustment.override_substitute_pay ?? ""} onChange={e => updatePayrollAdjustment(selectedEmployee.id, "override_substitute_pay", e.target.value)} placeholder={selectedSummaryRow ? selectedSummaryRow.substitutePay.toFixed(2) : "0"} style={inputStyle} />
+                  </Field>
+                  <Field label="แก้ยอดหักลา">
+                    <input type="number" min="0" step="0.01" value={selectedAdjustment.override_leave_deductions ?? ""} onChange={e => updatePayrollAdjustment(selectedEmployee.id, "override_leave_deductions", e.target.value)} placeholder={selectedSummaryRow ? selectedSummaryRow.leaveDeductions.toFixed(2) : "0"} style={inputStyle} />
+                  </Field>
+                </div>
+                <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#475569", marginBottom: "0.65rem" }}>รายการปรับเพิ่ม/หักเพิ่ม</div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "0.75rem" }}>
                   <Field label="ปรับเพิ่ม">
                     <input type="number" min="0" step="0.01" value={selectedAdjustment.adjustment_add ?? 0} onChange={e => updatePayrollAdjustment(selectedEmployee.id, "adjustment_add", e.target.value)} style={inputStyle} />

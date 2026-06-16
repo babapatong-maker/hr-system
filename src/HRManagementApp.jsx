@@ -163,6 +163,21 @@ function parseDutyName(settingValue) {
   return settingValue.slice(DUTY_SETTING_PREFIX.length);
 }
 
+function parsePayrollNote(value) {
+  if (!value) return { duty_note: "", adjustment_add: 0, adjustment_deduct: 0, adjustment_note: "" };
+  try {
+    const parsed = JSON.parse(value);
+    return {
+      duty_note: parsed.duty_note || "",
+      adjustment_add: parseMoney(parsed.adjustment_add),
+      adjustment_deduct: parseMoney(parsed.adjustment_deduct),
+      adjustment_note: parsed.adjustment_note || "",
+    };
+  } catch {
+    return { duty_note: value, adjustment_add: 0, adjustment_deduct: 0, adjustment_note: "" };
+  }
+}
+
 function getPeriodSubstitutes(value) {
   if (!value) return Array.from({ length: 6 }, () => "");
   try {
@@ -1832,6 +1847,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
   const [savedPayrollRows, setSavedPayrollRows] = useState([]);
   const [selectedPayrollEmployee, setSelectedPayrollEmployee] = useState("");
   const [employeeSearch, setEmployeeSearch] = useState("");
+  const [payrollAdjustments, setPayrollAdjustments] = useState({});
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -1840,6 +1856,17 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
   async function loadSavedPayroll(targetMonth) {
     const { data } = await supabase.from("payroll").select("*").eq("month", targetMonth).order("total", { ascending: false });
     setSavedPayrollRows(data || []);
+    const nextAdjustments = {};
+    (data || []).forEach(row => {
+      if (!row.employee_id) return;
+      const parsedNote = parsePayrollNote(row.note);
+      nextAdjustments[row.employee_id] = {
+        adjustment_add: parsedNote.adjustment_add || 0,
+        adjustment_deduct: parsedNote.adjustment_deduct || 0,
+        adjustment_note: parsedNote.adjustment_note || "",
+      };
+    });
+    setPayrollAdjustments(nextAdjustments);
   }
 
   useEffect(() => {
@@ -1863,7 +1890,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
           nextConfig.dutyRates[dutyName] = row.duty_rate ?? 0;
         } else if (row.employee_id) {
           nextConfig.employeeConfigs[row.employee_id] = {
-            daily_rate: row.daily_rate ?? 0,
+            daily_rate: row.daily_rate || 500,
             overtime_rate: row.overtime_rate ?? 0,
             substitute_rate: row.substitute_rate || 50,
             leave_deduct_types: row.leave_deduct_types || "ลาป่วย,ลากิจ",
@@ -1904,6 +1931,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
   const selectedEmployeeId = selectedPayrollEmployee || employeeOptions[0]?.id || employees[0]?.id || "";
   const selectedEmployee = employees.find(emp => emp.id === selectedEmployeeId) || null;
   const selectedEmployeeConfig = config.employeeConfigs[selectedEmployeeId] || defaultEmployeePayrollConfig();
+  const selectedAdjustment = payrollAdjustments[selectedEmployeeId] || { adjustment_add: 0, adjustment_deduct: 0, adjustment_note: "" };
   const allRows = employees.map(emp => {
     const employeeAttendance = monthAttendance.filter(row => row.employee_id === emp.id);
     const attendanceDays = new Set(employeeAttendance.map(row => getDateKey(row.check_in))).size;
@@ -1938,8 +1966,14 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
       return sum + periodSubs.filter(subId => subId === emp.id).length;
     }, 0);
     const substitutePay = substituteCount * substituteRate;
-    const deductions = leaveDeductDays * dailyRate;
-    const totalPay = baseSalary + dutyPay + overtimePay + substitutePay - deductions;
+    const leaveDeductions = leaveDeductDays * dailyRate;
+    const adjustment = payrollAdjustments[emp.id] || {};
+    const adjustmentAdd = parseMoney(adjustment.adjustment_add);
+    const adjustmentDeduct = parseMoney(adjustment.adjustment_deduct);
+    const adjustmentNote = adjustment.adjustment_note || "";
+    const grossPay = baseSalary + dutyPay + overtimePay + substitutePay;
+    const deductions = leaveDeductions + adjustmentDeduct;
+    const totalPay = grossPay + adjustmentAdd - deductions;
     const dutyCount = DUTY_OPTIONS.filter(dutyName => dutyName !== "ไม่มีเวร").reduce((sum, dutyName) => sum + dutyCounts[dutyName], 0);
     const absentDays = Math.max(0, workDays - attendanceDays - employeeLeaves.reduce((sum, row) => sum + ((row.hours || 0) / 8), 0));
 
@@ -1959,6 +1993,11 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
       substitutePay,
       overtimeHours,
       overtimePay,
+      grossPay,
+      leaveDeductions,
+      adjustmentAdd,
+      adjustmentDeduct,
+      adjustmentNote,
       deductions,
       note: DUTY_OPTIONS.filter(dutyName => dutyName !== "ไม่มีเวร" && dutyCounts[dutyName] > 0).map(dutyName => `${dutyName} ${dutyCounts[dutyName]} วัน`).join(", "),
     };
@@ -2002,6 +2041,16 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
           ...(current.employeeConfigs[employeeId] || defaultEmployeePayrollConfig()),
           [key]: value,
         },
+      },
+    }));
+  };
+
+  const updatePayrollAdjustment = (employeeId, key, value) => {
+    setPayrollAdjustments(current => ({
+      ...current,
+      [employeeId]: {
+        ...(current[employeeId] || { adjustment_add: 0, adjustment_deduct: 0, adjustment_note: "" }),
+        [key]: value,
       },
     }));
   };
@@ -2086,7 +2135,12 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
         overtime_pay: Number(row.overtimePay.toFixed(2)),
         deductions: Number(row.deductions.toFixed(2)),
         total: Number(row.totalPay.toFixed(2)),
-        note: row.note || null,
+        note: JSON.stringify({
+          duty_note: row.note || "",
+          adjustment_add: Number(row.adjustmentAdd.toFixed(2)),
+          adjustment_deduct: Number(row.adjustmentDeduct.toFixed(2)),
+          adjustment_note: row.adjustmentNote || "",
+        }),
       };
       const existing = payrollMap.get(row.emp.id);
 
@@ -2134,8 +2188,13 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
           <td>${row.overtimePay.toFixed(2)}</td>
           <td>${row.substituteCount}</td>
           <td>${row.substitutePay.toFixed(2)}</td>
+          <td>${row.grossPay.toFixed(2)}</td>
+          <td>${row.adjustmentAdd.toFixed(2)}</td>
           <td>${row.leaveDeductDays.toFixed(1)}</td>
+          <td>${row.leaveDeductions.toFixed(2)}</td>
+          <td>${row.adjustmentDeduct.toFixed(2)}</td>
           <td>${row.deductions.toFixed(2)}</td>
+          <td>${escapeHtml(row.adjustmentNote)}</td>
           <td>${row.totalPay.toFixed(2)}</td>
         </tr>
       `;
@@ -2166,7 +2225,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
       <body>
         <table>
           <tr>
-            <th colspan="17" style="font-size:18px;background:#dbeafe;">สรุปเงินเดือน เดือน ${escapeHtml(month)}</th>
+            <th colspan="21" style="font-size:18px;background:#dbeafe;">สรุปเงินเดือน เดือน ${escapeHtml(month)}</th>
           </tr>
           <tr>
             <th>พนักงาน</th>
@@ -2183,8 +2242,13 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
             <th>ค่า OT</th>
             <th>สอนแทน (คาบ)</th>
             <th>ค่าสอนแทน</th>
+            <th>ยอดก่อนหัก</th>
+            <th>ปรับเพิ่ม</th>
             <th>หักลา (วัน)</th>
-            <th>หักเงิน</th>
+            <th>หักลา (บาท)</th>
+            <th>หักเพิ่ม</th>
+            <th>หักรวม</th>
+            <th>หมายเหตุ</th>
             <th>รวมสุทธิ</th>
           </tr>
           ${rowsHtml}
@@ -2238,7 +2302,10 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
               </button>
               <button onClick={handleSave} disabled={loadingConfig || saving} style={{ ...btnPrimary, flex: "none", padding: "0.8rem 1rem", background: saved ? "#16a34a" : "linear-gradient(135deg, #2563eb, #1d4ed8)", color: "#fff", cursor: loadingConfig || saving ? "not-allowed" : "pointer" }}>
                 {saving ? <RefreshCw size={16} style={{ animation: "spin 1s linear infinite" }} /> : saved ? <CheckCircle size={16} /> : <Save size={16} />}
-                {saving ? "กำลังบันทึก..." : saved ? "บันทึกแล้ว" : "บันทึกลง Supabase"}
+                {saving ? "กำลังคำนวณ..." : saved ? "คำนวณแล้ว" : "คำนวณเงินเดือนเดือนนี้"}
+              </button>
+              <button onClick={() => document.getElementById("payroll-detail")?.scrollIntoView({ behavior: "smooth", block: "start" })} style={{ ...btnSecondary, flex: "none", padding: "0.8rem 1rem" }}>
+                <Search size={16} /> ดูรายละเอียดรายคน
               </button>
             </div>
           </div>
@@ -2292,6 +2359,20 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
                   })}
                 </div>
               </div>
+              <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: "0.9rem" }}>
+                <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#475569", marginBottom: "0.65rem" }}>รายการปรับเงินเดือน</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "0.75rem" }}>
+                  <Field label="ปรับเพิ่ม">
+                    <input type="number" min="0" step="0.01" value={selectedAdjustment.adjustment_add ?? 0} onChange={e => updatePayrollAdjustment(selectedEmployee.id, "adjustment_add", e.target.value)} style={inputStyle} />
+                  </Field>
+                  <Field label="หักเพิ่ม">
+                    <input type="number" min="0" step="0.01" value={selectedAdjustment.adjustment_deduct ?? 0} onChange={e => updatePayrollAdjustment(selectedEmployee.id, "adjustment_deduct", e.target.value)} style={inputStyle} />
+                  </Field>
+                </div>
+                <Field label="หมายเหตุ">
+                  <input value={selectedAdjustment.adjustment_note ?? ""} onChange={e => updatePayrollAdjustment(selectedEmployee.id, "adjustment_note", e.target.value)} placeholder="เช่น ค่าเดินทาง, หักเงินยืม, โบนัสพิเศษ" style={inputStyle} />
+                </Field>
+              </div>
             </div>
           )}
         </Card>
@@ -2327,7 +2408,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
                   <div style={{ fontSize: "1.25rem", color: "#0f172a", fontWeight: 800 }}>{selectedSummaryRow.attendanceDays} วัน</div>
                 </div>
                 <div style={{ background: "#f5f3ff", borderRadius: "12px", padding: "0.85rem" }}>
-                  <div style={{ fontSize: "0.72rem", color: "#7c3aed", fontWeight: 700 }}>รวมเงินเบื้องต้น</div>
+                  <div style={{ fontSize: "0.72rem", color: "#7c3aed", fontWeight: 700 }}>รวมสุทธิ</div>
                   <div style={{ fontSize: "1.25rem", color: "#0f172a", fontWeight: 800 }}>{formatMoney(selectedSummaryRow.totalPay)}</div>
                 </div>
               </div>
@@ -2346,7 +2427,21 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
                 </div>
                 <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.8rem" }}>
                   <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "0.2rem" }}>สอนแทน</div>
-                  <div style={{ fontWeight: 800, color: "#2563eb" }}>{selectedSummaryRow.substituteCount} ครั้ง / {formatMoney(selectedSummaryRow.substitutePay)}</div>
+                  <div style={{ fontWeight: 800, color: "#2563eb" }}>{selectedSummaryRow.substituteCount} คาบ / {formatMoney(selectedSummaryRow.substitutePay)}</div>
+                </div>
+              </div>
+              <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.85rem", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "0.75rem" }}>
+                <div>
+                  <div style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: 700 }}>ยอดก่อนหัก</div>
+                  <div style={{ color: "#0f172a", fontWeight: 800 }}>{formatMoney(selectedSummaryRow.grossPay)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: 700 }}>ปรับเพิ่ม</div>
+                  <div style={{ color: "#16a34a", fontWeight: 800 }}>{formatMoney(selectedSummaryRow.adjustmentAdd)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: 700 }}>หักเพิ่ม</div>
+                  <div style={{ color: "#dc2626", fontWeight: 800 }}>{formatMoney(selectedSummaryRow.adjustmentDeduct)}</div>
                 </div>
               </div>
               <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "12px", padding: "0.85rem" }}>
@@ -2408,7 +2503,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
           </div>
         </Card>
       </div>
-      <div style={{ marginTop: "1rem" }}>
+      <div id="payroll-detail" style={{ marginTop: "1rem" }}>
         <Card padding="0">
           <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
             <div>
@@ -2429,7 +2524,9 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
                   { label: "ค่าเวร", detail: selectedDutySummary.length > 0 ? selectedDutySummary.map(dutyName => `${dutyName} ${selectedSummaryRow.dutyCounts[dutyName]} วัน`).join(", ") : "ไม่มีเวรที่จ่ายเพิ่ม", value: formatMoney(selectedSummaryRow.dutyPay), color: "#7c3aed" },
                   { label: "OT", detail: `${selectedSummaryRow.overtimeHours.toFixed(1)} ชม.`, value: formatMoney(selectedSummaryRow.overtimePay), color: "#0f766e" },
                   { label: "สอนแทน", detail: `${selectedSummaryRow.substituteCount} คาบ`, value: formatMoney(selectedSummaryRow.substitutePay), color: "#2563eb" },
-                  { label: "หักลา", detail: `${selectedSummaryRow.leaveDeductDays.toFixed(1)} วัน`, value: `- ${formatMoney(selectedSummaryRow.deductions)}`, color: "#dc2626" },
+                  { label: "ปรับเพิ่ม", detail: selectedSummaryRow.adjustmentNote || "รายการพิเศษ", value: formatMoney(selectedSummaryRow.adjustmentAdd), color: "#16a34a" },
+                  { label: "หักลา", detail: `${selectedSummaryRow.leaveDeductDays.toFixed(1)} วัน`, value: `- ${formatMoney(selectedSummaryRow.leaveDeductions)}`, color: "#dc2626" },
+                  { label: "หักเพิ่ม", detail: selectedSummaryRow.adjustmentNote || "รายการพิเศษ", value: `- ${formatMoney(selectedSummaryRow.adjustmentDeduct)}`, color: "#dc2626" },
                 ].map(item => (
                   <div key={item.label} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "0.75rem", alignItems: "center", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.85rem 1rem" }}>
                     <div>

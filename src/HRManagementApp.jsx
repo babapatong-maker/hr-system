@@ -26,6 +26,17 @@ const DEFAULT_DUTY_RATES = {
 const PAID_DUTY_OPTIONS = ["เวรรถ"];
 const FREE_PERIOD_VALUE = "__FREE_PERIOD__";
 const DUTY_SETTING_PREFIX = "__DUTY__:";
+const LEAVE_TEACHER_LEVELS = ["อนุบาล", "ประถม", "มัธยม"];
+const SUBSTITUTE_PERIODS = [
+  { label: "จินตคณิต", rate: 25 },
+  { label: "คาบ 1", rate: 50 },
+  { label: "คาบ 2", rate: 50 },
+  { label: "คาบ 3", rate: 50 },
+  { label: "คาบ 4", rate: 50 },
+  { label: "คาบ 5", rate: 50 },
+  { label: "คาบ 6", rate: 50 },
+];
+const KINDERGARTEN_SUBSTITUTE_DAY_RATE = 250;
 
 function haversineDistance(lat1, lng1, lat2, lng2) {
   const R = 6371000;
@@ -179,15 +190,49 @@ function parsePayrollNote(value) {
   }
 }
 
-function getPeriodSubstitutes(value) {
-  if (!value) return Array.from({ length: 6 }, () => "");
+function normalizeSubstitutePeriods(periods) {
+  const list = Array.isArray(periods) ? periods : [];
+  if (list.length === 6) {
+    return ["", ...list].slice(0, SUBSTITUTE_PERIODS.length);
+  }
+  return Array.from({ length: SUBSTITUTE_PERIODS.length }, (_, index) => list[index] || "");
+}
+
+function getLeaveSubstituteMeta(value) {
+  if (!value) return { teacherLevel: "", periods: normalizeSubstitutePeriods([]) };
   try {
     const parsed = JSON.parse(value);
     if (Array.isArray(parsed)) {
-      return Array.from({ length: 6 }, (_, index) => parsed[index] || "");
+      return { teacherLevel: "", periods: normalizeSubstitutePeriods(parsed) };
+    }
+    if (parsed && typeof parsed === "object") {
+      return {
+        teacherLevel: parsed.teacher_level || parsed.teacherLevel || "",
+        periods: normalizeSubstitutePeriods(parsed.periods || parsed.period_substitutes),
+      };
     }
   } catch {}
-  return Array.from({ length: 6 }, () => "");
+  return { teacherLevel: "", periods: normalizeSubstitutePeriods([]) };
+}
+
+function getPeriodSubstitutes(value) {
+  return getLeaveSubstituteMeta(value).periods;
+}
+
+function getLeaveTeacherLevel(value) {
+  return getLeaveSubstituteMeta(value).teacherLevel;
+}
+
+function getSubstitutePayForLeave(row, employeeId) {
+  const { teacherLevel, periods } = getLeaveSubstituteMeta(row.substitute_note);
+  const dayCount = Math.max(1, (row.hours || 8) / 8);
+  if (teacherLevel === "อนุบาล") {
+    return periods.includes(employeeId) ? KINDERGARTEN_SUBSTITUTE_DAY_RATE * dayCount : 0;
+  }
+  return periods.reduce((sum, subId, index) => {
+    if (subId !== employeeId) return sum;
+    return sum + (SUBSTITUTE_PERIODS[index]?.rate || 50);
+  }, 0);
 }
 
 function defaultEmployeePayrollConfig() {
@@ -327,7 +372,7 @@ const navItems = [
   { icon: Calendar, label: "ตารางสอน", key: "schedule", roles: ["admin", "employee"] },
   { icon: Umbrella, label: "การลา", key: "leave", roles: ["admin", "employee"] },
   { icon: ArrowRightLeft, label: "ขอออกนอกสถานที่", key: "outing", roles: ["admin", "employee"] },
-  { icon: DollarSign, label: "เงินเดือน", key: "payroll", roles: ["admin"] },
+  { icon: DollarSign, label: "เงินเดือน", key: "finance", roles: ["admin"] },
   { icon: BarChart3, label: "รายงาน", key: "report", roles: ["admin"] },
   { icon: Settings, label: "ตั้งค่าเวลาทำงาน", key: "settings", roles: ["admin"] },
 ];
@@ -619,12 +664,13 @@ function EmployeeModal({ employee, onClose, onSave }) {
 
 // ─── LEAVE MODAL ──────────────────────────────────────────────────────────────
 function LeaveModal({ employees, currentUser, onClose, onSave }) {
-  const emptyPeriodSubs = Array.from({ length: 6 }, () => "");
+  const emptyPeriodSubs = Array.from({ length: SUBSTITUTE_PERIODS.length }, () => "");
   const [form, setForm] = useState({
     employee_id: currentUser?.id || "",
     leave_type: "ลาป่วย", duration_type: "เต็มวัน",
     start_date: todayISO(), end_date: todayISO(),
     start_time: "08:30", end_time: "16:30", hours: 8, reason: "",
+    teacher_level: "",
     substitute_id: "",
     substitute_note: JSON.stringify(emptyPeriodSubs),
     document_url: ""
@@ -647,15 +693,17 @@ function LeaveModal({ employees, currentUser, onClose, onSave }) {
 
   const handleSave = async () => {
     if (!form.employee_id) { setError("กรุณาเลือกพนักงาน"); return; }
+    if (!form.teacher_level) { setError("กรุณาเลือกว่าครูที่ลาเป็นครูอนุบาล ประถม หรือมัธยม"); return; }
     if (!form.reason.trim()) { setError("กรุณากรอกเหตุผล"); return; }
     if (uploading) { setError("กรุณารอให้ระบบแนบรูปให้เสร็จก่อน"); return; }
     if (periodSubs.some(value => !value)) { setError("กรุณาเลือกให้ครบทุกคาบ ว่าจะมีคนสอนแทนหรือเป็นคาบว่าง"); return; }
     setSaving(true);
     const normalizedPeriodSubs = periodSubs.map(value => value === FREE_PERIOD_VALUE ? "" : value);
+    const { teacher_level, ...leavePayload } = form;
     const payload = {
-      ...form,
+      ...leavePayload,
       substitute_id: normalizedPeriodSubs.find(Boolean) || null,
-      substitute_note: JSON.stringify(normalizedPeriodSubs),
+      substitute_note: JSON.stringify({ teacher_level, periods: normalizedPeriodSubs }),
     };
     const { error } = await supabase.from("leaves").insert(payload);
     setSaving(false);
@@ -697,6 +745,15 @@ function LeaveModal({ employees, currentUser, onClose, onSave }) {
             <option>ลาป่วย</option><option>ลากิจ</option><option>ลาพักร้อน</option><option>ลาคลอด</option><option>ลาบวช</option>
           </select>
         </Field>
+        <Field label="ระดับครูที่ลา *">
+          <select value={form.teacher_level} onChange={e => setForm(f => ({ ...f, teacher_level: e.target.value }))} style={selectStyle}>
+            <option value="">-- เลือกระดับครู --</option>
+            {LEAVE_TEACHER_LEVELS.map(level => <option key={level} value={level}>ครู{level}</option>)}
+          </select>
+          <div style={{ fontSize: "0.72rem", color: "#94a3b8", marginTop: "0.25rem" }}>
+            ครูอนุบาล: คนสอนแทนได้เหมาทั้งวัน {formatMoney(KINDERGARTEN_SUBSTITUTE_DAY_RATE)} / ครูประถม-มัธยม: จินตคณิต {formatMoney(25)}, คาบปกติ {formatMoney(50)}
+          </div>
+        </Field>
         <Field label="ระยะเวลา">
           <select value={form.duration_type} onChange={e => setForm(f => ({ ...f, duration_type: e.target.value }))} style={selectStyle}>
             <option>เต็มวัน</option><option>ครึ่งวันเช้า</option><option>ครึ่งวันบ่าย</option>
@@ -734,10 +791,10 @@ function LeaveModal({ employees, currentUser, onClose, onSave }) {
 
         <Field label="👨‍🏫 ครูสอนแทน (ถ้ามี)">
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-            {Array.from({ length: 6 }, (_, index) => (
+            {SUBSTITUTE_PERIODS.map((period, index) => (
               <div key={index}>
                 <label style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: 600, display: "block", marginBottom: "0.3rem" }}>
-                  คาบ {index + 1}
+                  {index === 0 ? "ไม่ใช่คาบที่ 1: จินตคณิต" : period.label} ({formatMoney(period.rate)})
                 </label>
                 <select
                   value={periodSubs[index]}
@@ -1287,17 +1344,22 @@ function LeavePage({ employees, leaves, currentUser, onRefresh }) {
                   <td style={{ padding: "0.65rem 0.75rem", color: "#475569", fontWeight: 600 }}>{row.hours || 8}</td>
                   <td style={{ padding: "0.65rem 0.75rem", color: "#475569" }}>
                     {(() => {
-                      const periodSubs = getPeriodSubstitutes(row.substitute_note);
+                      const { teacherLevel, periods: periodSubs } = getLeaveSubstituteMeta(row.substitute_note);
                       const filledSubs = periodSubs.filter(Boolean);
                       if (filledSubs.length === 0 && !row.substitute?.name) return <span style={{ color: "#94a3b8", fontSize: "0.78rem" }}>—</span>;
 
                       return (
                         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.3rem", maxWidth: 260 }}>
+                          {teacherLevel && (
+                            <span style={{ background: "#ecfeff", color: "#0e7490", fontSize: "0.7rem", fontWeight: 800, padding: "0.2rem 0.45rem", borderRadius: "20px", whiteSpace: "nowrap" }}>
+                              ครู{teacherLevel}
+                            </span>
+                          )}
                           {periodSubs.map((subId, periodIndex) => {
                             const subEmp = employees.find(emp => emp.id === subId);
                             return (
                               <span key={`${row.id}-${periodIndex}`} style={{ background: subEmp ? "#f5f3ff" : "#f8fafc", color: subEmp ? "#7c3aed" : "#94a3b8", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.45rem", borderRadius: "20px", whiteSpace: "nowrap" }}>
-                                {`ค${periodIndex + 1} ${subEmp?.name?.split(" ")[0] || "ว่าง"}`}
+                                {`${periodIndex === 0 ? "จินต" : `ค${periodIndex}`} ${subEmp?.name?.split(" ")[0] || "ว่าง"}`}
                               </span>
                             );
                           })}
@@ -1953,15 +2015,25 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
     });
 
     const dailyRate = parseMoney(employeeConfig.daily_rate);
-    const substituteRate = parseMoney(employeeConfig.substitute_rate) || 50;
     const dutyPay = PAID_DUTY_OPTIONS.reduce((sum, dutyName) => sum + dutyCounts[dutyName] * parseMoney(config.dutyRates[dutyName]), 0);
     const baseSalary = attendanceDays * dailyRate;
     const overtimePay = 0;
-    const substituteCount = monthLeaves.reduce((sum, row) => {
-      const periodSubs = getPeriodSubstitutes(row.substitute_note);
-      return sum + periodSubs.filter(subId => subId === emp.id).length;
-    }, 0);
-    const substitutePay = substituteCount * substituteRate;
+    const substituteItems = monthLeaves.flatMap(row => {
+      const { teacherLevel, periods } = getLeaveSubstituteMeta(row.substitute_note);
+      if (teacherLevel === "อนุบาล") {
+        return periods.includes(emp.id)
+          ? [{ label: "สอนแทนครูอนุบาล", amount: getSubstitutePayForLeave(row, emp.id) }]
+          : [];
+      }
+      return periods
+        .map((subId, index) => subId === emp.id ? {
+          label: SUBSTITUTE_PERIODS[index]?.label || `คาบ ${index + 1}`,
+          amount: SUBSTITUTE_PERIODS[index]?.rate || 50,
+        } : null)
+        .filter(Boolean);
+    });
+    const substituteCount = substituteItems.length;
+    const substitutePay = substituteItems.reduce((sum, item) => sum + item.amount, 0);
     const leaveDeductions = leaveDeductDays * dailyRate;
     const adjustment = payrollAdjustments[emp.id] || {};
     const adjustmentAdd = parseMoney(adjustment.adjustment_add);
@@ -2317,9 +2389,9 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
               <Field label="ค่าจ้างรายวัน">
                 <input type="number" min="0" step="0.01" value={selectedEmployeeConfig.daily_rate ?? ""} onChange={e => updateDailyRate(selectedEmployee.id, e.target.value)} placeholder="วันละเท่าไร" style={inputStyle} />
               </Field>
-              <Field label="ค่าสอนแทน / คาบ">
-                <input type="number" min="0" step="0.01" value={selectedEmployeeConfig.substitute_rate ?? 0} onChange={e => updateEmployeeSetting(selectedEmployee.id, "substitute_rate", e.target.value)} style={inputStyle} />
-              </Field>
+              <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "10px", padding: "0.75rem", color: "#1d4ed8", fontSize: "0.82rem", fontWeight: 700 }}>
+                ค่าสอนแทนคิดอัตโนมัติ: จินตคณิต {formatMoney(25)}, คาบปกติ {formatMoney(50)}, อนุบาลทั้งวัน {formatMoney(KINDERGARTEN_SUBSTITUTE_DAY_RATE)}
+              </div>
               <div>
                 <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "#475569", marginBottom: "0.5rem" }}>ประเภทลาที่หักเงิน</div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "0.45rem" }}>
@@ -2586,6 +2658,176 @@ function SettingsPage({ settings, onRefresh }) {
   );
 }
 
+function FinancePortal({ employees, attendance, leaves, settings }) {
+  const [tab, setTab] = useState("overview");
+  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [payrollRows, setPayrollRows] = useState([]);
+  const [loadingPayroll, setLoadingPayroll] = useState(false);
+  const [expenseRows, setExpenseRows] = useState([
+    { id: "electric", type: "expense", name: "ค่าไฟ", amount: 0 },
+    { id: "water", type: "expense", name: "ค่าน้ำ", amount: 0 },
+    { id: "internet", type: "expense", name: "ค่าอินเทอร์เน็ต", amount: 0 },
+    { id: "supplies", type: "expense", name: "ค่าอุปกรณ์/ซ่อมบำรุง", amount: 0 },
+    { id: "tuition", type: "income", name: "รายรับค่าเทอม/รายรับอื่น", amount: 0 },
+  ]);
+
+  useEffect(() => {
+    let active = true;
+    setLoadingPayroll(true);
+    supabase
+      .from("payroll")
+      .select("*, employees(name, department)")
+      .eq("month", month)
+      .order("total", { ascending: false })
+      .then(({ data }) => {
+        if (active) {
+          setPayrollRows(data || []);
+          setLoadingPayroll(false);
+        }
+      });
+    return () => { active = false; };
+  }, [month]);
+
+  const payrollTotal = payrollRows.reduce((sum, row) => sum + parseMoney(row.total), 0);
+  const incomeTotal = expenseRows.filter(row => row.type === "income").reduce((sum, row) => sum + parseMoney(row.amount), 0);
+  const manualExpenseTotal = expenseRows.filter(row => row.type === "expense").reduce((sum, row) => sum + parseMoney(row.amount), 0);
+  const totalExpense = payrollTotal + manualExpenseTotal;
+  const netTotal = incomeTotal - totalExpense;
+
+  const updateFinanceRow = (id, key, value) => {
+    setExpenseRows(rows => rows.map(row => row.id === id ? { ...row, [key]: value } : row));
+  };
+
+  const addFinanceRow = (type) => {
+    setExpenseRows(rows => [...rows, { id: `${type}-${Date.now()}`, type, name: "", amount: 0 }]);
+  };
+
+  const tabs = [
+    { key: "overview", label: "ภาพรวมการเงิน" },
+    { key: "payroll", label: "คิดเงินเดือน" },
+    { key: "calculator", label: "รายรับรายจ่าย" },
+  ];
+
+  return (
+    <div>
+      <PageHeader title="เว็บการเงินโรงเรียน" count={payrollRows.length} />
+
+      <Card>
+        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0f172a" }}>ศูนย์รวมเงินเดือนและค่าใช้จ่าย</div>
+            <div style={{ fontSize: "0.82rem", color: "#64748b", marginTop: "0.2rem" }}>ใช้ฐานข้อมูล Supabase ชุดเดียวกับ HR ไม่ต้องเข้าสู่ระบบใหม่</div>
+          </div>
+          <div style={{ width: 180 }}>
+            <Field label="เดือน">
+              <input type="month" value={month} onChange={e => setMonth(e.target.value)} style={inputStyle} />
+            </Field>
+          </div>
+        </div>
+      </Card>
+
+      <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", margin: "1rem 0" }}>
+        {tabs.map(item => (
+          <button
+            key={item.key}
+            onClick={() => setTab(item.key)}
+            style={{
+              border: `1.5px solid ${tab === item.key ? "#2563eb" : "#e2e8f0"}`,
+              background: tab === item.key ? "#eff6ff" : "#fff",
+              color: tab === item.key ? "#1d4ed8" : "#475569",
+              borderRadius: "10px",
+              padding: "0.65rem 0.9rem",
+              fontWeight: 800,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "overview" && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "1rem", marginBottom: "1rem" }}>
+            <StatCard stat={{ label: "เงินเดือนรวม", value: loadingPayroll ? "..." : formatMoney(payrollTotal), icon: DollarSign, color: "#2563eb", bg: "#eff6ff", trend: month }} />
+            <StatCard stat={{ label: "ค่าใช้จ่ายอื่น", value: formatMoney(manualExpenseTotal), icon: FileText, color: "#dc2626", bg: "#fef2f2", trend: "ค่าไฟ ค่าน้ำ และอื่นๆ" }} />
+            <StatCard stat={{ label: "รายรับรวม", value: formatMoney(incomeTotal), icon: TrendingUp, color: "#16a34a", bg: "#ecfdf5", trend: "กรอกในเครื่องคิด" }} />
+            <StatCard stat={{ label: "คงเหลือ", value: formatMoney(netTotal), icon: Building2, color: netTotal >= 0 ? "#059669" : "#dc2626", bg: netTotal >= 0 ? "#ecfdf5" : "#fef2f2", trend: "รายรับ - รายจ่าย" }} />
+          </div>
+
+          <Card padding="0">
+            <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid #f1f5f9" }}>
+              <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a" }}>เงินเดือนที่บันทึกแล้วในเดือนนี้</div>
+              <div style={{ fontSize: "0.8rem", color: "#64748b" }}>ดึงจากตาราง payroll โดยตรง</div>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.86rem" }}>
+                <thead>
+                  <tr style={{ borderBottom: "2px solid #f1f5f9" }}>
+                    {["ชื่อ", "แผนก", "มาทำงาน", "เวร", "สอนแทน", "หักรวม", "สุทธิ"].map(h => (
+                      <th key={h} style={{ padding: "0.7rem 0.9rem", textAlign: "left", color: "#64748b", fontSize: "0.75rem", whiteSpace: "nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {payrollRows.length === 0 ? (
+                    <tr><td colSpan="7" style={{ padding: "1.25rem", color: "#94a3b8", textAlign: "center" }}>ยังไม่มีข้อมูล payroll ของเดือนนี้ ให้ไปแท็บคิดเงินเดือนแล้วกดคำนวณก่อน</td></tr>
+                  ) : payrollRows.map(row => (
+                    <tr key={row.id} style={{ borderBottom: "1px solid #f8fafc" }}>
+                      <td style={{ padding: "0.75rem 0.9rem", fontWeight: 800, color: "#0f172a" }}>{row.employees?.name || "-"}</td>
+                      <td style={{ padding: "0.75rem 0.9rem", color: "#64748b" }}>{row.employees?.department || "-"}</td>
+                      <td style={{ padding: "0.75rem 0.9rem" }}>{row.work_days || 0} วัน</td>
+                      <td style={{ padding: "0.75rem 0.9rem" }}>{row.duty_count || 0} วัน</td>
+                      <td style={{ padding: "0.75rem 0.9rem" }}>{row.substitute_count || 0} คาบ</td>
+                      <td style={{ padding: "0.75rem 0.9rem", color: "#dc2626", fontWeight: 700 }}>{formatMoney(row.deductions)}</td>
+                      <td style={{ padding: "0.75rem 0.9rem", color: "#16a34a", fontWeight: 900 }}>{formatMoney(row.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </>
+      )}
+
+      {tab === "payroll" && <PayrollPage employees={employees} attendance={attendance} leaves={leaves} settings={settings} />}
+
+      {tab === "calculator" && (
+        <Card>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+            <div>
+              <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a" }}>เครื่องคิดรายรับรายจ่ายโรงเรียน</div>
+              <div style={{ fontSize: "0.8rem", color: "#64748b" }}>ใช้รวมกับเงินเดือนที่บันทึกใน Supabase เดือน {month}</div>
+            </div>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <button onClick={() => addFinanceRow("income")} style={{ ...btnSecondary, flex: "none" }}><Plus size={16} /> เพิ่มรายรับ</button>
+              <button onClick={() => addFinanceRow("expense")} style={{ ...btnSecondary, flex: "none" }}><Plus size={16} /> เพิ่มรายจ่าย</button>
+            </div>
+          </div>
+          <div style={{ display: "grid", gap: "0.75rem" }}>
+            {expenseRows.map(row => (
+              <div key={row.id} style={{ display: "grid", gridTemplateColumns: "130px minmax(180px, 1fr) minmax(150px, 220px)", gap: "0.75rem", alignItems: "center" }}>
+                <select value={row.type} onChange={e => updateFinanceRow(row.id, "type", e.target.value)} style={selectStyle}>
+                  <option value="income">รายรับ</option>
+                  <option value="expense">รายจ่าย</option>
+                </select>
+                <input value={row.name} onChange={e => updateFinanceRow(row.id, "name", e.target.value)} placeholder="ชื่อรายการ" style={inputStyle} />
+                <input type="number" min="0" step="0.01" value={row.amount} onChange={e => updateFinanceRow(row.id, "amount", e.target.value)} placeholder="จำนวนเงิน" style={inputStyle} />
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: "1rem", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.75rem" }}>
+            <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", borderRadius: "10px", padding: "0.9rem" }}><div style={{ color: "#166534", fontWeight: 700, fontSize: "0.78rem" }}>รายรับ</div><div style={{ color: "#14532d", fontWeight: 900, fontSize: "1.2rem" }}>{formatMoney(incomeTotal)}</div></div>
+            <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "10px", padding: "0.9rem" }}><div style={{ color: "#b91c1c", fontWeight: 700, fontSize: "0.78rem" }}>รายจ่ายรวมเงินเดือน</div><div style={{ color: "#7f1d1d", fontWeight: 900, fontSize: "1.2rem" }}>{formatMoney(totalExpense)}</div></div>
+            <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "10px", padding: "0.9rem" }}><div style={{ color: "#c2410c", fontWeight: 700, fontSize: "0.78rem" }}>คงเหลือ</div><div style={{ color: "#9a3412", fontWeight: 900, fontSize: "1.2rem" }}>{formatMoney(netTotal)}</div></div>
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 function StatCard({ stat }) {
   const Icon = stat.icon;
   return (
@@ -2605,7 +2847,8 @@ function StatCard({ stat }) {
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function HRApp() {
   const [currentUser, setCurrentUser] = useState(null);
-  const [activePage, setActivePage] = useState("dashboard");
+  const getInitialPage = () => (typeof window !== "undefined" && window.location.hash === "#finance" ? "finance" : "dashboard");
+  const [activePage, setActivePage] = useState(getInitialPage);
   const [showAttendance, setShowAttendance] = useState(false);
   const [attMode, setAttMode] = useState("in");
   const [activityLog, setActivityLog] = useState([]);
@@ -2629,6 +2872,15 @@ export default function HRApp() {
     if (saved) {
       try { setCurrentUser(JSON.parse(saved)); } catch (e) { localStorage.removeItem("hr_user"); }
     }
+  }, []);
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      if (window.location.hash === "#finance") setActivePage("finance");
+    };
+    window.addEventListener("hashchange", handleHashChange);
+    handleHashChange();
+    return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
 
   useEffect(() => { const t = setInterval(() => setCurrentTime(new Date()), 1000); return () => clearInterval(t); }, []);
@@ -2702,6 +2954,19 @@ export default function HRApp() {
 
   const openCheckIn = () => { setAttMode("in"); setShowAttendance(true); };
   const openCheckOut = () => { setAttMode("out"); setShowAttendance(true); };
+  const openNavItem = (key) => {
+    if (key === "finance") {
+      const financeUrl = `${window.location.origin}${window.location.pathname}#finance`;
+      window.open(financeUrl, "_blank", "noopener,noreferrer");
+      setSidebarOpen(false);
+      return;
+    }
+    if (window.location.hash === "#finance") {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+    setActivePage(key);
+    setSidebarOpen(false);
+  };
 
   const visibleNavItems = navItems.filter(item => item.roles.includes(currentUser.role));
 
@@ -2790,7 +3055,7 @@ export default function HRApp() {
             const Icon = item.icon;
             const isActive = activePage === item.key;
             return (
-              <button key={item.key} onClick={() => { setActivePage(item.key); setSidebarOpen(false); }} style={{
+              <button key={item.key} onClick={() => openNavItem(item.key)} style={{
                 width: "100%",
                 display: "flex",
                 alignItems: "center",
@@ -2996,7 +3261,7 @@ export default function HRApp() {
               {activePage === "attendance" && <AttendancePage employees={employees} activityLog={activityLog} currentUser={currentUser} settings={settings} onRefresh={fetchData} />}
               {activePage === "leave" && <LeavePage employees={employees} leaves={leaves} currentUser={currentUser} onRefresh={fetchData} />}
               {activePage === "outing" && <OutingPage employees={employees} outings={outings} currentUser={currentUser} onRefresh={fetchData} />}
-              {activePage === "payroll" && <PayrollPage employees={employees} attendance={activityLog} leaves={leaves} settings={settings} />}
+              {activePage === "finance" && <FinancePortal employees={employees} attendance={activityLog} leaves={leaves} settings={settings} />}
               {activePage === "report" && <ReportPage employees={employees} attendance={activityLog} leaves={leaves} outings={outings} settings={settings} />}
               {activePage === "schedule" && <SchedulePage employees={employees} currentUser={currentUser} onRefresh={fetchData} />}
               {activePage === "settings" && <SettingsPage settings={settings} onRefresh={fetchData} />}

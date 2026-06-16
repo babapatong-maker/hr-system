@@ -23,6 +23,7 @@ const DEFAULT_DUTY_RATES = {
   "แลกชิพ": 0,
   "เวรหน้าประตู": 0,
 };
+const PAID_DUTY_OPTIONS = ["เวรรถ"];
 const FREE_PERIOD_VALUE = "__FREE_PERIOD__";
 const DUTY_SETTING_PREFIX = "__DUTY__:";
 
@@ -1944,11 +1945,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
     const leaveDeductDays = employeeLeaves
       .filter(row => deductableLeaveTypes.includes(row.leave_type))
       .reduce((sum, row) => sum + ((row.hours || 0) / 8), 0);
-    const overtimeHours = employeeAttendance.reduce((sum, row) => {
-      if (!row.check_out) return sum;
-      const overtimeInfo = checkEarly(row.check_out, settings?.work_end);
-      return overtimeInfo?.late ? sum + (overtimeInfo.minutes / 60) : sum;
-    }, 0);
+    const overtimeHours = 0;
 
     employeeAttendance.forEach(row => {
       const dutyName = row.duty && DUTY_OPTIONS.includes(row.duty) ? row.duty : "ไม่มีเวร";
@@ -1956,11 +1953,10 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
     });
 
     const dailyRate = parseMoney(employeeConfig.daily_rate);
-    const overtimeRate = parseMoney(employeeConfig.overtime_rate);
     const substituteRate = parseMoney(employeeConfig.substitute_rate) || 50;
-    const dutyPay = DUTY_OPTIONS.reduce((sum, dutyName) => sum + dutyCounts[dutyName] * parseMoney(config.dutyRates[dutyName]), 0);
+    const dutyPay = PAID_DUTY_OPTIONS.reduce((sum, dutyName) => sum + dutyCounts[dutyName] * parseMoney(config.dutyRates[dutyName]), 0);
     const baseSalary = attendanceDays * dailyRate;
-    const overtimePay = overtimeHours * overtimeRate;
+    const overtimePay = 0;
     const substituteCount = monthLeaves.reduce((sum, row) => {
       const periodSubs = getPeriodSubstitutes(row.substitute_note);
       return sum + periodSubs.filter(subId => subId === emp.id).length;
@@ -1974,7 +1970,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
     const grossPay = baseSalary + dutyPay + overtimePay + substitutePay;
     const deductions = leaveDeductions + adjustmentDeduct;
     const totalPay = grossPay + adjustmentAdd - deductions;
-    const dutyCount = DUTY_OPTIONS.filter(dutyName => dutyName !== "ไม่มีเวร").reduce((sum, dutyName) => sum + dutyCounts[dutyName], 0);
+    const dutyCount = PAID_DUTY_OPTIONS.reduce((sum, dutyName) => sum + dutyCounts[dutyName], 0);
     const absentDays = Math.max(0, workDays - attendanceDays - employeeLeaves.reduce((sum, row) => sum + ((row.hours || 0) / 8), 0));
 
     return {
@@ -1999,14 +1995,14 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
       adjustmentDeduct,
       adjustmentNote,
       deductions,
-      note: DUTY_OPTIONS.filter(dutyName => dutyName !== "ไม่มีเวร" && dutyCounts[dutyName] > 0).map(dutyName => `${dutyName} ${dutyCounts[dutyName]} วัน`).join(", "),
+      note: PAID_DUTY_OPTIONS.filter(dutyName => dutyCounts[dutyName] > 0).map(dutyName => `${dutyName} ${dutyCounts[dutyName]} วัน`).join(", "),
     };
   });
-  const summaryRows = allRows.filter(row => row.attendanceDays > 0 || row.dailyRate > 0 || row.dutyPay > 0 || row.deductions > 0 || row.overtimePay > 0);
+  const summaryRows = allRows.filter(row => row.attendanceDays > 0 || row.dailyRate > 0 || row.dutyPay > 0 || row.deductions > 0 || row.substitutePay > 0);
   const selectedSummaryRow = allRows.find(row => row.emp.id === selectedEmployeeId) || null;
   const selectedSavedPayroll = savedPayrollRows.find(row => row.employee_id === selectedEmployeeId) || null;
   const selectedDutySummary = selectedSummaryRow
-    ? DUTY_OPTIONS.filter(dutyName => dutyName !== "ไม่มีเวร" && selectedSummaryRow.dutyCounts[dutyName] > 0)
+    ? PAID_DUTY_OPTIONS.filter(dutyName => selectedSummaryRow.dutyCounts[dutyName] > 0)
     : [];
 
   const totalPayout = summaryRows.reduce((sum, row) => sum + row.totalPay, 0);
@@ -2070,14 +2066,14 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
     const dutyRows = settingsRows.filter(row => parseDutyName(row.leave_deduct_types));
     const employeeRows = settingsRows.filter(row => row.employee_id);
 
-    for (const dutyName of DUTY_OPTIONS) {
+    for (const dutyName of PAID_DUTY_OPTIONS) {
       const existing = dutyRows.find(row => parseDutyName(row.leave_deduct_types) === dutyName);
       const payload = {
         employee_id: null,
         daily_rate: 0,
         duty_rate: parseMoney(config.dutyRates[dutyName]),
         substitute_rate: existing?.substitute_rate ?? 0,
-        overtime_rate: existing?.overtime_rate ?? 0,
+        overtime_rate: 0,
         leave_deduct_types: getDutySettingLabel(dutyName),
       };
 
@@ -2092,14 +2088,13 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
       const existing = employeeRows.find(row => row.employee_id === emp.id);
       const employeeConfig = { ...defaultEmployeePayrollConfig(), ...(config.employeeConfigs[emp.id] || {}) };
       const hasMeaningfulConfig = parseMoney(employeeConfig.daily_rate) > 0
-        || parseMoney(employeeConfig.overtime_rate) > 0
         || parseMoney(employeeConfig.substitute_rate) > 0
         || (employeeConfig.leave_deduct_types || "").trim() !== "ลาป่วย,ลากิจ";
 
       if (existing) {
         await supabase.from("salary_settings").update({
           daily_rate: parseMoney(employeeConfig.daily_rate),
-          overtime_rate: parseMoney(employeeConfig.overtime_rate),
+          overtime_rate: 0,
           substitute_rate: parseMoney(employeeConfig.substitute_rate),
           leave_deduct_types: employeeConfig.leave_deduct_types || "ลาป่วย,ลากิจ",
         }).eq("id", existing.id);
@@ -2109,7 +2104,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
           daily_rate: parseMoney(employeeConfig.daily_rate),
           duty_rate: 0,
           substitute_rate: parseMoney(employeeConfig.substitute_rate),
-          overtime_rate: parseMoney(employeeConfig.overtime_rate),
+          overtime_rate: 0,
           leave_deduct_types: employeeConfig.leave_deduct_types || "ลาป่วย,ลากิจ",
         });
       }
@@ -2167,8 +2162,8 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
       .replace(/\"/g, "&quot;");
 
     const rowsHtml = summaryRows.map(row => {
-      const dutySummary = DUTY_OPTIONS
-        .filter(dutyName => dutyName !== "ไม่มีเวร" && row.dutyCounts[dutyName] > 0)
+      const dutySummary = PAID_DUTY_OPTIONS
+        .filter(dutyName => row.dutyCounts[dutyName] > 0)
         .map(dutyName => `${dutyName} ${row.dutyCounts[dutyName]} วัน`)
         .join(", ") || "ไม่มีเวรที่จ่ายเพิ่ม";
 
@@ -2176,26 +2171,22 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
         <tr>
           <td>${escapeHtml(row.emp.name)}</td>
           <td>${escapeHtml(row.emp.department || "")}</td>
-          <td>${row.attendanceDays}</td>
-          <td>${row.dailyRate}</td>
-          <td>${row.baseSalary.toFixed(2)}</td>
-          <td>${row.dutyCounts["เวรรถ"]}</td>
-          <td>${row.dutyCounts["แลกชิพ"]}</td>
-          <td>${row.dutyCounts["เวรหน้าประตู"]}</td>
+          <td class="count">${row.attendanceDays}</td>
+          <td class="money">${row.dailyRate.toFixed(2)}</td>
+          <td class="money">${row.baseSalary.toFixed(2)}</td>
+          <td class="count">${row.dutyCounts["เวรรถ"] || 0}</td>
           <td>${escapeHtml(dutySummary)}</td>
-          <td>${row.dutyPay.toFixed(2)}</td>
-          <td>${row.overtimeHours.toFixed(1)}</td>
-          <td>${row.overtimePay.toFixed(2)}</td>
-          <td>${row.substituteCount}</td>
-          <td>${row.substitutePay.toFixed(2)}</td>
-          <td>${row.grossPay.toFixed(2)}</td>
-          <td>${row.adjustmentAdd.toFixed(2)}</td>
-          <td>${row.leaveDeductDays.toFixed(1)}</td>
-          <td>${row.leaveDeductions.toFixed(2)}</td>
-          <td>${row.adjustmentDeduct.toFixed(2)}</td>
-          <td>${row.deductions.toFixed(2)}</td>
+          <td class="money">${row.dutyPay.toFixed(2)}</td>
+          <td class="count">${row.substituteCount}</td>
+          <td class="money">${row.substitutePay.toFixed(2)}</td>
+          <td class="money">${row.grossPay.toFixed(2)}</td>
+          <td class="money">${row.adjustmentAdd.toFixed(2)}</td>
+          <td class="count">${row.leaveDeductDays.toFixed(1)}</td>
+          <td class="money deduct">${row.leaveDeductions.toFixed(2)}</td>
+          <td class="money deduct">${row.adjustmentDeduct.toFixed(2)}</td>
+          <td class="money deduct">${row.deductions.toFixed(2)}</td>
           <td>${escapeHtml(row.adjustmentNote)}</td>
-          <td>${row.totalPay.toFixed(2)}</td>
+          <td class="money total">${row.totalPay.toFixed(2)}</td>
         </tr>
       `;
     }).join("");
@@ -2217,15 +2208,21 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
           </x:ExcelWorkbook>
         </xml>
         <style>
-          table { border-collapse: collapse; font-family: Tahoma, sans-serif; }
-          th, td { border: 1px solid #cbd5e1; padding: 8px; }
+          @page { size: A4 landscape; margin: 10mm; }
+          body { margin: 0; }
+          table { border-collapse: collapse; font-family: Tahoma, sans-serif; width: 100%; font-size: 11pt; }
+          th, td { border: 1px solid #cbd5e1; padding: 6px 8px; vertical-align: middle; }
           th { background: #eff6ff; font-weight: 700; }
+          .count { text-align: center; }
+          .money { background: #ecfdf5; color: #166534; font-weight: 700; text-align: right; }
+          .deduct { background: #fef2f2; color: #b91c1c; }
+          .total { background: #fff7ed; color: #c2410c; font-weight: 800; }
         </style>
       </head>
       <body>
         <table>
           <tr>
-            <th colspan="21" style="font-size:18px;background:#dbeafe;">สรุปเงินเดือน เดือน ${escapeHtml(month)}</th>
+            <th colspan="18" style="font-size:18px;background:#dbeafe;">สรุปเงินเดือน เดือน ${escapeHtml(month)}</th>
           </tr>
           <tr>
             <th>พนักงาน</th>
@@ -2234,12 +2231,8 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
             <th>อัตรารายวัน</th>
             <th>ค่ารายวัน</th>
             <th>เวรรถ (วัน)</th>
-            <th>แลกชิพ (วัน)</th>
-            <th>เวรหน้าประตู (วัน)</th>
             <th>สรุปเวร</th>
             <th>ค่าเวร</th>
-            <th>OT (ชม.)</th>
-            <th>ค่า OT</th>
             <th>สอนแทน (คาบ)</th>
             <th>ค่าสอนแทน</th>
             <th>ยอดก่อนหัก</th>
@@ -2324,14 +2317,9 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
               <Field label="ค่าจ้างรายวัน">
                 <input type="number" min="0" step="0.01" value={selectedEmployeeConfig.daily_rate ?? ""} onChange={e => updateDailyRate(selectedEmployee.id, e.target.value)} placeholder="วันละเท่าไร" style={inputStyle} />
               </Field>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-                <Field label="ค่า OT / ชั่วโมง">
-                  <input type="number" min="0" step="0.01" value={selectedEmployeeConfig.overtime_rate ?? 0} onChange={e => updateEmployeeSetting(selectedEmployee.id, "overtime_rate", e.target.value)} style={inputStyle} />
-                </Field>
-                  <Field label="ค่าสอนแทน / คาบ">
-                    <input type="number" min="0" step="0.01" value={selectedEmployeeConfig.substitute_rate ?? 0} onChange={e => updateEmployeeSetting(selectedEmployee.id, "substitute_rate", e.target.value)} style={inputStyle} />
-                  </Field>
-              </div>
+              <Field label="ค่าสอนแทน / คาบ">
+                <input type="number" min="0" step="0.01" value={selectedEmployeeConfig.substitute_rate ?? 0} onChange={e => updateEmployeeSetting(selectedEmployee.id, "substitute_rate", e.target.value)} style={inputStyle} />
+              </Field>
               <div>
                 <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "#475569", marginBottom: "0.5rem" }}>ประเภทลาที่หักเงิน</div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "0.45rem" }}>
@@ -2377,11 +2365,11 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
           )}
         </Card>
         <Card>
-          <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.3rem" }}>ตั้งค่าอัตราเวร</div>
-          <div style={{ fontSize: "0.8rem", color: "#64748b", marginBottom: "0.9rem" }}>ค่านี้ใช้ร่วมกันทั้งระบบ เอาไว้คูณกับจำนวนเวรของคนที่เลือก</div>
+          <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.3rem" }}>ตั้งค่าอัตราเวรที่คิดเงิน</div>
+          <div style={{ fontSize: "0.8rem", color: "#64748b", marginBottom: "0.9rem" }}>แสดงเฉพาะเวรที่มีผลกับเงินเดือน</div>
           {loadingConfig && <div style={{ color: "#64748b", fontSize: "0.8rem", marginBottom: "0.75rem" }}>กำลังโหลดค่าจาก Supabase...</div>}
           <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
-            {DUTY_OPTIONS.map(dutyName => (
+            {PAID_DUTY_OPTIONS.map(dutyName => (
               <Field key={dutyName} label={dutyName}>
                 <input
                   type="number"
@@ -2420,10 +2408,6 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
                 <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.8rem" }}>
                   <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "0.2rem" }}>ค่าเวร</div>
                   <div style={{ fontWeight: 800, color: "#7c3aed" }}>{formatMoney(selectedSummaryRow.dutyPay)}</div>
-                </div>
-                <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.8rem" }}>
-                  <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "0.2rem" }}>OT</div>
-                  <div style={{ fontWeight: 800, color: "#16a34a" }}>{selectedSummaryRow.overtimeHours.toFixed(1)} ชม. / {formatMoney(selectedSummaryRow.overtimePay)}</div>
                 </div>
                 <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.8rem" }}>
                   <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "0.2rem" }}>สอนแทน</div>
@@ -2488,7 +2472,6 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
                   ["มาทำงาน", `${selectedSavedPayroll.work_days} วัน`],
                   ["มาสาย", `${selectedSavedPayroll.late_count} ครั้ง`],
                   ["เวร", `${selectedSavedPayroll.duty_count} ครั้ง`],
-                  ["OT", `${selectedSavedPayroll.overtime_hours} ชม.`],
                   ["หักลา", `${selectedSavedPayroll.leave_deduct_days} วัน`],
                   ["หักเงิน", formatMoney(selectedSavedPayroll.deductions)],
                   ["รวมสุทธิ", formatMoney(selectedSavedPayroll.total)],
@@ -2522,7 +2505,6 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
                 {[
                   { label: "ค่าจ้างรายวัน", detail: `${selectedSummaryRow.attendanceDays} วัน x ${formatMoney(selectedSummaryRow.dailyRate)}`, value: formatMoney(selectedSummaryRow.baseSalary), color: "#16a34a" },
                   { label: "ค่าเวร", detail: selectedDutySummary.length > 0 ? selectedDutySummary.map(dutyName => `${dutyName} ${selectedSummaryRow.dutyCounts[dutyName]} วัน`).join(", ") : "ไม่มีเวรที่จ่ายเพิ่ม", value: formatMoney(selectedSummaryRow.dutyPay), color: "#7c3aed" },
-                  { label: "OT", detail: `${selectedSummaryRow.overtimeHours.toFixed(1)} ชม.`, value: formatMoney(selectedSummaryRow.overtimePay), color: "#0f766e" },
                   { label: "สอนแทน", detail: `${selectedSummaryRow.substituteCount} คาบ`, value: formatMoney(selectedSummaryRow.substitutePay), color: "#2563eb" },
                   { label: "ปรับเพิ่ม", detail: selectedSummaryRow.adjustmentNote || "รายการพิเศษ", value: formatMoney(selectedSummaryRow.adjustmentAdd), color: "#16a34a" },
                   { label: "หักลา", detail: `${selectedSummaryRow.leaveDeductDays.toFixed(1)} วัน`, value: `- ${formatMoney(selectedSummaryRow.leaveDeductions)}`, color: "#dc2626" },

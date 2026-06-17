@@ -2207,6 +2207,25 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
   const selectedDutySummary = selectedSummaryRow
     ? PAID_DUTY_OPTIONS.filter(dutyName => selectedSummaryRow.dutyCounts[dutyName] > 0)
     : [];
+  const payrollSnapshotDisplay = selectedSummaryRow
+    ? {
+      workDays: selectedSummaryRow.attendanceDays,
+      lateCount: selectedSummaryRow.lateCount,
+      dutyCount: selectedSummaryRow.dutyCount,
+      leaveDeductDays: selectedSummaryRow.leaveDeductDays,
+      deductions: selectedSummaryRow.deductions,
+      total: selectedSummaryRow.totalPay,
+    }
+    : selectedSavedPayroll
+    ? {
+      workDays: selectedSavedPayroll.work_days || 0,
+      lateCount: selectedSavedPayroll.late_count || 0,
+      dutyCount: selectedSavedPayroll.duty_count || 0,
+      leaveDeductDays: selectedSavedPayroll.leave_deduct_days || 0,
+      deductions: selectedSavedPayroll.deductions || 0,
+      total: selectedSavedPayroll.total || 0,
+    }
+    : null;
 
   const totalPayout = summaryRows.reduce((sum, row) => sum + row.totalPay, 0);
   const totalAttendanceDays = summaryRows.reduce((sum, row) => sum + row.attendanceDays, 0);
@@ -2699,7 +2718,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
           <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
             <div>
               <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a" }}>ข้อมูลเงินเดือนที่บันทึกไว้แล้ว</div>
-              <div style={{ fontSize: "0.8rem", color: "#64748b" }}>snapshot จากตาราง payroll ของเดือน {month}</div>
+              <div style={{ fontSize: "0.8rem", color: "#64748b" }}>แสดงตามสูตรปัจจุบัน เทียบกับ snapshot เดือน {month}</div>
             </div>
             <div style={{ background: "#eff6ff", borderRadius: "999px", padding: "0.35rem 0.8rem", color: "#1d4ed8", fontWeight: 700, fontSize: "0.8rem" }}>
               {selectedEmployee?.name || "ยังไม่ได้เลือกพนักงาน"}
@@ -2711,12 +2730,12 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.75rem" }}>
                 {[
-                  ["มาทำงาน", `${selectedSavedPayroll.work_days} วัน`],
-                  ["มาสาย", `${selectedSavedPayroll.late_count} ครั้ง`],
-                  ["เวร", `${selectedSavedPayroll.duty_count} ครั้ง`],
-                  ["หักลา", `${selectedSavedPayroll.leave_deduct_days} วัน`],
-                  ["หักเงิน", formatMoney(selectedSavedPayroll.deductions)],
-                  ["รวมสุทธิ", formatMoney(selectedSavedPayroll.total)],
+                  ["มาทำงาน", `${payrollSnapshotDisplay.workDays} วัน`],
+                  ["มาสาย", `${payrollSnapshotDisplay.lateCount} ครั้ง`],
+                  ["เวร", `${payrollSnapshotDisplay.dutyCount} ครั้ง`],
+                  ["หักลา", `${Number(payrollSnapshotDisplay.leaveDeductDays).toFixed(1)} วัน`],
+                  ["หักเงิน", formatMoney(payrollSnapshotDisplay.deductions)],
+                  ["รวมสุทธิ", formatMoney(payrollSnapshotDisplay.total)],
                 ].map(([label, value]) => (
                   <div key={label} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.8rem" }}>
                     <div style={{ fontSize: "0.74rem", color: "#64748b", marginBottom: "0.2rem" }}>{label}</div>

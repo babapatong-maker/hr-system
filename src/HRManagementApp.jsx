@@ -3305,12 +3305,31 @@ export default function HRApp() {
 
   useEffect(() => {
     const handleHashChange = () => {
-      if (window.location.hash === "#finance") setActivePage("finance");
+      if (!currentUser) return;
+      if (window.location.hash === "#finance") {
+        if (currentUser.role === "admin") {
+          setActivePage("finance");
+        } else {
+          window.history.replaceState(null, "", window.location.pathname);
+          setActivePage("dashboard");
+        }
+      }
     };
     window.addEventListener("hashchange", handleHashChange);
     handleHashChange();
     return () => window.removeEventListener("hashchange", handleHashChange);
-  }, []);
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const currentPage = navItems.find(item => item.key === activePage);
+    if (currentPage && !currentPage.roles.includes(currentUser.role)) {
+      if (window.location.hash === "#finance") {
+        window.history.replaceState(null, "", window.location.pathname);
+      }
+      setActivePage("dashboard");
+    }
+  }, [currentUser, activePage]);
 
   useEffect(() => { const t = setInterval(() => setCurrentTime(new Date()), 1000); return () => clearInterval(t); }, []);
   useEffect(() => { if (currentUser) fetchData(); }, [currentUser]);
@@ -3385,6 +3404,11 @@ export default function HRApp() {
   const openCheckOut = () => { setAttMode("out"); setShowAttendance(true); };
   const openNavItem = (key) => {
     if (key === "finance") {
+      if (currentUser.role !== "admin") {
+        setActivePage("dashboard");
+        setSidebarOpen(false);
+        return;
+      }
       const financeUrl = `${window.location.origin}${window.location.pathname}#finance`;
       window.open(financeUrl, "_blank", "noopener,noreferrer");
       setSidebarOpen(false);
@@ -3690,7 +3714,7 @@ export default function HRApp() {
               {activePage === "attendance" && <AttendancePage employees={employees} activityLog={activityLog} currentUser={currentUser} settings={settings} onRefresh={fetchData} />}
               {activePage === "leave" && <LeavePage employees={employees} leaves={leaves} currentUser={currentUser} onRefresh={fetchData} />}
               {activePage === "outing" && <OutingPage employees={employees} outings={outings} currentUser={currentUser} onRefresh={fetchData} />}
-              {activePage === "finance" && <FinancePortal employees={employees} attendance={activityLog} leaves={leaves} settings={settings} />}
+              {activePage === "finance" && currentUser.role === "admin" && <FinancePortal employees={employees} attendance={activityLog} leaves={leaves} settings={settings} />}
               {activePage === "report" && <ReportPage employees={employees} attendance={activityLog} leaves={leaves} outings={outings} settings={settings} />}
               {activePage === "schedule" && <SchedulePage employees={employees} currentUser={currentUser} onRefresh={fetchData} />}
               {activePage === "settings" && <SettingsPage settings={settings} onRefresh={fetchData} />}

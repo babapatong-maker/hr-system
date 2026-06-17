@@ -1104,8 +1104,10 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
   const [doneStatus, setDoneStatus] = useState(null); // {late|early|onTime|leaveEarly|stayLate|onTimeLeave, minutes}
   const [selectedEmp, setSelectedEmp] = useState(currentUser?.id || "");
   const [openAttendance, setOpenAttendance] = useState(null);
+  const [todayOpenAttendances, setTodayOpenAttendances] = useState([]);
   const [staleOpenAttendance, setStaleOpenAttendance] = useState(null);
   const [duty, setDuty] = useState("ไม่มีเวร");
+  const [savingAttendance, setSavingAttendance] = useState(false);
 
   useEffect(() => {
     // ดึงสถิติของพนักงานคนนี้ (เดือนปัจจุบัน)
@@ -1144,21 +1146,20 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
         .eq("employee_id", selectedEmp)
         .is("check_out", null)
         .order("check_in", { ascending: false })
-        .limit(1);
+        .limit(20);
       if (!active) return;
-      const latestOpen = data?.[0] || null;
-      if (!latestOpen) {
+      const openRows = data || [];
+      const todayRows = openRows.filter(row => getDateKey(row.check_in) === todayISO());
+      const staleRows = openRows.filter(row => getDateKey(row.check_in) !== todayISO());
+      if (openRows.length === 0) {
         setOpenAttendance(null);
+        setTodayOpenAttendances([]);
         setStaleOpenAttendance(null);
         return;
       }
-      if (getDateKey(latestOpen.check_in) === todayISO()) {
-        setOpenAttendance(latestOpen);
-        setStaleOpenAttendance(null);
-      } else {
-        setOpenAttendance(null);
-        setStaleOpenAttendance(latestOpen);
-      }
+      setOpenAttendance(todayRows[0] || null);
+      setTodayOpenAttendances(todayRows);
+      setStaleOpenAttendance(staleRows[0] || null);
     })();
     return () => { active = false; };
   }, [selectedEmp, mode]);
@@ -1195,15 +1196,25 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
   const isInZone = distance !== null && distance <= GEOFENCE_RADIUS;
 
   const handleSubmit = async () => {
-    if (!isInZone || done || !selectedEmp) return;
+    if (!isInZone || done || !selectedEmp || savingAttendance) return;
+    setSavingAttendance(true);
     if (mode === "in") {
-      if (openAttendance) return;
+      if (openAttendance || todayOpenAttendances.length > 0) {
+        setSavingAttendance(false);
+        return;
+      }
       const { error } = await supabase.from("attendance").insert({ employee_id: selectedEmp, latitude: coords?.lat, longitude: coords?.lng, distance_from_school: distance, duty: duty });
       if (!error) finish();
+      else setSavingAttendance(false);
     } else {
-      if (!openAttendance) return;
-      const { error } = await supabase.from("attendance").update({ check_out: new Date().toISOString() }).eq("id", openAttendance.id);
+      const openIds = todayOpenAttendances.length > 0 ? todayOpenAttendances.map(row => row.id) : (openAttendance ? [openAttendance.id] : []);
+      if (openIds.length === 0) {
+        setSavingAttendance(false);
+        return;
+      }
+      const { error } = await supabase.from("attendance").update({ check_out: new Date().toISOString() }).in("id", openIds);
       if (!error) finish();
+      else setSavingAttendance(false);
     }
   };
 
@@ -1235,7 +1246,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
   const circumference = 2 * Math.PI * 54;
   const ringColor = gpsState === "success" ? (isInZone ? (mode === "in" ? "#10b981" : "#f59e0b") : "#ef4444") : "#94a3b8";
   const pct = distance !== null ? Math.min(distance / GEOFENCE_RADIUS, 1) : 0;
-  const canSubmit = isInZone && !done && gpsState === "success" && selectedEmp && (mode === "in" ? !openAttendance : openAttendance);
+  const canSubmit = isInZone && !done && !savingAttendance && gpsState === "success" && selectedEmp && (mode === "in" ? !openAttendance : openAttendance);
 
   return (
     <Modal title={mode === "in" ? "ลงเวลาเข้างาน" : "ลงเวลากลับบ้าน"} subtitle={`📍 รัศมี ${GEOFENCE_RADIUS} เมตรจากโรงเรียน`} onClose={onClose} icon={mode === "in" ? LogIn : LogOut} color={mode === "in" ? "#1d4ed8" : "#d97706"}>

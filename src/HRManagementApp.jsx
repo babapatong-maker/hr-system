@@ -2566,14 +2566,8 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
     const dailyRows = summaryRows.filter(row => row.payType === "daily");
 
     const renderPayrollRows = (rows) => rows.length === 0
-      ? `<tr><td colspan="21" style="text-align:center;color:#94a3b8;">ไม่มีข้อมูลในกลุ่มนี้</td></tr>`
-      : rows.map(row => {
-      const dutySummary = PAID_DUTY_OPTIONS
-        .filter(dutyName => row.dutyCounts[dutyName] > 0)
-        .map(dutyName => `${dutyName} ${row.dutyCounts[dutyName]} วัน`)
-        .join(", ") || "ไม่มีเวรที่จ่ายเพิ่ม";
-
-      return `
+      ? `<tr><td colspan="20" style="text-align:center;color:#94a3b8;">ไม่มีข้อมูลในกลุ่มนี้</td></tr>`
+      : rows.map(row => `
         <tr>
           <td>${escapeHtml(row.emp.name)}</td>
           <td>${escapeHtml(row.emp.department || "")}</td>
@@ -2581,7 +2575,6 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
           <td class="money">${row.dailyRate.toFixed(2)}</td>
           <td class="money">${row.baseSalary.toFixed(2)}</td>
           <td class="count">${row.dutyCounts["เวรรถ"] || 0}</td>
-          <td>${escapeHtml(dutySummary)}</td>
           <td class="money">${row.dutyPay.toFixed(2)}</td>
           <td class="count">${row.substituteCount}</td>
           <td class="money">${row.substitutePay.toFixed(2)}</td>
@@ -2597,8 +2590,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
           <td class="money">${row.realSalary.toFixed(2)}</td>
           <td class="money total">${row.refundAmount.toFixed(2)}</td>
         </tr>
-      `;
-    }).join("");
+      `).join("");
 
     const renderDailyRows = (rows) => rows.length === 0
       ? `<tr><td colspan="10" style="text-align:center;color:#94a3b8;">ไม่มีพนักงานรายวันในเดือนนี้</td></tr>`
@@ -2628,19 +2620,34 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
             <x:ExcelWorksheets>
               <x:ExcelWorksheet>
                 <x:Name>สรุปเงินเดือน</x:Name>
-                <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
+                <x:WorksheetOptions>
+                  <x:DisplayGridlines/>
+                  <x:FitToPage/>
+                  <x:PageSetup>
+                    <x:Layout x:Orientation="Landscape"/>
+                    <x:PageMargins x:Bottom="0.2" x:Left="0.2" x:Right="0.2" x:Top="0.2"/>
+                  </x:PageSetup>
+                  <x:Print>
+                    <x:FitWidth>1</x:FitWidth>
+                    <x:FitHeight>0</x:FitHeight>
+                    <x:ValidPrinterInfo/>
+                    <x:PaperSizeIndex>9</x:PaperSizeIndex>
+                    <x:HorizontalResolution>600</x:HorizontalResolution>
+                    <x:VerticalResolution>600</x:VerticalResolution>
+                  </x:Print>
+                </x:WorksheetOptions>
               </x:ExcelWorksheet>
             </x:ExcelWorksheets>
           </x:ExcelWorkbook>
         </xml>
         <style>
-          @page { size: A4 landscape; margin: 10mm; }
+          @page { size: A4 landscape; margin: 5mm; mso-page-orientation: landscape; }
           body { margin: 0; }
-          table { border-collapse: collapse; font-family: Tahoma, sans-serif; width: 100%; font-size: 11pt; }
-          .daily-table { margin-top: 18px; }
-          th, td { border: 1px solid #cbd5e1; padding: 6px 8px; vertical-align: middle; }
+          table { border-collapse: collapse; font-family: Tahoma, sans-serif; width: 100%; font-size: 9pt; table-layout: fixed; }
+          .daily-table { margin-top: 10px; }
+          th, td { border: 1px solid #cbd5e1; padding: 3px 4px; vertical-align: middle; white-space: nowrap; overflow: hidden; }
           th { background: #eff6ff; font-weight: 700; }
-          .section-title { background: #f8fafc; color: #0f172a; font-size: 14px; text-align: left; }
+          .section-title { background: #f8fafc; color: #0f172a; font-size: 12px; text-align: left; }
           .count { text-align: center; }
           .money { background: #ecfdf5; color: #166534; font-weight: 700; text-align: right; }
           .deduct { background: #fef2f2; color: #b91c1c; }
@@ -2650,10 +2657,10 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
       <body>
         <table>
           <tr>
-            <th colspan="21" style="font-size:18px;background:#dbeafe;">สรุปเงินเดือน เดือน ${escapeHtml(month)}</th>
+            <th colspan="20" style="font-size:15px;background:#dbeafe;">สรุปเงินเดือน เดือน ${escapeHtml(month)}</th>
           </tr>
           <tr>
-            <th colspan="21" class="section-title">ตารางเงินเดือนประจำ / เทียบยอดเข้า บช</th>
+            <th colspan="20" class="section-title">ตารางเงินเดือนประจำ / เทียบยอดเข้า บช</th>
           </tr>
           <tr>
             <th>พนักงาน</th>
@@ -2662,7 +2669,6 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
             <th>เงินเดือนเต็ม</th>
             <th>ฐานเงินเดือน</th>
             <th>เวรรถ (วัน)</th>
-            <th>สรุปเวร</th>
             <th>ค่าเวร</th>
             <th>สอนแทน (คาบ)</th>
             <th>ค่าสอนแทน</th>

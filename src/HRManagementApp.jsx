@@ -37,6 +37,8 @@ const SUBSTITUTE_PERIODS = [
   { label: "คาบ 6", rate: 50 },
 ];
 const KINDERGARTEN_SUBSTITUTE_DAY_RATE = 250;
+const MONTHLY_LEAVE_DEDUCT_RATE = 500;
+const MONTHLY_BANK_DEPOSIT_DEDUCT_RATE = 0.03;
 
 function haversineDistance(lat1, lng1, lat2, lng2) {
   const R = 6371000;
@@ -306,6 +308,7 @@ function parsePayrollNote(value) {
       bank_deposit: parseMoney(parsed.bank_deposit),
       real_salary: parseMoney(parsed.real_salary),
       refund_amount: parseMoney(parsed.refund_amount),
+      monthly_recurring_deduction: parseMoney(parsed.monthly_recurring_deduction),
     };
   } catch {
     return { duty_note: value, adjustment_add: 0, adjustment_deduct: 0, adjustment_note: "" };
@@ -2280,7 +2283,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
     const configuredRate = parseMoney(employeeConfig.daily_rate);
     const effectiveRate = adjustment.override_rate !== "" && adjustment.override_rate != null ? parseMoney(adjustment.override_rate) : configuredRate;
     const payType = employeeConfig.pay_type || "daily";
-    const perDayRate = payType === "monthly" ? (workDays > 0 ? effectiveRate / workDays : 0) : effectiveRate;
+    const perDayRate = payType === "monthly" ? MONTHLY_LEAVE_DEDUCT_RATE : effectiveRate;
     const dailyRate = effectiveRate;
     const baseSalaryLabel = payType === "monthly" ? "เงินเดือนเต็ม" : "ค่าจ้างรายวัน";
     const baseSalaryDetail = payType === "monthly"
@@ -2308,17 +2311,18 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
     const substituteCount = substituteItems.length;
     const calculatedSubstitutePay = substituteItems.reduce((sum, item) => sum + item.amount, 0);
     const substitutePay = adjustment.override_substitute_pay !== "" && adjustment.override_substitute_pay != null ? parseMoney(adjustment.override_substitute_pay) : calculatedSubstitutePay;
-    const calculatedLeaveDeductions = payType === "daily" ? 0 : leaveDeductDays * perDayRate;
+    const bankDeposit = adjustment.override_bank_deposit !== "" && adjustment.override_bank_deposit != null
+      ? parseMoney(adjustment.override_bank_deposit)
+      : parseMoney(employeeConfig.bank_deposit);
+    const calculatedLeaveDeductions = payType === "daily" ? 0 : leaveDeductDays * MONTHLY_LEAVE_DEDUCT_RATE;
     const leaveDeductions = adjustment.override_leave_deductions !== "" && adjustment.override_leave_deductions != null ? parseMoney(adjustment.override_leave_deductions) : calculatedLeaveDeductions;
+    const monthlyRecurringDeduction = payType === "monthly" ? bankDeposit * MONTHLY_BANK_DEPOSIT_DEDUCT_RATE : 0;
     const adjustmentAdd = parseMoney(adjustment.adjustment_add);
     const adjustmentDeduct = parseMoney(adjustment.adjustment_deduct);
     const adjustmentNote = adjustment.adjustment_note || "";
     const grossPay = baseSalary + dutyPay + overtimePay + substitutePay;
-    const deductions = leaveDeductions + adjustmentDeduct;
+    const deductions = leaveDeductions + monthlyRecurringDeduction + adjustmentDeduct;
     const totalPay = grossPay + adjustmentAdd - deductions;
-    const bankDeposit = adjustment.override_bank_deposit !== "" && adjustment.override_bank_deposit != null
-      ? parseMoney(adjustment.override_bank_deposit)
-      : parseMoney(employeeConfig.bank_deposit);
     const realSalary = totalPay;
     const refundAmount = Math.max(0, bankDeposit - realSalary);
     const dutyCount = PAID_DUTY_OPTIONS.reduce((sum, dutyName) => sum + dutyCounts[dutyName], 0);
@@ -2345,6 +2349,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
       leaveDeductDays,
       substituteCount,
       substitutePay,
+      monthlyRecurringDeduction,
       overtimeHours,
       overtimePay,
       grossPay,
@@ -2524,6 +2529,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
           bank_deposit: Number(row.bankDeposit.toFixed(2)),
           real_salary: Number(row.realSalary.toFixed(2)),
           refund_amount: Number(row.refundAmount.toFixed(2)),
+          monthly_recurring_deduction: Number(row.monthlyRecurringDeduction.toFixed(2)),
           override_rate: payrollAdjustments[row.emp.id]?.override_rate ?? "",
           override_base_salary: payrollAdjustments[row.emp.id]?.override_base_salary ?? "",
           override_duty_pay: payrollAdjustments[row.emp.id]?.override_duty_pay ?? "",
@@ -2560,7 +2566,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
     const dailyRows = summaryRows.filter(row => row.payType === "daily");
 
     const renderPayrollRows = (rows) => rows.length === 0
-      ? `<tr><td colspan="20" style="text-align:center;color:#94a3b8;">ไม่มีข้อมูลในกลุ่มนี้</td></tr>`
+      ? `<tr><td colspan="21" style="text-align:center;color:#94a3b8;">ไม่มีข้อมูลในกลุ่มนี้</td></tr>`
       : rows.map(row => {
       const dutySummary = PAID_DUTY_OPTIONS
         .filter(dutyName => row.dutyCounts[dutyName] > 0)
@@ -2583,6 +2589,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
           <td class="money">${row.adjustmentAdd.toFixed(2)}</td>
           <td class="count">${row.leaveDeductDays.toFixed(1)}</td>
           <td class="money deduct">${row.leaveDeductions.toFixed(2)}</td>
+          <td class="money deduct">${row.monthlyRecurringDeduction.toFixed(2)}</td>
           <td class="money deduct">${row.adjustmentDeduct.toFixed(2)}</td>
           <td class="money deduct">${row.deductions.toFixed(2)}</td>
           <td>${escapeHtml(row.adjustmentNote)}</td>
@@ -2643,10 +2650,10 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
       <body>
         <table>
           <tr>
-            <th colspan="20" style="font-size:18px;background:#dbeafe;">สรุปเงินเดือน เดือน ${escapeHtml(month)}</th>
+            <th colspan="21" style="font-size:18px;background:#dbeafe;">สรุปเงินเดือน เดือน ${escapeHtml(month)}</th>
           </tr>
           <tr>
-            <th colspan="20" class="section-title">ตารางเงินเดือนประจำ / เทียบยอดเข้า บช</th>
+            <th colspan="21" class="section-title">ตารางเงินเดือนประจำ / เทียบยอดเข้า บช</th>
           </tr>
           <tr>
             <th>พนักงาน</th>
@@ -2663,6 +2670,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
             <th>ปรับเพิ่ม</th>
             <th>หักลา (วัน)</th>
             <th>หักลา (บาท)</th>
+            <th>หักประจำ 3%</th>
             <th>หักเพิ่ม</th>
             <th>หักรวม</th>
             <th>หมายเหตุ</th>
@@ -2918,6 +2926,10 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
                   <div style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: 700 }}>หักเพิ่ม</div>
                   <div style={{ color: "#dc2626", fontWeight: 800 }}>{formatMoney(selectedSummaryRow.adjustmentDeduct)}</div>
                 </div>
+                <div>
+                  <div style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: 700 }}>หักประจำ 3%</div>
+                  <div style={{ color: "#dc2626", fontWeight: 800 }}>{formatMoney(selectedSummaryRow.monthlyRecurringDeduction)}</div>
+                </div>
               </div>
               <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "12px", padding: "0.85rem" }}>
                 <div style={{ fontSize: "0.78rem", color: "#9a3412", fontWeight: 700, marginBottom: "0.4rem" }}>สรุปเวรของคนนี้</div>
@@ -2965,6 +2977,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
                   ["เวร", `${payrollSnapshotDisplay.dutyCount} ครั้ง`],
                   ["หักลา", `${Number(payrollSnapshotDisplay.leaveDeductDays).toFixed(1)} วัน`],
                   ["หักเงิน", formatMoney(payrollSnapshotDisplay.deductions)],
+                  ["หักประจำ 3%", formatMoney(parsePayrollNote(selectedSavedPayroll.note).monthly_recurring_deduction || 0)],
                   ["เงินเข้า บช", formatMoney(payrollSnapshotDisplay.bankDeposit)],
                   ["เงินเดือนจริง", formatMoney(payrollSnapshotDisplay.realSalary)],
                   ["ยอดคืน", formatMoney(payrollSnapshotDisplay.total)],
@@ -3000,9 +3013,10 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
                   { label: "ค่าเวร", detail: selectedDutySummary.length > 0 ? selectedDutySummary.map(dutyName => `${dutyName} ${selectedSummaryRow.dutyCounts[dutyName]} วัน`).join(", ") : "ไม่มีเวรที่จ่ายเพิ่ม", value: formatMoney(selectedSummaryRow.dutyPay), color: "#7c3aed" },
                   { label: "สอนแทน", detail: `${selectedSummaryRow.substituteCount} คาบ`, value: formatMoney(selectedSummaryRow.substitutePay), color: "#2563eb" },
                   { label: "ปรับเพิ่ม", detail: selectedSummaryRow.adjustmentNote || "รายการพิเศษ", value: formatMoney(selectedSummaryRow.adjustmentAdd), color: "#16a34a" },
-                  { label: "หักลา", detail: selectedSummaryRow.payType === "daily" ? `${selectedSummaryRow.leaveDeductDays.toFixed(1)} วัน (รายวันไม่หักซ้ำ)` : `${selectedSummaryRow.leaveDeductDays.toFixed(1)} วัน`, value: `- ${formatMoney(selectedSummaryRow.leaveDeductions)}`, color: "#dc2626" },
+                  { label: "หักลา", detail: selectedSummaryRow.payType === "daily" ? `${selectedSummaryRow.leaveDeductDays.toFixed(1)} วัน (รายวันไม่หักซ้ำ)` : `${selectedSummaryRow.leaveDeductDays.toFixed(1)} วัน x ${formatMoney(MONTHLY_LEAVE_DEDUCT_RATE)}`, value: `- ${formatMoney(selectedSummaryRow.leaveDeductions)}`, color: "#dc2626" },
+                  { label: "หักประจำ 3%", detail: selectedSummaryRow.payType === "monthly" ? `${formatMoney(selectedSummaryRow.bankDeposit)} x 3%` : "เฉพาะรายเดือน", value: `- ${formatMoney(selectedSummaryRow.monthlyRecurringDeduction)}`, color: "#dc2626" },
                   { label: "หักเพิ่ม", detail: selectedSummaryRow.adjustmentNote || "รายการพิเศษ", value: `- ${formatMoney(selectedSummaryRow.adjustmentDeduct)}`, color: "#dc2626" },
-                  { label: "เงินเดือนจริง", detail: selectedSummaryRow.payType === "daily" ? "ค่าจ้างรายวัน + เวรรถ + สอนแทน" : "เงินเดือนเต็ม - หักลา + เวรรถ + สอนแทน", value: formatMoney(selectedSummaryRow.realSalary), color: "#15803d" },
+                  { label: "เงินเดือนจริง", detail: selectedSummaryRow.payType === "daily" ? "ค่าจ้างรายวัน + เวรรถ + สอนแทน" : "เงินเดือนเต็ม - หักประจำ 3% - หักลา + เวรรถ + สอนแทน", value: formatMoney(selectedSummaryRow.realSalary), color: "#15803d" },
                   { label: "เงินเข้า บช", detail: "ยอดที่ครูได้รับเข้าบัญชีก่อน", value: formatMoney(selectedSummaryRow.bankDeposit), color: "#c2410c" },
                 ].map(item => (
                   <div key={item.label} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "0.75rem", alignItems: "center", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.85rem 1rem" }}>

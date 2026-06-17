@@ -2282,6 +2282,10 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
     const payType = employeeConfig.pay_type || "daily";
     const perDayRate = payType === "monthly" ? (workDays > 0 ? effectiveRate / workDays : 0) : effectiveRate;
     const dailyRate = effectiveRate;
+    const baseSalaryLabel = payType === "monthly" ? "เงินเดือนเต็ม" : "ค่าจ้างรายวัน";
+    const baseSalaryDetail = payType === "monthly"
+      ? `เงินเดือนเต็ม ${formatMoney(effectiveRate)}`
+      : `${attendanceDays} วัน x ${formatMoney(effectiveRate)}`;
     const calculatedDutyPay = PAID_DUTY_OPTIONS.reduce((sum, dutyName) => sum + dutyCounts[dutyName] * parseMoney(config.dutyRates[dutyName]), 0);
     const dutyPay = adjustment.override_duty_pay !== "" && adjustment.override_duty_pay != null ? parseMoney(adjustment.override_duty_pay) : calculatedDutyPay;
     const calculatedBaseSalary = payType === "monthly" ? effectiveRate : attendanceDays * effectiveRate;
@@ -2328,6 +2332,8 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
       dailyRate,
       payType,
       perDayRate,
+      baseSalaryLabel,
+      baseSalaryDetail,
       baseSalary,
       dutyPay,
       totalPay,
@@ -2646,8 +2652,8 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
             <th>พนักงาน</th>
             <th>แผนก</th>
             <th>มาทำงาน (วัน)</th>
-            <th>อัตรารายวัน</th>
-            <th>ค่ารายวัน</th>
+            <th>เงินเดือนเต็ม</th>
+            <th>ฐานเงินเดือน</th>
             <th>เวรรถ (วัน)</th>
             <th>สรุปเวร</th>
             <th>ค่าเวร</th>
@@ -2879,7 +2885,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.75rem" }}>
                 <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.8rem" }}>
-                  <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "0.2rem" }}>ค่ารายวัน</div>
+                  <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "0.2rem" }}>{selectedSummaryRow.baseSalaryLabel}</div>
                   <div style={{ fontWeight: 800, color: "#16a34a" }}>{formatMoney(selectedSummaryRow.baseSalary)}</div>
                 </div>
                 <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.8rem" }}>
@@ -2990,13 +2996,13 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
             ) : (
               <div style={{ display: "grid", gap: "0.75rem" }}>
                 {[
-                  { label: "ค่าจ้างรายวัน", detail: `${selectedSummaryRow.attendanceDays} วัน x ${formatMoney(selectedSummaryRow.dailyRate)}`, value: formatMoney(selectedSummaryRow.baseSalary), color: "#16a34a" },
+                  { label: selectedSummaryRow.baseSalaryLabel, detail: selectedSummaryRow.baseSalaryDetail, value: formatMoney(selectedSummaryRow.baseSalary), color: "#16a34a" },
                   { label: "ค่าเวร", detail: selectedDutySummary.length > 0 ? selectedDutySummary.map(dutyName => `${dutyName} ${selectedSummaryRow.dutyCounts[dutyName]} วัน`).join(", ") : "ไม่มีเวรที่จ่ายเพิ่ม", value: formatMoney(selectedSummaryRow.dutyPay), color: "#7c3aed" },
                   { label: "สอนแทน", detail: `${selectedSummaryRow.substituteCount} คาบ`, value: formatMoney(selectedSummaryRow.substitutePay), color: "#2563eb" },
                   { label: "ปรับเพิ่ม", detail: selectedSummaryRow.adjustmentNote || "รายการพิเศษ", value: formatMoney(selectedSummaryRow.adjustmentAdd), color: "#16a34a" },
                   { label: "หักลา", detail: selectedSummaryRow.payType === "daily" ? `${selectedSummaryRow.leaveDeductDays.toFixed(1)} วัน (รายวันไม่หักซ้ำ)` : `${selectedSummaryRow.leaveDeductDays.toFixed(1)} วัน`, value: `- ${formatMoney(selectedSummaryRow.leaveDeductions)}`, color: "#dc2626" },
                   { label: "หักเพิ่ม", detail: selectedSummaryRow.adjustmentNote || "รายการพิเศษ", value: `- ${formatMoney(selectedSummaryRow.adjustmentDeduct)}`, color: "#dc2626" },
-                  { label: "เงินเดือนจริง", detail: "เงินเดือนเต็ม - หักลา + เวรรถ + สอนแทน", value: formatMoney(selectedSummaryRow.realSalary), color: "#15803d" },
+                  { label: "เงินเดือนจริง", detail: selectedSummaryRow.payType === "daily" ? "ค่าจ้างรายวัน + เวรรถ + สอนแทน" : "เงินเดือนเต็ม - หักลา + เวรรถ + สอนแทน", value: formatMoney(selectedSummaryRow.realSalary), color: "#15803d" },
                   { label: "เงินเข้า บช", detail: "ยอดที่ครูได้รับเข้าบัญชีก่อน", value: formatMoney(selectedSummaryRow.bankDeposit), color: "#c2410c" },
                 ].map(item => (
                   <div key={item.label} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "0.75rem", alignItems: "center", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.85rem 1rem" }}>

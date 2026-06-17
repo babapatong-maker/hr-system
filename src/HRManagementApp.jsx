@@ -64,6 +64,38 @@ const todayRange = () => {
   return { start, end };
 };
 
+function playWarningBeeps() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    [0, 180, 360].forEach(delay => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 880;
+      gain.gain.value = 0.12;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      const start = ctx.currentTime + delay / 1000;
+      osc.start(start);
+      osc.stop(start + 0.12);
+    });
+  } catch {}
+}
+
+function speakThai(text) {
+  try {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "th-TH";
+    utterance.rate = 0.95;
+    utterance.pitch = 1;
+    window.speechSynthesis.speak(utterance);
+  } catch {}
+}
+
 // คำนวณสถานะมาสาย / กลับก่อน
 // แปลงนาทีเป็น "X ชม. Y นาที" หรือ "Y นาที"
 function formatMinutes(mins) {
@@ -1005,6 +1037,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
   const [doneStatus, setDoneStatus] = useState(null); // {late|early|onTime|leaveEarly|stayLate|onTimeLeave, minutes}
   const [selectedEmp, setSelectedEmp] = useState(currentUser?.id || "");
   const [openAttendance, setOpenAttendance] = useState(null);
+  const [staleOpenAttendance, setStaleOpenAttendance] = useState(null);
   const [duty, setDuty] = useState("ไม่มีเวร");
 
   useEffect(() => {
@@ -1035,14 +1068,39 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
   }, [currentUser, settings]);
 
   useEffect(() => {
-    if (mode === "out" && selectedEmp) {
-      (async () => {
-        const { start, end } = todayRange();
-        const { data } = await supabase.from("attendance").select("*").eq("employee_id", selectedEmp).is("check_out", null).gte("check_in", start).lte("check_in", end).order("check_in", { ascending: false }).limit(1);
-        setOpenAttendance(data?.[0] || null);
-      })();
-    }
+    if (!selectedEmp) return;
+    let active = true;
+    (async () => {
+      const { data } = await supabase
+        .from("attendance")
+        .select("*")
+        .eq("employee_id", selectedEmp)
+        .is("check_out", null)
+        .order("check_in", { ascending: false })
+        .limit(1);
+      if (!active) return;
+      const latestOpen = data?.[0] || null;
+      if (!latestOpen) {
+        setOpenAttendance(null);
+        setStaleOpenAttendance(null);
+        return;
+      }
+      if (getDateKey(latestOpen.check_in) === todayISO()) {
+        setOpenAttendance(latestOpen);
+        setStaleOpenAttendance(null);
+      } else {
+        setOpenAttendance(null);
+        setStaleOpenAttendance(latestOpen);
+      }
+    })();
+    return () => { active = false; };
   }, [selectedEmp, mode]);
+
+  useEffect(() => {
+    if (!staleOpenAttendance) return;
+    playWarningBeeps();
+    speakThai("คุณไม่ได้ลงเวลากลับบ้าน");
+  }, [staleOpenAttendance?.id]);
 
   const fetchLocation = useCallback(() => {
     setGpsState("loading");
@@ -1072,6 +1130,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
   const handleSubmit = async () => {
     if (!isInZone || done || !selectedEmp) return;
     if (mode === "in") {
+      if (openAttendance) return;
       const { error } = await supabase.from("attendance").insert({ employee_id: selectedEmp, latitude: coords?.lat, longitude: coords?.lng, distance_from_school: distance, duty: duty });
       if (!error) finish();
     } else {
@@ -1098,8 +1157,10 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
       else if (info?.late) quoteType = "stayLate";
       else quoteType = "onTimeLeave";
     }
+    const quote = randomQuote(quoteType);
     setDoneStatus({ type: quoteType, minutes: info?.minutes || 0 });
-    setDoneQuote(randomQuote(quoteType));
+    setDoneQuote(quote);
+    speakThai(quote);
     setDone(true);
     onCheckin && onCheckin();
   };
@@ -1107,7 +1168,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
   const circumference = 2 * Math.PI * 54;
   const ringColor = gpsState === "success" ? (isInZone ? (mode === "in" ? "#10b981" : "#f59e0b") : "#ef4444") : "#94a3b8";
   const pct = distance !== null ? Math.min(distance / GEOFENCE_RADIUS, 1) : 0;
-  const canSubmit = isInZone && !done && gpsState === "success" && selectedEmp && (mode === "in" || openAttendance);
+  const canSubmit = isInZone && !done && gpsState === "success" && selectedEmp && (mode === "in" ? !openAttendance : openAttendance);
 
   return (
     <Modal title={mode === "in" ? "ลงเวลาเข้างาน" : "ลงเวลากลับบ้าน"} subtitle={`📍 รัศมี ${GEOFENCE_RADIUS} เมตรจากโรงเรียน`} onClose={onClose} icon={mode === "in" ? LogIn : LogOut} color={mode === "in" ? "#1d4ed8" : "#d97706"}>
@@ -1121,6 +1182,21 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
           <select value={duty} onChange={e => setDuty(e.target.value)} style={selectStyle}>
             {DUTY_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
           </select>
+        </div>
+      )}
+
+      {staleOpenAttendance && (
+        <div style={{ background: "#fee2e2", border: "3px solid #dc2626", borderRadius: "16px", padding: "1rem", marginBottom: "1.25rem", textAlign: "center", color: "#991b1b", boxShadow: "0 10px 28px rgba(220,38,38,0.18)" }}>
+          <div style={{ fontSize: "1.15rem", fontWeight: 900, marginBottom: "0.3rem" }}>คุณไม่ได้ลงเวลากลับบ้าน</div>
+          <div style={{ fontSize: "0.85rem", fontWeight: 700 }}>
+            เข้างานครั้งก่อน {fmtDate(staleOpenAttendance.check_in)} เวลา {fmtTime(staleOpenAttendance.check_in)} น. ระบบตัดเป็นวันใหม่แล้ว
+          </div>
+        </div>
+      )}
+
+      {mode === "in" && openAttendance && (
+        <div style={{ background: "#eff6ff", border: "1.5px solid #93c5fd", borderRadius: "12px", padding: "0.75rem", marginBottom: "1.25rem", textAlign: "center", color: "#1d4ed8", fontSize: "0.85rem", fontWeight: 700 }}>
+          ลงเวลาเข้างานวันนี้แล้ว เวลา {fmtTime(openAttendance.check_in)} น. ถ้าจะกลับบ้านให้กดเมนูกลับบ้าน
         </div>
       )}
 

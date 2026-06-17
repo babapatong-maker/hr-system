@@ -89,30 +89,38 @@ function playWarningBeeps() {
 function getThaiSpeechVoice() {
   if (typeof window === "undefined" || !window.speechSynthesis?.getVoices) return null;
   const voices = window.speechSynthesis.getVoices();
-  const thaiVoices = voices.filter(voice => {
+  const thaiVoices = voices
+    .filter(voice => {
     const lang = (voice.lang || "").toLowerCase();
     const name = (voice.name || "").toLowerCase();
-    return lang === "th-th" || lang.startsWith("th") || name.includes("thai") || name.includes("ไทย");
-  });
+      return lang === "th-th" || lang.startsWith("th") || name.includes("thai") || name.includes("ไทย") || name.includes("pattara") || name.includes("narisa");
+    })
+    .sort((a, b) => {
+      const score = (voice) => {
+        const lang = (voice.lang || "").toLowerCase();
+        const name = (voice.name || "").toLowerCase();
+        return (lang === "th-th" ? 100 : 0)
+          + (lang.startsWith("th") ? 50 : 0)
+          + (name.includes("pattara") ? 30 : 0)
+          + (name.includes("narisa") ? 20 : 0)
+          + (voice.localService ? 10 : 0)
+          + (voice.default ? 5 : 0);
+      };
+      return score(b) - score(a);
+    });
 
-  return (
-    thaiVoices.find(voice => (voice.lang || "").toLowerCase() === "th-th" && voice.default) ||
-    thaiVoices.find(voice => (voice.lang || "").toLowerCase() === "th-th" && voice.localService) ||
-    thaiVoices.find(voice => (voice.lang || "").toLowerCase() === "th-th") ||
-    thaiVoices.find(voice => voice.localService) ||
-    thaiVoices[0] ||
-    null
-  );
+  return thaiVoices[0] || null;
 }
 
 function prepareThaiSpeechText(text) {
   return String(text || "")
     .replace(/ไฟต์ติ้ง/g, "สู้สู้นะครับ")
     .replace(/เป๊ะ/g, "ตรงเวลามาก")
-    .replace(/([\p{Script=Thai}]+)\s*ๆ/gu, "$1$1")
     .replace(/[^\p{Script=Thai}\p{N}\s.,!?]/gu, " ")
+    .replace(/สู้สู้นะครับ/g, "สู้ สู้ นะครับ")
     .replace(/\s+/g, " ")
     .replace(/\s*([,.!?])\s*/g, "$1 ")
+    .replace(/ครับ\s+/g, "ครับ. ")
     .trim();
 }
 
@@ -124,27 +132,29 @@ function speakThai(text, waitForVoices = true) {
     if (!spokenText) return;
 
     const speakNow = () => {
+      const thaiVoice = getThaiSpeechVoice();
+      if (!thaiVoice) return false;
       synth.cancel();
       const utterance = new SpeechSynthesisUtterance(spokenText);
-      const thaiVoice = getThaiSpeechVoice();
-      if (thaiVoice) utterance.voice = thaiVoice;
+      utterance.voice = thaiVoice;
       utterance.lang = "th-TH";
-      utterance.rate = 0.64;
+      utterance.rate = 0.6;
       utterance.pitch = 1;
       utterance.volume = 1;
       synth.speak(utterance);
+      return true;
     };
 
-    if (waitForVoices && synth.getVoices?.().length === 0) {
+    if (waitForVoices && !getThaiSpeechVoice()) {
       let handled = false;
       const handleVoicesReady = () => {
-        if (handled) return;
+        if (handled || !getThaiSpeechVoice()) return;
         handled = true;
         synth.removeEventListener?.("voiceschanged", handleVoicesReady);
         speakNow();
       };
       synth.addEventListener?.("voiceschanged", handleVoicesReady, { once: true });
-      window.setTimeout(handleVoicesReady, 350);
+      [300, 800, 1500].forEach(delay => window.setTimeout(handleVoicesReady, delay));
       return;
     }
 

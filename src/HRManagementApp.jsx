@@ -327,6 +327,12 @@ function parsePayrollNote(value) {
       monthly_recurring_deduction: parseMoney(parsed.monthly_recurring_deduction),
       driver_days: parseMoney(parsed.driver_days),
       driver_pay: parseMoney(parsed.driver_pay),
+      onet_pay: parseMoney(parsed.onet_pay),
+      chpk_deduction: parseMoney(parsed.chpk_deduction),
+      chps_deduction: parseMoney(parsed.chps_deduction),
+      cooperative_deduction: parseMoney(parsed.cooperative_deduction),
+      other_deduction_1: parseMoney(parsed.other_deduction_1),
+      other_deduction_2: parseMoney(parsed.other_deduction_2),
     };
   } catch {
     return { duty_note: value, adjustment_add: 0, adjustment_deduct: 0, adjustment_note: "" };
@@ -2222,6 +2228,12 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
         override_leave_deductions: parsedNote.override_leave_deductions ?? "",
         override_bank_deposit: parsedNote.override_bank_deposit ?? "",
         driver_days: parsedNote.driver_days || 0,
+        onet_pay: parsedNote.onet_pay || 0,
+        chpk_deduction: parsedNote.chpk_deduction || 0,
+        chps_deduction: parsedNote.chps_deduction || 0,
+        cooperative_deduction: parsedNote.cooperative_deduction || 0,
+        other_deduction_1: parsedNote.other_deduction_1 || 0,
+        other_deduction_2: parsedNote.other_deduction_2 || 0,
       };
     });
     setPayrollAdjustments(nextAdjustments);
@@ -2353,8 +2365,21 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
     const isDriverEmployee = DRIVER_EMPLOYEE_IDS.has(emp.id);
     const driverDays = isDriverEmployee ? Math.max(0, Math.floor(parseMoney(adjustment.driver_days))) : 0;
     const driverPay = driverDays * DRIVER_DAY_RATE;
-    const grossPay = baseSalary + dutyPay + overtimePay + substitutePay + driverPay;
-    const deductions = leaveDeductions + monthlyRecurringDeduction + adjustmentDeduct;
+    const dutyOrDriverPay = isDriverEmployee && driverDays > 0 ? driverPay : dutyPay;
+    const chpkDeduction = parseMoney(adjustment.chpk_deduction);
+    const chpsDeduction = parseMoney(adjustment.chps_deduction);
+    const cooperativeDeduction = parseMoney(adjustment.cooperative_deduction);
+    const otherDeduction1 = parseMoney(adjustment.other_deduction_1);
+    const otherDeduction2 = parseMoney(adjustment.other_deduction_2);
+    const grossPay = baseSalary + dutyOrDriverPay + overtimePay + substitutePay;
+    const deductions = leaveDeductions
+      + monthlyRecurringDeduction
+      + chpkDeduction
+      + chpsDeduction
+      + cooperativeDeduction
+      + otherDeduction1
+      + otherDeduction2
+      + adjustmentDeduct;
     const totalPay = grossPay + adjustmentAdd - deductions;
     const realSalary = totalPay;
     const refundAmount = Math.max(0, bankDeposit - realSalary);
@@ -2386,6 +2411,12 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
       substitutePay,
       driverDays,
       driverPay,
+      dutyOrDriverPay,
+      chpkDeduction,
+      chpsDeduction,
+      cooperativeDeduction,
+      otherDeduction1,
+      otherDeduction2,
       monthlyRecurringDeduction,
       overtimeHours,
       overtimePay,
@@ -2573,6 +2604,11 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
           monthly_recurring_deduction: Number(row.monthlyRecurringDeduction.toFixed(2)),
           driver_days: row.driverDays,
           driver_pay: Number(row.driverPay.toFixed(2)),
+          chpk_deduction: Number(row.chpkDeduction.toFixed(2)),
+          chps_deduction: Number(row.chpsDeduction.toFixed(2)),
+          cooperative_deduction: Number(row.cooperativeDeduction.toFixed(2)),
+          other_deduction_1: Number(row.otherDeduction1.toFixed(2)),
+          other_deduction_2: Number(row.otherDeduction2.toFixed(2)),
           override_rate: payrollAdjustments[row.emp.id]?.override_rate ?? "",
           override_base_salary: payrollAdjustments[row.emp.id]?.override_base_salary ?? "",
           override_duty_pay: payrollAdjustments[row.emp.id]?.override_duty_pay ?? "",
@@ -2609,32 +2645,28 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
     const dailyRows = summaryRows.filter(row => row.payType === "daily");
 
     const renderPayrollRows = (rows) => rows.length === 0
-      ? `<tr><td colspan="23" style="text-align:center;color:#94a3b8;">ไม่มีข้อมูลในกลุ่มนี้</td></tr>`
+      ? `<tr><td colspan="19" style="text-align:center;color:#94a3b8;">ไม่มีข้อมูลในกลุ่มนี้</td></tr>`
       : rows.map(row => `
         <tr>
           <td>${escapeHtml(row.emp.name)}</td>
-          <td>${escapeHtml(row.emp.department || "")}</td>
-          <td class="count">${row.attendanceDays}</td>
+          <td>${row.payType === "monthly" ? "รายเดือน" : "รายวัน"}</td>
           <td class="money">${row.dailyRate.toFixed(2)}</td>
+          <td class="money deduct" x:fmla="=RC[1]*3%">${row.monthlyRecurringDeduction.toFixed(2)}</td>
+          <td class="money">${row.bankDeposit.toFixed(2)}</td>
           <td class="money">${row.baseSalary.toFixed(2)}</td>
-          <td class="count">${row.dutyCounts["เวรรถ"] || 0}</td>
-          <td class="money" x:fmla="=RC[-1]*30">${row.dutyPay.toFixed(2)}</td>
-          <td class="count">${row.substituteCount}</td>
           <td class="money">${row.substitutePay.toFixed(2)}</td>
           <td class="count">${row.driverDays}</td>
-          <td class="money" x:fmla="=RC[-1]*320">${row.driverPay.toFixed(2)}</td>
-          <td class="money" x:fmla="=RC[-7]+RC[-5]+RC[-3]+RC[-1]">${row.grossPay.toFixed(2)}</td>
-          <td class="money">${row.adjustmentAdd.toFixed(2)}</td>
-          <td class="count">${row.leaveDeductDays.toFixed(1)}</td>
-          <td class="money deduct" x:fmla="=RC[-1]*500">${row.leaveDeductions.toFixed(2)}</td>
-          <td class="money deduct" x:fmla="=RC[4]*3%">${row.monthlyRecurringDeduction.toFixed(2)}</td>
-          <td class="money deduct">${row.adjustmentDeduct.toFixed(2)}</td>
-          <td class="money deduct" x:fmla="=RC[-3]+RC[-2]+RC[-1]">${row.deductions.toFixed(2)}</td>
-          <td>${escapeHtml(row.adjustmentNote)}</td>
-          <td class="money">${row.bankDeposit.toFixed(2)}</td>
-          <td class="money" x:fmla="=RC[-9]+RC[-8]-RC[-3]">${row.realSalary.toFixed(2)}</td>
-          <td class="money total" x:fmla="=MAX(0,RC[-2]-RC[-1])">${row.refundAmount.toFixed(2)}</td>
-          <td class="money additional" x:fmla="=MAX(0,RC[-2]-RC[-3])">${row.additionalPayment.toFixed(2)}</td>
+          <td class="money"${DRIVER_EMPLOYEE_IDS.has(row.emp.id) ? ' x:fmla="=IF(RC[-1]>0,RC[-1]*320,0)"' : ""}>${row.dutyOrDriverPay.toFixed(2)}</td>
+          <td class="money deduct">${row.chpkDeduction.toFixed(2)}</td>
+          <td class="money deduct">${row.chpsDeduction.toFixed(2)}</td>
+          <td class="money deduct">${row.cooperativeDeduction.toFixed(2)}</td>
+          <td class="money deduct">${row.leaveDeductions.toFixed(2)}</td>
+          <td class="money deduct">${row.otherDeduction1.toFixed(2)}</td>
+          <td class="money deduct">${(row.otherDeduction2 + row.adjustmentDeduct).toFixed(2)}</td>
+          <td class="money deduct" x:fmla="=RC[-12]+SUM(RC[-6]:RC[-1])">${row.deductions.toFixed(2)}</td>
+          <td class="money" x:fmla="=SUM(RC[-11]:RC[-10],RC[-8])+${row.adjustmentAdd.toFixed(2)}-RC[-1]">${row.realSalary.toFixed(2)}</td>
+          <td class="money total" x:fmla="=MAX(0,RC[-13]-RC[-1])">${row.refundAmount.toFixed(2)}</td>
+          <td class="money additional" x:fmla="=MAX(0,RC[-2]-RC[-14])">${row.additionalPayment.toFixed(2)}</td>
         </tr>
       `).join("");
 
@@ -2646,8 +2678,8 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
           <td>${escapeHtml(row.emp.department || "")}</td>
           <td class="count">${row.attendanceDays}</td>
           <td class="money">${row.dailyRate.toFixed(2)}</td>
-          <td>${row.attendanceDays} x ${row.dailyRate.toFixed(2)}</td>
-          <td class="money">${row.baseSalary.toFixed(2)}</td>
+          <td>${row.dailyRate.toFixed(2)} x ${row.attendanceDays} วัน</td>
+          <td class="money" x:fmla="=RC[-2]*RC[-3]">${row.baseSalary.toFixed(2)}</td>
           <td class="money">${row.dutyPay.toFixed(2)}</td>
           <td class="money">${row.substitutePay.toFixed(2)}</td>
           <td class="money deduct">${row.leaveDeductions.toFixed(2)}</td>
@@ -2704,33 +2736,29 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
       <body>
         <table>
           <tr>
-            <th colspan="23" style="font-size:15px;background:#dbeafe;">สรุปเงินเดือน เดือน ${escapeHtml(month)}</th>
+            <th colspan="19" style="font-size:15px;background:#dbeafe;">สรุปเงินเดือน เดือน ${escapeHtml(month)}</th>
           </tr>
           <tr>
-            <th colspan="23" class="section-title">ตารางเงินเดือนประจำ / เทียบยอดเข้า บช</th>
+            <th colspan="19" class="section-title">ตารางเงินเดือนประจำ / เทียบยอดเข้า บช</th>
           </tr>
           <tr>
             <th>พนักงาน</th>
-            <th>แผนก</th>
-            <th>มาทำงาน (วัน)</th>
-            <th>เงินเดือนเต็ม</th>
-            <th>ฐานเงินเดือน</th>
-            <th>เวรรถ (วัน)</th>
-            <th>ค่าเวร</th>
-            <th>สอนแทน (คาบ)</th>
+            <th>ประเภท</th>
+            <th>เงินเดือน</th>
+            <th>หัก 3%</th>
+            <th>เงินเข้า บช</th>
+            <th>รับจริง</th>
             <th>ค่าสอนแทน</th>
             <th>ขับรถ (วัน)</th>
-            <th>ค่าขับรถ</th>
-            <th>ยอดก่อนหัก</th>
-            <th>ปรับเพิ่ม</th>
-            <th>หักลา (วัน)</th>
-            <th>หักลา (บาท)</th>
-            <th>หักประจำ 3%</th>
-            <th>หักเพิ่ม</th>
+            <th>ขับรถ/เวร</th>
+            <th>ช.พ.ค.</th>
+            <th>ช.พ.ส.</th>
+            <th>สหกรณ์</th>
+            <th>ลา</th>
+            <th>อื่น ๆ 1</th>
+            <th>อื่น ๆ 2</th>
             <th>หักรวม</th>
-            <th>หมายเหตุ</th>
-            <th>เงินเข้า บช</th>
-            <th>เงินเดือนจริง</th>
+            <th>รวมรับ</th>
             <th>ยอดคืน</th>
             <th>ต้องรับเพิ่ม</th>
           </tr>
@@ -2766,6 +2794,133 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
     link.download = `สรุปเงินเดือน_${month}.xls`;
     link.click();
   };
+
+  const tableRows = allRows.filter(row => {
+    const search = employeeSearch.trim().toLowerCase();
+    if (!search) return true;
+    return `${row.emp.name || ""} ${row.emp.department || ""}`.toLowerCase().includes(search);
+  });
+  const monthlyTableRows = tableRows.filter(row => row.payType === "monthly");
+  const dailyTableRows = tableRows.filter(row => row.payType === "daily");
+  const payrollInputStyle = {
+    width: 88,
+    minWidth: 72,
+    border: "1px solid #93c5fd",
+    borderRadius: "6px",
+    padding: "0.38rem 0.42rem",
+    fontFamily: "inherit",
+    fontSize: "0.75rem",
+    fontWeight: 700,
+    color: "#0f172a",
+    background: "#fff",
+    textAlign: "right",
+  };
+  const payrollCellBase = {
+    padding: "0.38rem 0.42rem",
+    borderRight: "1px solid #e2e8f0",
+    borderBottom: "1px solid #e2e8f0",
+    textAlign: "right",
+    whiteSpace: "nowrap",
+    verticalAlign: "middle",
+  };
+  const payrollEditableCell = { ...payrollCellBase, background: "#fffbeb" };
+  const payrollFormulaCell = { ...payrollCellBase, background: "#fef2f2", color: "#b91c1c", fontWeight: 800 };
+  const payrollDeductCell = { ...payrollCellBase, background: "#fee2e2", color: "#b91c1c", fontWeight: 900 };
+  const payrollTotalCell = { ...payrollCellBase, background: "#dbeafe", color: "#1d4ed8", fontWeight: 900 };
+  const payrollRefundCell = { ...payrollCellBase, background: "#fff7ed", color: "#c2410c", fontWeight: 900 };
+  const payrollAdditionalCell = { ...payrollCellBase, background: "#eff6ff", color: "#1d4ed8", fontWeight: 900 };
+  const renderMoneyInput = (row, key, value, options = {}) => (
+    <input
+      type="number"
+      min={options.min ?? 0}
+      step={options.step ?? "0.01"}
+      value={value ?? 0}
+      onChange={e => updatePayrollAdjustment(row.emp.id, key, e.target.value)}
+      style={{ ...payrollInputStyle, width: options.width || payrollInputStyle.width }}
+    />
+  );
+  const renderPayrollTable = (rows, title, isDailyTable = false) => (
+    <Card padding="0">
+      <div style={{ padding: "0.9rem 1rem", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#0f172a" }}>{title}</div>
+          <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: "0.15rem" }}>ช่องสีขาวกรอกแก้ได้ ช่องสีอื่นเป็นสูตรคำนวณอัตโนมัติ</div>
+        </div>
+        <div style={{ fontSize: "0.75rem", color: "#1d4ed8", fontWeight: 800 }}>{rows.length} คน</div>
+      </div>
+      <div style={{ overflowX: "auto", maxHeight: 560 }}>
+        <table style={{ width: "max-content", minWidth: "100%", borderCollapse: "separate", borderSpacing: 0, fontSize: "0.75rem" }}>
+          <thead style={{ position: "sticky", top: 0, zIndex: 2 }}>
+            <tr>
+              {[
+                "ชื่อ-สกุล", "เงินเดือน", "หัก 3%", "เงินเข้า บช", "รับจริง", "สอนแทน",
+                ...(isDailyTable ? ["วันทำงาน", "สูตรรายวัน"] : []),
+                "วันขับ", "ขับรถ/เวร", "ช.พ.ค.", "ช.พ.ส.", "สหกรณ์",
+                "ลา", "อื่น ๆ 1", "อื่น ๆ 2", "รวมหัก", "รวมรับ", "ยอดคืน", "ต้องรับเพิ่ม",
+              ].map((header, index) => (
+                <th key={header} style={{
+                  padding: "0.55rem 0.5rem",
+                  borderRight: "1px solid #cbd5e1",
+                  borderBottom: "1px solid #94a3b8",
+                  background: index <= 8 ? "#fef3c7" : index <= 15 ? "#fed7aa" : index === 16 ? "#bfdbfe" : "#f8fafc",
+                  color: "#334155",
+                  fontWeight: 800,
+                  whiteSpace: "nowrap",
+                  textAlign: index === 0 ? "left" : "right",
+                }}>{header}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr><td colSpan={isDailyTable ? 20 : 18} style={{ padding: "1.25rem", textAlign: "center", color: "#94a3b8" }}>ไม่มีข้อมูลในกลุ่มนี้</td></tr>
+            ) : rows.map(row => {
+              const adjustment = payrollAdjustments[row.emp.id] || {};
+              return (
+                <tr key={row.emp.id}>
+                  <td style={{ padding: "0.45rem 0.55rem", borderRight: "1px solid #e2e8f0", borderBottom: "1px solid #e2e8f0", background: "#dcfce7", minWidth: 180 }}>
+                    <div style={{ fontWeight: 800, color: "#0f172a" }}>{row.emp.name}</div>
+                    <div style={{ color: "#64748b", fontSize: "0.68rem" }}>{row.emp.department || "-"}</div>
+                  </td>
+                  <td style={payrollEditableCell}>{renderMoneyInput(row, "override_rate", adjustment.override_rate !== "" && adjustment.override_rate != null ? adjustment.override_rate : row.dailyRate)}</td>
+                  <td style={payrollFormulaCell}>{formatMoney(row.monthlyRecurringDeduction)}</td>
+                  <td style={payrollEditableCell}>{renderMoneyInput(row, "override_bank_deposit", adjustment.override_bank_deposit !== "" && adjustment.override_bank_deposit != null ? adjustment.override_bank_deposit : row.bankDeposit)}</td>
+                  <td style={payrollEditableCell}>{renderMoneyInput(row, "override_base_salary", adjustment.override_base_salary !== "" && adjustment.override_base_salary != null ? adjustment.override_base_salary : row.baseSalary)}</td>
+                  <td style={payrollEditableCell}>{renderMoneyInput(row, "override_substitute_pay", adjustment.override_substitute_pay !== "" && adjustment.override_substitute_pay != null ? adjustment.override_substitute_pay : row.substitutePay)}</td>
+                  {isDailyTable && (
+                    <>
+                      <td style={{ ...payrollCellBase, background: "#eff6ff", color: "#1d4ed8", fontWeight: 900, textAlign: "center" }}>{row.attendanceDays} วัน</td>
+                      <td style={{ ...payrollCellBase, background: "#ecfdf5", color: "#166534", fontWeight: 900 }}>{formatMoney(row.dailyRate)} x {row.attendanceDays} = {formatMoney(row.baseSalary)}</td>
+                    </>
+                  )}
+                  <td style={payrollEditableCell}>
+                    {DRIVER_EMPLOYEE_IDS.has(row.emp.id)
+                      ? renderMoneyInput(row, "driver_days", adjustment.driver_days || 0, { step: 1, width: 66 })
+                      : <span style={{ color: "#94a3b8" }}>-</span>}
+                  </td>
+                  <td style={payrollEditableCell}>
+                    {DRIVER_EMPLOYEE_IDS.has(row.emp.id) && row.driverDays > 0
+                      ? <div style={{ minWidth: 88, color: "#0891b2", fontWeight: 900, textAlign: "right" }}>{formatMoney(row.driverPay)}</div>
+                      : renderMoneyInput(row, "override_duty_pay", adjustment.override_duty_pay !== "" && adjustment.override_duty_pay != null ? adjustment.override_duty_pay : row.dutyPay)}
+                  </td>
+                  <td style={payrollEditableCell}>{renderMoneyInput(row, "chpk_deduction", adjustment.chpk_deduction || 0)}</td>
+                  <td style={payrollEditableCell}>{renderMoneyInput(row, "chps_deduction", adjustment.chps_deduction || 0)}</td>
+                  <td style={payrollEditableCell}>{renderMoneyInput(row, "cooperative_deduction", adjustment.cooperative_deduction || 0)}</td>
+                  <td style={payrollEditableCell}>{renderMoneyInput(row, "override_leave_deductions", adjustment.override_leave_deductions !== "" && adjustment.override_leave_deductions != null ? adjustment.override_leave_deductions : row.leaveDeductions)}</td>
+                  <td style={payrollEditableCell}>{renderMoneyInput(row, "other_deduction_1", adjustment.other_deduction_1 || 0)}</td>
+                  <td style={payrollEditableCell}>{renderMoneyInput(row, "other_deduction_2", adjustment.other_deduction_2 || 0)}</td>
+                  <td style={payrollDeductCell}>{formatMoney(row.deductions)}</td>
+                  <td style={payrollTotalCell}>{formatMoney(row.realSalary)}</td>
+                  <td style={payrollRefundCell}>{formatMoney(row.refundAmount)}</td>
+                  <td style={payrollAdditionalCell}>{formatMoney(row.additionalPayment)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
 
   return (
     <div>
@@ -2814,6 +2969,10 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
           </div>
         </div>
       </Card>
+      <div style={{ display: "grid", gap: "1rem", marginTop: "1rem" }}>
+        {renderPayrollTable(monthlyTableRows, "ตารางเงินเดือนรายเดือน / บรรจุ")}
+        {renderPayrollTable(dailyTableRows, "ตารางเงินเดือนรายวัน / ไม่บรรจุ", true)}
+      </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem", marginTop: "1rem" }}>
         <Card>
           <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.3rem" }}>ข้อมูลเงินเดือนรายคน</div>
@@ -2963,19 +3122,13 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
                   <div style={{ fontWeight: 800, color: "#16a34a" }}>{formatMoney(selectedSummaryRow.baseSalary)}</div>
                 </div>
                 <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.8rem" }}>
-                  <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "0.2rem" }}>ค่าเวร</div>
-                  <div style={{ fontWeight: 800, color: "#7c3aed" }}>{formatMoney(selectedSummaryRow.dutyPay)}</div>
+                  <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "0.2rem" }}>ขับรถ/เวร</div>
+                  <div style={{ fontWeight: 800, color: "#7c3aed" }}>{formatMoney(selectedSummaryRow.dutyOrDriverPay)}</div>
                 </div>
                 <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.8rem" }}>
                   <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "0.2rem" }}>สอนแทน</div>
                   <div style={{ fontWeight: 800, color: "#2563eb" }}>{selectedSummaryRow.substituteCount} คาบ / {formatMoney(selectedSummaryRow.substitutePay)}</div>
                 </div>
-                {DRIVER_EMPLOYEE_IDS.has(selectedSummaryRow.emp.id) && (
-                  <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.8rem" }}>
-                    <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "0.2rem" }}>ค่าขับรถ</div>
-                    <div style={{ fontWeight: 800, color: "#0891b2" }}>{selectedSummaryRow.driverDays} วัน / {formatMoney(selectedSummaryRow.driverPay)}</div>
-                  </div>
-                )}
                 <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "12px", padding: "0.8rem" }}>
                   <div style={{ fontSize: "0.75rem", color: "#9a3412", marginBottom: "0.2rem" }}>เงินเข้า บช</div>
                   <div style={{ fontWeight: 800, color: "#c2410c" }}>{formatMoney(selectedSummaryRow.bankDeposit)}</div>
@@ -3087,9 +3240,15 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
               <div style={{ display: "grid", gap: "0.75rem" }}>
                 {[
                   { label: selectedSummaryRow.baseSalaryLabel, detail: selectedSummaryRow.baseSalaryDetail, value: formatMoney(selectedSummaryRow.baseSalary), color: "#16a34a" },
-                  { label: "ค่าเวร", detail: selectedDutySummary.length > 0 ? selectedDutySummary.map(dutyName => `${dutyName} ${selectedSummaryRow.dutyCounts[dutyName]} วัน`).join(", ") : "ไม่มีเวรที่จ่ายเพิ่ม", value: formatMoney(selectedSummaryRow.dutyPay), color: "#7c3aed" },
+                  {
+                    label: "ขับรถ/เวร",
+                    detail: selectedSummaryRow.driverDays > 0
+                      ? `${selectedSummaryRow.driverDays} วัน x ${formatMoney(DRIVER_DAY_RATE)}`
+                      : (selectedDutySummary.length > 0 ? selectedDutySummary.map(dutyName => `${dutyName} ${selectedSummaryRow.dutyCounts[dutyName]} วัน`).join(", ") : "ไม่มีเวรที่จ่ายเพิ่ม"),
+                    value: formatMoney(selectedSummaryRow.dutyOrDriverPay),
+                    color: "#7c3aed",
+                  },
                   { label: "สอนแทน", detail: `${selectedSummaryRow.substituteCount} คาบ`, value: formatMoney(selectedSummaryRow.substitutePay), color: "#2563eb" },
-                  DRIVER_EMPLOYEE_IDS.has(selectedSummaryRow.emp.id) ? { label: "ค่าขับรถ", detail: `${selectedSummaryRow.driverDays} วัน x ${formatMoney(DRIVER_DAY_RATE)}`, value: formatMoney(selectedSummaryRow.driverPay), color: "#0891b2" } : null,
                   { label: "ปรับเพิ่ม", detail: selectedSummaryRow.adjustmentNote || "รายการพิเศษ", value: formatMoney(selectedSummaryRow.adjustmentAdd), color: "#16a34a" },
                   { label: "หักลา", detail: selectedSummaryRow.payType === "daily" ? `${selectedSummaryRow.leaveDeductDays.toFixed(1)} วัน (รายวันไม่หักซ้ำ)` : `${selectedSummaryRow.leaveDeductDays.toFixed(1)} วัน x ${formatMoney(MONTHLY_LEAVE_DEDUCT_RATE)}`, value: `- ${formatMoney(selectedSummaryRow.leaveDeductions)}`, color: "#dc2626" },
                   { label: "หักประจำ 3%", detail: selectedSummaryRow.payType === "monthly" ? `${formatMoney(selectedSummaryRow.bankDeposit)} x 3%` : "เฉพาะรายเดือน", value: `- ${formatMoney(selectedSummaryRow.monthlyRecurringDeduction)}`, color: "#dc2626" },

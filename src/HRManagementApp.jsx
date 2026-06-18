@@ -323,6 +323,7 @@ function parsePayrollNote(value) {
       bank_deposit: parseMoney(parsed.bank_deposit),
       real_salary: parseMoney(parsed.real_salary),
       refund_amount: parseMoney(parsed.refund_amount),
+      additional_payment: parseMoney(parsed.additional_payment),
       monthly_recurring_deduction: parseMoney(parsed.monthly_recurring_deduction),
       driver_days: parseMoney(parsed.driver_days),
       driver_pay: parseMoney(parsed.driver_pay),
@@ -2357,6 +2358,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
     const totalPay = grossPay + adjustmentAdd - deductions;
     const realSalary = totalPay;
     const refundAmount = Math.max(0, bankDeposit - realSalary);
+    const additionalPayment = Math.max(0, realSalary - bankDeposit);
     const dutyCount = PAID_DUTY_OPTIONS.reduce((sum, dutyName) => sum + dutyCounts[dutyName], 0);
     const absentDays = Math.max(0, workDays - attendanceDays - employeeLeaves.reduce((sum, row) => sum + ((row.hours || 0) / 8), 0));
 
@@ -2376,6 +2378,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
       bankDeposit,
       realSalary,
       refundAmount,
+      additionalPayment,
       lateCount,
       absentDays,
       leaveDeductDays,
@@ -2411,6 +2414,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
       bankDeposit: selectedSummaryRow.bankDeposit,
       realSalary: selectedSummaryRow.realSalary,
       total: selectedSummaryRow.refundAmount,
+      additionalPayment: selectedSummaryRow.additionalPayment,
     }
     : selectedSavedPayroll
     ? {
@@ -2422,12 +2426,14 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
       bankDeposit: parsePayrollNote(selectedSavedPayroll.note).bank_deposit || parsePayrollNote(selectedSavedPayroll.note).override_bank_deposit || 0,
       realSalary: parsePayrollNote(selectedSavedPayroll.note).real_salary || 0,
       total: parsePayrollNote(selectedSavedPayroll.note).refund_amount || selectedSavedPayroll.total || 0,
+      additionalPayment: parsePayrollNote(selectedSavedPayroll.note).additional_payment || 0,
     }
     : null;
 
   const totalPayout = summaryRows.reduce((sum, row) => sum + row.realSalary, 0);
   const totalBankDeposit = summaryRows.reduce((sum, row) => sum + row.bankDeposit, 0);
   const totalRefund = summaryRows.reduce((sum, row) => sum + row.refundAmount, 0);
+  const totalAdditionalPayment = summaryRows.reduce((sum, row) => sum + row.additionalPayment, 0);
   const totalAttendanceDays = summaryRows.reduce((sum, row) => sum + row.attendanceDays, 0);
 
   const updateDutyRate = (dutyName, value) => {
@@ -2563,6 +2569,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
           bank_deposit: Number(row.bankDeposit.toFixed(2)),
           real_salary: Number(row.realSalary.toFixed(2)),
           refund_amount: Number(row.refundAmount.toFixed(2)),
+          additional_payment: Number(row.additionalPayment.toFixed(2)),
           monthly_recurring_deduction: Number(row.monthlyRecurringDeduction.toFixed(2)),
           driver_days: row.driverDays,
           driver_pay: Number(row.driverPay.toFixed(2)),
@@ -2602,7 +2609,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
     const dailyRows = summaryRows.filter(row => row.payType === "daily");
 
     const renderPayrollRows = (rows) => rows.length === 0
-      ? `<tr><td colspan="22" style="text-align:center;color:#94a3b8;">ไม่มีข้อมูลในกลุ่มนี้</td></tr>`
+      ? `<tr><td colspan="23" style="text-align:center;color:#94a3b8;">ไม่มีข้อมูลในกลุ่มนี้</td></tr>`
       : rows.map(row => `
         <tr>
           <td>${escapeHtml(row.emp.name)}</td>
@@ -2627,6 +2634,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
           <td class="money">${row.bankDeposit.toFixed(2)}</td>
           <td class="money" x:fmla="=RC[-9]+RC[-8]-RC[-3]">${row.realSalary.toFixed(2)}</td>
           <td class="money total" x:fmla="=MAX(0,RC[-2]-RC[-1])">${row.refundAmount.toFixed(2)}</td>
+          <td class="money additional" x:fmla="=MAX(0,RC[-2]-RC[-3])">${row.additionalPayment.toFixed(2)}</td>
         </tr>
       `).join("");
 
@@ -2690,15 +2698,16 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
           .money { background: #ecfdf5; color: #166534; font-weight: 700; text-align: right; }
           .deduct { background: #fef2f2; color: #b91c1c; }
           .total { background: #fff7ed; color: #c2410c; font-weight: 800; }
+          .additional { background: #eff6ff; color: #1d4ed8; font-weight: 800; }
         </style>
       </head>
       <body>
         <table>
           <tr>
-            <th colspan="22" style="font-size:15px;background:#dbeafe;">สรุปเงินเดือน เดือน ${escapeHtml(month)}</th>
+            <th colspan="23" style="font-size:15px;background:#dbeafe;">สรุปเงินเดือน เดือน ${escapeHtml(month)}</th>
           </tr>
           <tr>
-            <th colspan="22" class="section-title">ตารางเงินเดือนประจำ / เทียบยอดเข้า บช</th>
+            <th colspan="23" class="section-title">ตารางเงินเดือนประจำ / เทียบยอดเข้า บช</th>
           </tr>
           <tr>
             <th>พนักงาน</th>
@@ -2723,6 +2732,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
             <th>เงินเข้า บช</th>
             <th>เงินเดือนจริง</th>
             <th>ยอดคืน</th>
+            <th>ต้องรับเพิ่ม</th>
           </tr>
           ${renderPayrollRows(monthlyRows)}
         </table>
@@ -2766,6 +2776,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
         <StatCard stat={{ label: "เงินเข้า บช รวม", value: formatMoney(totalBankDeposit), icon: Building2, color: "#7c3aed", bg: "#f5f3ff", trend: "ยอดที่โอนเข้าก่อน" }} />
         <StatCard stat={{ label: "เงินเดือนจริงรวม", value: formatMoney(totalPayout), icon: Calendar, color: "#059669", bg: "#ecfdf5", trend: `${totalAttendanceDays} วันทำงานรวม` }} />
         <StatCard stat={{ label: "ยอดคืนรวม", value: formatMoney(totalRefund), icon: DollarSign, color: "#d97706", bg: "#fff7ed", trend: "ยอดสุดท้าย" }} />
+        <StatCard stat={{ label: "ต้องรับเพิ่มรวม", value: formatMoney(totalAdditionalPayment), icon: Plus, color: "#2563eb", bg: "#eff6ff", trend: "ยอดที่ต้องจ่ายเพิ่ม" }} />
       </div>
 
       <Card>
@@ -2941,6 +2952,10 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
                   <div style={{ fontSize: "0.72rem", color: "#7c3aed", fontWeight: 700 }}>ยอดคืน</div>
                   <div style={{ fontSize: "1.25rem", color: "#0f172a", fontWeight: 800 }}>{formatMoney(selectedSummaryRow.refundAmount)}</div>
                 </div>
+                <div style={{ background: "#eff6ff", borderRadius: "12px", padding: "0.85rem" }}>
+                  <div style={{ fontSize: "0.72rem", color: "#1d4ed8", fontWeight: 700 }}>ต้องรับเพิ่ม</div>
+                  <div style={{ fontSize: "1.25rem", color: "#0f172a", fontWeight: 800 }}>{formatMoney(selectedSummaryRow.additionalPayment)}</div>
+                </div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.75rem" }}>
                 <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.8rem" }}>
@@ -3038,6 +3053,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
                   ["เงินเข้า บช", formatMoney(payrollSnapshotDisplay.bankDeposit)],
                   ["เงินเดือนจริง", formatMoney(payrollSnapshotDisplay.realSalary)],
                   ["ยอดคืน", formatMoney(payrollSnapshotDisplay.total)],
+                  ["ต้องรับเพิ่ม", formatMoney(payrollSnapshotDisplay.additionalPayment || 0)],
                 ].map(([label, value]) => (
                   <div key={label} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.8rem" }}>
                     <div style={{ fontSize: "0.74rem", color: "#64748b", marginBottom: "0.2rem" }}>{label}</div>
@@ -3057,7 +3073,11 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
               <div style={{ fontSize: "0.8rem", color: "#64748b" }}>ดูรายการบวกและรายการหักของพนักงานคนนี้ในบล็อกเดียว</div>
             </div>
             <div style={{ background: "#fff7ed", borderRadius: "999px", padding: "0.35rem 0.8rem", color: "#d97706", fontWeight: 700, fontSize: "0.8rem" }}>
-              {selectedSummaryRow ? `ยอดคืน ${formatMoney(selectedSummaryRow.refundAmount)}` : `ยอดคืนรวม ${formatMoney(totalRefund)}`}
+              {selectedSummaryRow
+                ? (selectedSummaryRow.additionalPayment > 0
+                  ? `ต้องรับเพิ่ม ${formatMoney(selectedSummaryRow.additionalPayment)}`
+                  : `ยอดคืน ${formatMoney(selectedSummaryRow.refundAmount)}`)
+                : `ยอดคืนรวม ${formatMoney(totalRefund)}`}
             </div>
           </div>
           <div style={{ padding: "1rem 1.25rem" }}>
@@ -3091,6 +3111,13 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
                     <div style={{ fontSize: "0.76rem", color: "#b45309", marginTop: "0.18rem" }}>MAX(0, เงินเข้า บช - เงินเดือนจริง)</div>
                   </div>
                   <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#d97706", whiteSpace: "nowrap" }}>{formatMoney(selectedSummaryRow.refundAmount)}</div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "0.75rem", alignItems: "center", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "12px", padding: "0.95rem 1rem" }}>
+                  <div>
+                    <div style={{ fontSize: "0.84rem", fontWeight: 800, color: "#1d4ed8" }}>ต้องรับเพิ่ม</div>
+                    <div style={{ fontSize: "0.76rem", color: "#2563eb", marginTop: "0.18rem" }}>MAX(0, เงินเดือนจริง - เงินเข้า บช)</div>
+                  </div>
+                  <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#2563eb", whiteSpace: "nowrap" }}>{formatMoney(selectedSummaryRow.additionalPayment)}</div>
                 </div>
               </div>
             )}

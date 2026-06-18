@@ -39,6 +39,11 @@ const SUBSTITUTE_PERIODS = [
 const KINDERGARTEN_SUBSTITUTE_DAY_RATE = 250;
 const MONTHLY_LEAVE_DEDUCT_RATE = 500;
 const MONTHLY_BANK_DEPOSIT_DEDUCT_RATE = 0.03;
+const DRIVER_DAY_RATE = 320;
+const DRIVER_EMPLOYEE_IDS = new Set([
+  "1c21605d-3404-4424-a640-d2eb25361c19",
+  "193538b9-9672-4c18-b29d-114dcc5befaf",
+]);
 
 function haversineDistance(lat1, lng1, lat2, lng2) {
   const R = 6371000;
@@ -319,6 +324,8 @@ function parsePayrollNote(value) {
       real_salary: parseMoney(parsed.real_salary),
       refund_amount: parseMoney(parsed.refund_amount),
       monthly_recurring_deduction: parseMoney(parsed.monthly_recurring_deduction),
+      driver_days: parseMoney(parsed.driver_days),
+      driver_pay: parseMoney(parsed.driver_pay),
     };
   } catch {
     return { duty_note: value, adjustment_add: 0, adjustment_deduct: 0, adjustment_note: "" };
@@ -2213,6 +2220,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
         override_substitute_pay: parsedNote.override_substitute_pay ?? "",
         override_leave_deductions: parsedNote.override_leave_deductions ?? "",
         override_bank_deposit: parsedNote.override_bank_deposit ?? "",
+        driver_days: parsedNote.driver_days || 0,
       };
     });
     setPayrollAdjustments(nextAdjustments);
@@ -2341,7 +2349,10 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
     const adjustmentAdd = parseMoney(adjustment.adjustment_add);
     const adjustmentDeduct = parseMoney(adjustment.adjustment_deduct);
     const adjustmentNote = adjustment.adjustment_note || "";
-    const grossPay = baseSalary + dutyPay + overtimePay + substitutePay;
+    const isDriverEmployee = DRIVER_EMPLOYEE_IDS.has(emp.id);
+    const driverDays = isDriverEmployee ? Math.max(0, Math.floor(parseMoney(adjustment.driver_days))) : 0;
+    const driverPay = driverDays * DRIVER_DAY_RATE;
+    const grossPay = baseSalary + dutyPay + overtimePay + substitutePay + driverPay;
     const deductions = leaveDeductions + monthlyRecurringDeduction + adjustmentDeduct;
     const totalPay = grossPay + adjustmentAdd - deductions;
     const realSalary = totalPay;
@@ -2370,6 +2381,8 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
       leaveDeductDays,
       substituteCount,
       substitutePay,
+      driverDays,
+      driverPay,
       monthlyRecurringDeduction,
       overtimeHours,
       overtimePay,
@@ -2382,7 +2395,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
       note: PAID_DUTY_OPTIONS.filter(dutyName => dutyCounts[dutyName] > 0).map(dutyName => `${dutyName} ${dutyCounts[dutyName]} วัน`).join(", "),
     };
   });
-  const summaryRows = allRows.filter(row => row.attendanceDays > 0 || row.dailyRate > 0 || row.dutyPay > 0 || row.deductions > 0 || row.substitutePay > 0);
+  const summaryRows = allRows.filter(row => row.attendanceDays > 0 || row.dailyRate > 0 || row.dutyPay > 0 || row.deductions > 0 || row.substitutePay > 0 || row.driverPay > 0);
   const selectedSummaryRow = allRows.find(row => row.emp.id === selectedEmployeeId) || null;
   const selectedSavedPayroll = savedPayrollRows.find(row => row.employee_id === selectedEmployeeId) || null;
   const selectedDutySummary = selectedSummaryRow
@@ -2551,6 +2564,8 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
           real_salary: Number(row.realSalary.toFixed(2)),
           refund_amount: Number(row.refundAmount.toFixed(2)),
           monthly_recurring_deduction: Number(row.monthlyRecurringDeduction.toFixed(2)),
+          driver_days: row.driverDays,
+          driver_pay: Number(row.driverPay.toFixed(2)),
           override_rate: payrollAdjustments[row.emp.id]?.override_rate ?? "",
           override_base_salary: payrollAdjustments[row.emp.id]?.override_base_salary ?? "",
           override_duty_pay: payrollAdjustments[row.emp.id]?.override_duty_pay ?? "",
@@ -2587,7 +2602,7 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
     const dailyRows = summaryRows.filter(row => row.payType === "daily");
 
     const renderPayrollRows = (rows) => rows.length === 0
-      ? `<tr><td colspan="20" style="text-align:center;color:#94a3b8;">ไม่มีข้อมูลในกลุ่มนี้</td></tr>`
+      ? `<tr><td colspan="22" style="text-align:center;color:#94a3b8;">ไม่มีข้อมูลในกลุ่มนี้</td></tr>`
       : rows.map(row => `
         <tr>
           <td>${escapeHtml(row.emp.name)}</td>
@@ -2596,20 +2611,22 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
           <td class="money">${row.dailyRate.toFixed(2)}</td>
           <td class="money">${row.baseSalary.toFixed(2)}</td>
           <td class="count">${row.dutyCounts["เวรรถ"] || 0}</td>
-          <td class="money">${row.dutyPay.toFixed(2)}</td>
+          <td class="money" x:fmla="=RC[-1]*30">${row.dutyPay.toFixed(2)}</td>
           <td class="count">${row.substituteCount}</td>
           <td class="money">${row.substitutePay.toFixed(2)}</td>
-          <td class="money">${row.grossPay.toFixed(2)}</td>
+          <td class="count">${row.driverDays}</td>
+          <td class="money" x:fmla="=RC[-1]*320">${row.driverPay.toFixed(2)}</td>
+          <td class="money" x:fmla="=RC[-7]+RC[-5]+RC[-3]+RC[-1]">${row.grossPay.toFixed(2)}</td>
           <td class="money">${row.adjustmentAdd.toFixed(2)}</td>
           <td class="count">${row.leaveDeductDays.toFixed(1)}</td>
-          <td class="money deduct">${row.leaveDeductions.toFixed(2)}</td>
-          <td class="money deduct">${row.monthlyRecurringDeduction.toFixed(2)}</td>
+          <td class="money deduct" x:fmla="=RC[-1]*500">${row.leaveDeductions.toFixed(2)}</td>
+          <td class="money deduct" x:fmla="=RC[4]*3%">${row.monthlyRecurringDeduction.toFixed(2)}</td>
           <td class="money deduct">${row.adjustmentDeduct.toFixed(2)}</td>
-          <td class="money deduct">${row.deductions.toFixed(2)}</td>
+          <td class="money deduct" x:fmla="=RC[-3]+RC[-2]+RC[-1]">${row.deductions.toFixed(2)}</td>
           <td>${escapeHtml(row.adjustmentNote)}</td>
           <td class="money">${row.bankDeposit.toFixed(2)}</td>
-          <td class="money">${row.realSalary.toFixed(2)}</td>
-          <td class="money total">${row.refundAmount.toFixed(2)}</td>
+          <td class="money" x:fmla="=RC[-9]+RC[-8]-RC[-3]">${row.realSalary.toFixed(2)}</td>
+          <td class="money total" x:fmla="=MAX(0,RC[-2]-RC[-1])">${row.refundAmount.toFixed(2)}</td>
         </tr>
       `).join("");
 
@@ -2678,10 +2695,10 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
       <body>
         <table>
           <tr>
-            <th colspan="20" style="font-size:15px;background:#dbeafe;">สรุปเงินเดือน เดือน ${escapeHtml(month)}</th>
+            <th colspan="22" style="font-size:15px;background:#dbeafe;">สรุปเงินเดือน เดือน ${escapeHtml(month)}</th>
           </tr>
           <tr>
-            <th colspan="20" class="section-title">ตารางเงินเดือนประจำ / เทียบยอดเข้า บช</th>
+            <th colspan="22" class="section-title">ตารางเงินเดือนประจำ / เทียบยอดเข้า บช</th>
           </tr>
           <tr>
             <th>พนักงาน</th>
@@ -2693,6 +2710,8 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
             <th>ค่าเวร</th>
             <th>สอนแทน (คาบ)</th>
             <th>ค่าสอนแทน</th>
+            <th>ขับรถ (วัน)</th>
+            <th>ค่าขับรถ</th>
             <th>ยอดก่อนหัก</th>
             <th>ปรับเพิ่ม</th>
             <th>หักลา (วัน)</th>
@@ -2847,6 +2866,11 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
               <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: "0.9rem" }}>
                 <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#475569", marginBottom: "0.65rem" }}>แก้ยอดคำนวณเฉพาะเดือนนี้</div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "0.75rem" }}>
+                  {DRIVER_EMPLOYEE_IDS.has(selectedEmployee.id) && (
+                    <Field label={`จำนวนวันขับรถ (${formatMoney(DRIVER_DAY_RATE)}/วัน)`}>
+                      <input type="number" min="0" step="1" value={selectedAdjustment.driver_days ?? 0} onChange={e => updatePayrollAdjustment(selectedEmployee.id, "driver_days", e.target.value)} placeholder="0" style={inputStyle} />
+                    </Field>
+                  )}
                   <Field label="แก้อัตราเงิน">
                     <input type="number" min="0" step="0.01" value={selectedAdjustment.override_rate ?? ""} onChange={e => updatePayrollAdjustment(selectedEmployee.id, "override_rate", e.target.value)} placeholder={String(selectedEmployeeConfig.daily_rate ?? 0)} style={inputStyle} />
                   </Field>
@@ -2931,6 +2955,12 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
                   <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "0.2rem" }}>สอนแทน</div>
                   <div style={{ fontWeight: 800, color: "#2563eb" }}>{selectedSummaryRow.substituteCount} คาบ / {formatMoney(selectedSummaryRow.substitutePay)}</div>
                 </div>
+                {DRIVER_EMPLOYEE_IDS.has(selectedSummaryRow.emp.id) && (
+                  <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.8rem" }}>
+                    <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "0.2rem" }}>ค่าขับรถ</div>
+                    <div style={{ fontWeight: 800, color: "#0891b2" }}>{selectedSummaryRow.driverDays} วัน / {formatMoney(selectedSummaryRow.driverPay)}</div>
+                  </div>
+                )}
                 <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "12px", padding: "0.8rem" }}>
                   <div style={{ fontSize: "0.75rem", color: "#9a3412", marginBottom: "0.2rem" }}>เงินเข้า บช</div>
                   <div style={{ fontWeight: 800, color: "#c2410c" }}>{formatMoney(selectedSummaryRow.bankDeposit)}</div>
@@ -3039,13 +3069,14 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
                   { label: selectedSummaryRow.baseSalaryLabel, detail: selectedSummaryRow.baseSalaryDetail, value: formatMoney(selectedSummaryRow.baseSalary), color: "#16a34a" },
                   { label: "ค่าเวร", detail: selectedDutySummary.length > 0 ? selectedDutySummary.map(dutyName => `${dutyName} ${selectedSummaryRow.dutyCounts[dutyName]} วัน`).join(", ") : "ไม่มีเวรที่จ่ายเพิ่ม", value: formatMoney(selectedSummaryRow.dutyPay), color: "#7c3aed" },
                   { label: "สอนแทน", detail: `${selectedSummaryRow.substituteCount} คาบ`, value: formatMoney(selectedSummaryRow.substitutePay), color: "#2563eb" },
+                  DRIVER_EMPLOYEE_IDS.has(selectedSummaryRow.emp.id) ? { label: "ค่าขับรถ", detail: `${selectedSummaryRow.driverDays} วัน x ${formatMoney(DRIVER_DAY_RATE)}`, value: formatMoney(selectedSummaryRow.driverPay), color: "#0891b2" } : null,
                   { label: "ปรับเพิ่ม", detail: selectedSummaryRow.adjustmentNote || "รายการพิเศษ", value: formatMoney(selectedSummaryRow.adjustmentAdd), color: "#16a34a" },
                   { label: "หักลา", detail: selectedSummaryRow.payType === "daily" ? `${selectedSummaryRow.leaveDeductDays.toFixed(1)} วัน (รายวันไม่หักซ้ำ)` : `${selectedSummaryRow.leaveDeductDays.toFixed(1)} วัน x ${formatMoney(MONTHLY_LEAVE_DEDUCT_RATE)}`, value: `- ${formatMoney(selectedSummaryRow.leaveDeductions)}`, color: "#dc2626" },
                   { label: "หักประจำ 3%", detail: selectedSummaryRow.payType === "monthly" ? `${formatMoney(selectedSummaryRow.bankDeposit)} x 3%` : "เฉพาะรายเดือน", value: `- ${formatMoney(selectedSummaryRow.monthlyRecurringDeduction)}`, color: "#dc2626" },
                   { label: "หักเพิ่ม", detail: selectedSummaryRow.adjustmentNote || "รายการพิเศษ", value: `- ${formatMoney(selectedSummaryRow.adjustmentDeduct)}`, color: "#dc2626" },
-                  { label: "เงินเดือนจริง", detail: selectedSummaryRow.payType === "daily" ? "ค่าจ้างรายวัน + เวรรถ + สอนแทน" : "เงินเดือนเต็ม - หักประจำ 3% - หักลา + เวรรถ + สอนแทน", value: formatMoney(selectedSummaryRow.realSalary), color: "#15803d" },
+                  { label: "เงินเดือนจริง", detail: selectedSummaryRow.payType === "daily" ? "ค่าจ้างรายวัน + เวรรถ + สอนแทน + ค่าขับรถ" : "เงินเดือนเต็ม - หักประจำ 3% - หักลา + เวรรถ + สอนแทน + ค่าขับรถ", value: formatMoney(selectedSummaryRow.realSalary), color: "#15803d" },
                   { label: "เงินเข้า บช", detail: "ยอดที่ครูได้รับเข้าบัญชีก่อน", value: formatMoney(selectedSummaryRow.bankDeposit), color: "#c2410c" },
-                ].map(item => (
+                ].filter(Boolean).map(item => (
                   <div key={item.label} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "0.75rem", alignItems: "center", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.85rem 1rem" }}>
                     <div>
                       <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "#0f172a" }}>{item.label}</div>

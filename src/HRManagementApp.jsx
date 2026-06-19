@@ -44,6 +44,14 @@ const DRIVER_EMPLOYEE_IDS = new Set([
   "1c21605d-3404-4424-a640-d2eb25361c19",
   "193538b9-9672-4c18-b29d-114dcc5befaf",
 ]);
+const FINANCE_INFO_FIELDS = [
+  { key: "phone", label: "ค่าโทรศัพท์" },
+  { key: "three_percent", label: "ค่า 3%" },
+  { key: "cooperative", label: "ค่าสหกรณ์" },
+  { key: "electric", label: "ค่าไฟ" },
+  { key: "water", label: "ค่าน้ำ" },
+  { key: "chpk", label: "ค่า ช.พ.ค." },
+];
 
 function haversineDistance(lat1, lng1, lat2, lng2) {
   const R = 6371000;
@@ -61,6 +69,12 @@ const todayISO = () => {
   const now = new Date();
   // ใช้ฟอร์แมต en-CA จะได้ YYYY-MM-DD
   return now.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
+};
+
+// วันที่เมื่อวานในเวลาไทย (Asia/Bangkok)
+const yesterdayISO = () => {
+  const yesterday = new Date(Date.now() - 86400000);
+  return yesterday.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
 };
 
 // คืนค่า start/end ของวันนี้ในเวลาไทยเป็น ISO timestamp
@@ -1164,7 +1178,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
       if (!active) return;
       const openRows = data || [];
       const todayRows = openRows.filter(row => getDateKey(row.check_in) === todayISO());
-      const staleRows = openRows.filter(row => getDateKey(row.check_in) !== todayISO());
+      const yesterdayRows = openRows.filter(row => getDateKey(row.check_in) === yesterdayISO());
       if (openRows.length === 0) {
         setOpenAttendance(null);
         setTodayOpenAttendances([]);
@@ -1173,7 +1187,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
       }
       setOpenAttendance(todayRows[0] || null);
       setTodayOpenAttendances(todayRows);
-      setStaleOpenAttendance(staleRows[0] || null);
+      setStaleOpenAttendance(yesterdayRows[0] || null);
     })();
     return () => { active = false; };
   }, [selectedEmp, mode]);
@@ -1281,7 +1295,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
         <div style={{ background: "#fee2e2", border: "3px solid #dc2626", borderRadius: "16px", padding: "1rem", marginBottom: "1.25rem", textAlign: "center", color: "#991b1b", boxShadow: "0 10px 28px rgba(220,38,38,0.18)" }}>
           <div style={{ fontSize: "1.15rem", fontWeight: 900, marginBottom: "0.3rem" }}>คุณไม่ได้ลงเวลากลับบ้าน</div>
           <div style={{ fontSize: "0.85rem", fontWeight: 700 }}>
-            เข้างานครั้งก่อน {fmtDate(staleOpenAttendance.check_in)} เวลา {fmtTime(staleOpenAttendance.check_in)} น. ระบบตัดเป็นวันใหม่แล้ว
+            เมื่อวาน {fmtDate(staleOpenAttendance.check_in)} เวลา {fmtTime(staleOpenAttendance.check_in)} น. ระบบตัดเป็นวันใหม่แล้ว
           </div>
         </div>
       )}
@@ -2197,7 +2211,7 @@ function ScheduleModal({ employees, onClose, onSave }) {
   );
 }
 
-function PayrollPage({ employees, attendance, leaves, settings }) {
+function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {} }) {
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [config, setConfig] = useState({ dutyRates: { ...DEFAULT_DUTY_RATES }, employeeConfigs: {} });
   const [settingsRows, setSettingsRows] = useState([]);
@@ -2643,6 +2657,12 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
 
     const monthlyRows = summaryRows.filter(row => row.payType !== "daily");
     const dailyRows = summaryRows.filter(row => row.payType === "daily");
+    const financeInfoRows = FINANCE_INFO_FIELDS.map(field => `
+      <tr>
+        <td>${escapeHtml(field.label)}</td>
+        <td class="money">${parseMoney(financeInfo[field.key]).toFixed(2)}</td>
+      </tr>
+    `).join("");
 
     const renderPayrollRows = (rows) => rows.length === 0
       ? `<tr><td colspan="19" style="text-align:center;color:#94a3b8;">ไม่มีข้อมูลในกลุ่มนี้</td></tr>`
@@ -2782,6 +2802,17 @@ function PayrollPage({ employees, attendance, leaves, settings }) {
             <th>เงินเดือนจริง</th>
           </tr>
           ${renderDailyRows(dailyRows)}
+        </table>
+
+        <table class="daily-table" style="width:45%;">
+          <tr>
+            <th colspan="2" class="section-title">สรุปค่าใช้จ่ายประกอบ (ไม่รวมในสูตรเงินเดือน)</th>
+          </tr>
+          <tr>
+            <th>รายการ</th>
+            <th>จำนวนเงิน</th>
+          </tr>
+          ${financeInfoRows}
         </table>
       </body>
       </html>
@@ -3344,6 +3375,10 @@ function FinancePortal({ employees, attendance, leaves, settings }) {
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [payrollRows, setPayrollRows] = useState([]);
   const [loadingPayroll, setLoadingPayroll] = useState(false);
+  const [financeInfo, setFinanceInfo] = useState(() => Object.fromEntries(FINANCE_INFO_FIELDS.map(field => [field.key, 0])));
+  const [financeInfoRowId, setFinanceInfoRowId] = useState(null);
+  const [savingFinanceInfo, setSavingFinanceInfo] = useState(false);
+  const [financeInfoSaved, setFinanceInfoSaved] = useState(false);
   const [expenseRows, setExpenseRows] = useState([
     { id: "electric", type: "expense", name: "ค่าไฟ", amount: 0 },
     { id: "water", type: "expense", name: "ค่าน้ำ", amount: 0 },
@@ -3362,7 +3397,21 @@ function FinancePortal({ employees, attendance, leaves, settings }) {
       .order("total", { ascending: false })
       .then(({ data }) => {
         if (active) {
-          setPayrollRows(data || []);
+          const rows = data || [];
+          const infoRow = rows.find(row => {
+            try { return JSON.parse(row.note || "{}").record_type === "finance_info"; } catch { return false; }
+          }) || null;
+          const emptyInfo = Object.fromEntries(FINANCE_INFO_FIELDS.map(field => [field.key, 0]));
+          let values = emptyInfo;
+          if (infoRow) {
+            try {
+              values = { ...emptyInfo, ...(JSON.parse(infoRow.note || "{}").values || {}) };
+            } catch {}
+          }
+          setFinanceInfo(values);
+          setFinanceInfoRowId(infoRow?.id || null);
+          setFinanceInfoSaved(false);
+          setPayrollRows(rows.filter(row => row.employee_id));
           setLoadingPayroll(false);
         }
       });
@@ -3382,6 +3431,40 @@ function FinancePortal({ employees, attendance, leaves, settings }) {
 
   const addFinanceRow = (type) => {
     setExpenseRows(rows => [...rows, { id: `${type}-${Date.now()}`, type, name: "", amount: 0 }]);
+  };
+
+  const saveFinanceInfo = async () => {
+    setSavingFinanceInfo(true);
+    setFinanceInfoSaved(false);
+    const payload = {
+      employee_id: null,
+      month,
+      work_days: 0,
+      absent_days: 0,
+      late_count: 0,
+      duty_count: 0,
+      substitute_count: 0,
+      overtime_hours: 0,
+      leave_deduct_days: 0,
+      base_salary: 0,
+      duty_pay: 0,
+      substitute_pay: 0,
+      overtime_pay: 0,
+      deductions: 0,
+      total: 0,
+      note: JSON.stringify({
+        record_type: "finance_info",
+        values: Object.fromEntries(FINANCE_INFO_FIELDS.map(field => [field.key, parseMoney(financeInfo[field.key])])),
+      }),
+    };
+    const result = financeInfoRowId
+      ? await supabase.from("payroll").update(payload).eq("id", financeInfoRowId).select("id").single()
+      : await supabase.from("payroll").insert(payload).select("id").single();
+    if (!result.error) {
+      setFinanceInfoRowId(result.data?.id || financeInfoRowId);
+      setFinanceInfoSaved(true);
+    }
+    setSavingFinanceInfo(false);
   };
 
   const tabs = [
@@ -3545,6 +3628,10 @@ export default function HRApp() {
   const [settings, setSettings] = useState({ work_start: "08:00", work_end: "16:30", late_grace_minutes: 0 });
   const [currentTime, setCurrentTime] = useState(new Date());
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("hr_sidebar_collapsed") === "true";
+  });
   const [isMobile, setIsMobile] = useState(typeof window !== "undefined" ? window.innerWidth < 768 : false);
 
   useEffect(() => {
@@ -3552,6 +3639,9 @@ export default function HRApp() {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+  useEffect(() => {
+    localStorage.setItem("hr_sidebar_collapsed", String(desktopSidebarCollapsed));
+  }, [desktopSidebarCollapsed]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -3686,11 +3776,14 @@ export default function HRApp() {
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap'); * { box-sizing: border-box; margin: 0; padding: 0; } @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
 
       <header style={{ background: "#fff", borderBottom: "1px solid #e2e8f0", height: 60, display: "flex", alignItems: "center", padding: "0 1rem", gap: "0.75rem", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 1px 8px rgba(0,0,0,0.06)" }}>
-        {isMobile && (
-          <button onClick={() => setSidebarOpen(true)} style={{ background: "#f1f5f9", border: "none", borderRadius: "10px", padding: "0.5rem", cursor: "pointer", color: "#475569", display: "flex" }}>
-            <Menu size={20} />
-          </button>
-        )}
+        <button
+          onClick={() => isMobile ? setSidebarOpen(open => !open) : setDesktopSidebarCollapsed(collapsed => !collapsed)}
+          title={isMobile ? "เปิดเมนู" : (desktopSidebarCollapsed ? "เปิดแถบเมนู" : "พับแถบเมนู")}
+          aria-label={isMobile ? "เปิดเมนู" : (desktopSidebarCollapsed ? "เปิดแถบเมนู" : "พับแถบเมนู")}
+          style={{ background: "#f1f5f9", border: "none", borderRadius: "10px", padding: "0.5rem", cursor: "pointer", color: "#475569", display: "flex", flexShrink: 0 }}
+        >
+          <Menu size={20} />
+        </button>
         <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", minWidth: 0, flex: isMobile ? 1 : "0 0 auto" }}>
           <div style={{ width: 34, height: 34, borderRadius: "10px", background: "linear-gradient(135deg, #2563eb, #1d4ed8)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Shield size={18} color="#fff" /></div>
           <div style={{ minWidth: 0 }}>
@@ -3722,20 +3815,21 @@ export default function HRApp() {
         )}
 
         <aside style={{
-          width: 260,
+          width: !isMobile && desktopSidebarCollapsed ? 0 : 260,
           background: "#fff",
-          borderRight: "1px solid #e2e8f0",
-          padding: "1rem 0.75rem",
+          borderRight: !isMobile && desktopSidebarCollapsed ? "none" : "1px solid #e2e8f0",
+          padding: !isMobile && desktopSidebarCollapsed ? "1rem 0" : "1rem 0.75rem",
           display: "flex",
           flexDirection: "column",
           gap: "0.35rem",
-          overflowY: "auto",
+          overflowY: !isMobile && desktopSidebarCollapsed ? "hidden" : "auto",
+          overflowX: "hidden",
           position: isMobile ? "fixed" : "sticky",
           top: 60,
           left: isMobile ? (sidebarOpen ? 0 : -280) : 0,
           height: "calc(100vh - 60px)",
           zIndex: 95,
-          transition: "left 0.3s ease",
+          transition: "left 0.3s ease, width 0.25s ease, padding 0.25s ease",
           boxShadow: isMobile && sidebarOpen ? "4px 0 20px rgba(0,0,0,0.15)" : "none"
         }}>
           <div style={{ background: "linear-gradient(135deg, #eff6ff, #f0f9ff)", border: "1px solid #bfdbfe", borderRadius: "12px", padding: "0.85rem", marginBottom: "0.75rem", textAlign: "center" }}>

@@ -1791,31 +1791,58 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
   });
 
   const exportCSV = () => {
+    const csvCell = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const csvRow = (values) => values.map(csvCell).join(",") + "\n";
+    const attendanceRows = attendance
+      .filter(a => inMonth(a.check_in) && (!empFilter || a.employee_id === empFilter))
+      .sort((a, b) => {
+        const nameCompare = (a.employees?.name || "").localeCompare(b.employees?.name || "", "th");
+        if (nameCompare !== 0) return nameCompare;
+        return new Date(a.check_in) - new Date(b.check_in);
+      });
     let csv = "";
     if (reportType === "summary") {
-      csv = "พนักงาน,แผนก,มาทำงาน(วัน),มาสาย(ครั้ง),เข้าก่อน(ครั้ง),กลับก่อน(ครั้ง),OT(ครั้ง),ลา(ชม.),ลา(วัน),ขาด,ออกนอก(ครั้ง),รวม(ชม.)\n";
+      csv = csvRow(["พนักงาน", "แผนก", "มาทำงาน(วัน)", "มาสาย(ครั้ง)", "เข้าก่อน(ครั้ง)", "กลับก่อน(ครั้ง)", "OT(ครั้ง)", "ลา(ชม.)", "ลา(วัน)", "ขาด", "ออกนอก(ครั้ง)", "รวม(ชม.)"]);
       summaryRows.forEach(r => {
-        csv += `${r.emp.name},${r.emp.department || ""},${r.attended},${r.lateCount},${r.earlyArrival},${r.earlyDeparture},${r.overtime},${r.leaveHours},${r.leaveDays},${r.absent},${r.outingCount},${r.totalHours}\n`;
+        csv += csvRow([r.emp.name, r.emp.department || "", r.attended, r.lateCount, r.earlyArrival, r.earlyDeparture, r.overtime, r.leaveHours, r.leaveDays, r.absent, r.outingCount, r.totalHours]);
       });
-    } else if (reportType === "attendance") {
-      csv = "พนักงาน,วันที่,เข้างาน,กลับบ้าน,รวม(ชม.),สถานะเข้า,สถานะกลับ\n";
-      attendance.filter(a => inMonth(a.check_in) && (!empFilter || a.employee_id === empFilter)).forEach(a => {
+      csv += "\n";
+      csv += csvRow(["รายละเอียดเวลาเข้า-ออก"]);
+      csv += csvRow(["พนักงาน", "แผนก", "วันที่", "เวลาเข้า", "เวลาออก", "รวม(ชม.)", "สถานะเข้า", "สถานะกลับ"]);
+      attendanceRows.forEach(a => {
         const li = checkLate(a.check_in, settings?.work_start);
         const ei = a.check_out ? checkEarly(a.check_out, settings?.work_end) : null;
         const hours = a.check_out ? ((new Date(a.check_out) - new Date(a.check_in)) / 3600000).toFixed(1) : "-";
-        csv += `${a.employees?.name || "-"},${fmtDate(a.check_in)},${fmtTime(a.check_in)},${a.check_out ? fmtTime(a.check_out) : "-"},${hours},${li?.late ? "สาย " + li.minutes + " น." : li?.early ? "เข้าก่อน " + li.minutes + " น." : "ตรงเวลา"},${ei ? (ei.early ? "ก่อน " + ei.minutes + " น." : ei.late ? "ช้า " + ei.minutes + " น." : "ตรงเวลา") : "-"}\n`;
+        csv += csvRow([
+          a.employees?.name || "-",
+          a.employees?.department || "",
+          fmtDate(a.check_in),
+          fmtTime(a.check_in),
+          a.check_out ? fmtTime(a.check_out) : "-",
+          hours,
+          li?.late ? "สาย " + li.minutes + " น." : li?.early ? "เข้าก่อน " + li.minutes + " น." : "ตรงเวลา",
+          ei ? (ei.early ? "ก่อน " + ei.minutes + " น." : ei.late ? "ช้า " + ei.minutes + " น." : "ตรงเวลา") : "-"
+        ]);
+      });
+    } else if (reportType === "attendance") {
+      csv = csvRow(["พนักงาน", "วันที่", "เข้างาน", "กลับบ้าน", "รวม(ชม.)", "สถานะเข้า", "สถานะกลับ"]);
+      attendanceRows.forEach(a => {
+        const li = checkLate(a.check_in, settings?.work_start);
+        const ei = a.check_out ? checkEarly(a.check_out, settings?.work_end) : null;
+        const hours = a.check_out ? ((new Date(a.check_out) - new Date(a.check_in)) / 3600000).toFixed(1) : "-";
+        csv += csvRow([a.employees?.name || "-", fmtDate(a.check_in), fmtTime(a.check_in), a.check_out ? fmtTime(a.check_out) : "-", hours, li?.late ? "สาย " + li.minutes + " น." : li?.early ? "เข้าก่อน " + li.minutes + " น." : "ตรงเวลา", ei ? (ei.early ? "ก่อน " + ei.minutes + " น." : ei.late ? "ช้า " + ei.minutes + " น." : "ตรงเวลา") : "-"]);
       });
     } else if (reportType === "late") {
-      csv = "พนักงาน,วันที่,เวลาเข้า,สาย(นาที)\n";
-      attendance.filter(a => inMonth(a.check_in) && (!empFilter || a.employee_id === empFilter)).forEach(a => {
+      csv = csvRow(["พนักงาน", "วันที่", "เวลาเข้า", "สาย(นาที)"]);
+      attendanceRows.forEach(a => {
         const li = checkLate(a.check_in, settings?.work_start);
-        if (li?.late) csv += `${a.employees?.name || "-"},${fmtDate(a.check_in)},${fmtTime(a.check_in)},${li.minutes}\n`;
+        if (li?.late) csv += csvRow([a.employees?.name || "-", fmtDate(a.check_in), fmtTime(a.check_in), li.minutes]);
       });
     } else if (reportType === "earlyLeave") {
-      csv = "พนักงาน,วันที่,เวลากลับ,กลับก่อน(นาที)\n";
-      attendance.filter(a => inMonth(a.check_in) && a.check_out && (!empFilter || a.employee_id === empFilter)).forEach(a => {
+      csv = csvRow(["พนักงาน", "วันที่", "เวลากลับ", "กลับก่อน(นาที)"]);
+      attendanceRows.filter(a => a.check_out).forEach(a => {
         const ei = checkEarly(a.check_out, settings?.work_end);
-        if (ei?.early) csv += `${a.employees?.name || "-"},${fmtDate(a.check_in)},${fmtTime(a.check_out)},${ei.minutes}\n`;
+        if (ei?.early) csv += csvRow([a.employees?.name || "-", fmtDate(a.check_in), fmtTime(a.check_out), ei.minutes]);
       });
     } else if (reportType === "leave") {
       csv = "พนักงาน,ประเภท,ระยะเวลา,วันที่เริ่ม,ถึง,ชั่วโมง,เหตุผล,สถานะ\n";

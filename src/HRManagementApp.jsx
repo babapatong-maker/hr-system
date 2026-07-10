@@ -1775,6 +1775,13 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
 
   const inMonth = (dateStr) => { if (!dateStr) return false; const d = new Date(dateStr); return d.getMonth() === monthStart.getMonth() && d.getFullYear() === monthStart.getFullYear(); };
   const empList = empFilter ? employees.filter(e => e.id === empFilter) : employees;
+  const monthDates = Array.from({ length: monthEnd.getDate() }, (_, i) => {
+    const date = new Date(monthStart.getFullYear(), monthStart.getMonth(), i + 1);
+    return {
+      key: date.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }),
+      label: date.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" }),
+    };
+  });
 
   const summaryRows = empList.map(emp => {
     const attDays = attendance.filter(a => a.employee_id === emp.id && inMonth(a.check_in));
@@ -1789,6 +1796,33 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
     const absent = Math.max(0, workDays - attended - leaveHours / 8);
     return { emp, attended, absent: absent.toFixed(1), lateCount, earlyArrival, earlyDeparture, overtime, leaveHours, leaveDays: (leaveHours / 8).toFixed(1), outingCount, totalHours: totalHours.toFixed(1) };
   });
+  const dailySummaryRows = monthDates.flatMap(date => empList.map(emp => {
+    const rows = attendance
+      .filter(a => a.employee_id === emp.id && getDateKey(a.check_in) === date.key)
+      .sort((a, b) => new Date(a.check_in) - new Date(b.check_in));
+    const firstRow = rows[0];
+    const lastRowWithCheckOut = [...rows].reverse().find(row => row.check_out);
+    const lateInfo = firstRow ? checkLate(firstRow.check_in, settings?.work_start) : null;
+    const earlyInfo = lastRowWithCheckOut ? checkEarly(lastRowWithCheckOut.check_out, settings?.work_end) : null;
+    const lateMinutes = lateInfo?.late ? lateInfo.minutes : 0;
+    const earlyMinutes = earlyInfo?.early ? earlyInfo.minutes : 0;
+    const totalHours = rows.reduce((sum, row) => sum + (row.check_out ? (new Date(row.check_out) - new Date(row.check_in)) / 3600000 : 0), 0);
+    const checkInText = rows.length ? rows.map(row => fmtTime(row.check_in)).join(" / ") : "-";
+    const checkOutText = rows.length ? rows.map(row => row.check_out ? fmtTime(row.check_out) : "ยังไม่กลับ").join(" / ") : "-";
+    const hasOpenRow = rows.some(row => !row.check_out);
+    return {
+      date,
+      emp,
+      checkInText,
+      checkOutText,
+      totalHours: rows.length ? totalHours.toFixed(1) : "-",
+      status: rows.length ? (hasOpenRow ? "ยังไม่ลงเวลากลับ" : "ลงเวลาครบ") : "ไม่มีข้อมูลลงเวลา",
+      lateHours: lateMinutes ? Math.floor(lateMinutes / 60) : "",
+      lateMinutes: lateMinutes ? lateMinutes % 60 : "",
+      earlyHours: earlyMinutes ? Math.floor(earlyMinutes / 60) : "",
+      earlyMinutes: earlyMinutes ? earlyMinutes % 60 : "",
+    };
+  }));
 
   const exportCSV = () => {
     const csvCell = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
@@ -1832,6 +1866,17 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
         const hours = a.check_out ? ((new Date(a.check_out) - new Date(a.check_in)) / 3600000).toFixed(1) : "-";
         csv += csvRow([a.employees?.name || "-", fmtDate(a.check_in), fmtTime(a.check_in), a.check_out ? fmtTime(a.check_out) : "-", hours, li?.late ? "สาย " + li.minutes + " น." : li?.early ? "เข้าก่อน " + li.minutes + " น." : "ตรงเวลา", ei ? (ei.early ? "ก่อน " + ei.minutes + " น." : ei.late ? "ช้า " + ei.minutes + " น." : "ตรงเวลา") : "-"]);
       });
+    } else if (reportType === "dailySummary") {
+      csv = csvRow(["เวลาเริ่มงาน", settings?.work_start?.slice(0, 5) || "-", "", "เวลาเลิกงาน", settings?.work_end?.slice(0, 5) || "-"]);
+      csv += "\n";
+      monthDates.forEach(date => {
+        csv += csvRow([date.label]);
+        csv += csvRow(["ลำดับ", "ชื่อ - นามสกุล", "ลงเวลาเข้า", "ลงเวลาออก", "มาสาย ช.ม.", "มาสาย นาที", "เลิกก่อน ช.ม.", "เลิกก่อน นาที"]);
+        dailySummaryRows.filter(row => row.date.key === date.key).forEach((row, index) => {
+          csv += csvRow([index + 1, row.emp.name, row.checkInText, row.checkOutText, row.lateHours, row.lateMinutes, row.earlyHours, row.earlyMinutes]);
+        });
+        csv += "\n";
+      });
     } else if (reportType === "late") {
       csv = csvRow(["พนักงาน", "วันที่", "เวลาเข้า", "สาย(นาที)"]);
       attendanceRows.forEach(a => {
@@ -1866,6 +1911,7 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
   const reportTabs = [
     { key: "summary", label: "สรุปภาพรวม", icon: BarChart3, color: "#2563eb" },
     { key: "attendance", label: "การเข้า-ออก", icon: Clock, color: "#059669" },
+    { key: "dailySummary", label: "รายวันครบคน", icon: Calendar, color: "#0f766e" },
     { key: "late", label: "มาสาย", icon: AlertCircle, color: "#dc2626" },
     { key: "earlyLeave", label: "กลับก่อน", icon: LogOut, color: "#f59e0b" },
     { key: "leave", label: "การลา", icon: Umbrella, color: "#7c3aed" },
@@ -2003,6 +2049,56 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
                   })}
                 </tbody>
               </table>
+            )}
+
+            {reportType === "dailySummary" && (
+              <div style={{ minWidth: "760px", padding: "1rem" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "120px 100px", justifyContent: "center", gap: "0.25rem 1rem", color: "#0f172a", fontSize: "0.9rem", fontWeight: 800, marginBottom: "1rem" }}>
+                  <div style={{ textAlign: "right" }}>เวลาเริ่มงาน</div>
+                  <div>{settings?.work_start?.slice(0, 5) || "-"} น.</div>
+                  <div style={{ textAlign: "right" }}>เวลาเลิกงาน</div>
+                  <div>{settings?.work_end?.slice(0, 5) || "-"} น.</div>
+                </div>
+                {monthDates.map(date => {
+                  const rows = dailySummaryRows.filter(row => row.date.key === date.key);
+                  return (
+                    <div key={date.key} style={{ marginBottom: "1.25rem" }}>
+                      <div style={{ background: "#0f766e", color: "#fff", fontWeight: 900, padding: "0.45rem 0.75rem", border: "1px solid #0f766e", borderBottom: "none" }}>{date.label}</div>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem", border: "2px solid #0f172a" }}>
+                        <thead>
+                          <tr>
+                            <th rowSpan={2} style={{ background: "#dbeafe", border: "1px solid #0f172a", padding: "0.5rem", textAlign: "center", width: 64 }}>ลำดับ</th>
+                            <th rowSpan={2} style={{ background: "#dbeafe", border: "1px solid #0f172a", padding: "0.5rem", textAlign: "center", minWidth: 220 }}>ชื่อ - นามสกุล</th>
+                            <th rowSpan={2} style={{ background: "#dbeafe", border: "1px solid #0f172a", padding: "0.5rem", textAlign: "center", width: 110 }}>ลงเวลาเข้า</th>
+                            <th rowSpan={2} style={{ background: "#dbeafe", border: "1px solid #0f172a", padding: "0.5rem", textAlign: "center", width: 110 }}>ลงเวลาออก</th>
+                            <th colSpan={2} style={{ background: "#fed7aa", border: "1px solid #0f172a", padding: "0.5rem", textAlign: "center" }}>มาสาย</th>
+                            <th colSpan={2} style={{ background: "#fed7aa", border: "1px solid #0f172a", padding: "0.5rem", textAlign: "center" }}>เลิกก่อน</th>
+                          </tr>
+                          <tr>
+                            {["ช.ม.", "นาที", "ช.ม.", "นาที"].map((h, index) => (
+                              <th key={`${h}-${index}`} style={{ background: "#fed7aa", border: "1px solid #0f172a", padding: "0.45rem", textAlign: "center", width: 78 }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((row, index) => (
+                            <tr key={`${date.key}-${row.emp.id}`} style={{ background: index % 2 === 0 ? "#fff" : "#f8fafc" }}>
+                              <td style={{ border: "1px solid #0f172a", padding: "0.45rem", textAlign: "center", fontWeight: 800 }}>{index + 1}</td>
+                              <td style={{ border: "1px solid #0f172a", padding: "0.45rem 0.6rem", fontWeight: 700, color: "#0f172a" }}>{row.emp.name}</td>
+                              <td style={{ border: "1px solid #0f172a", padding: "0.45rem", textAlign: "center", fontWeight: 800, color: row.checkInText === "-" ? "#94a3b8" : "#0f172a" }}>{row.checkInText === "-" ? "-" : `${row.checkInText} น.`}</td>
+                              <td style={{ border: "1px solid #0f172a", padding: "0.45rem", textAlign: "center", fontWeight: 800, color: row.checkOutText.includes("ยังไม่กลับ") ? "#dc2626" : "#0f172a" }}>{row.checkOutText === "-" ? "-" : `${row.checkOutText} น.`}</td>
+                              <td style={{ border: "1px solid #0f172a", padding: "0.45rem", textAlign: "center", color: row.lateHours !== "" ? "#dc2626" : "#0f172a", fontWeight: row.lateHours !== "" ? 900 : 500 }}>{row.lateHours}</td>
+                              <td style={{ border: "1px solid #0f172a", padding: "0.45rem", textAlign: "center", color: row.lateMinutes !== "" ? "#dc2626" : "#0f172a", fontWeight: row.lateMinutes !== "" ? 900 : 500 }}>{row.lateMinutes}</td>
+                              <td style={{ border: "1px solid #0f172a", padding: "0.45rem", textAlign: "center", color: row.earlyHours !== "" ? "#dc2626" : "#0f172a", fontWeight: row.earlyHours !== "" ? 900 : 500 }}>{row.earlyHours}</td>
+                              <td style={{ border: "1px solid #0f172a", padding: "0.45rem", textAlign: "center", color: row.earlyMinutes !== "" ? "#dc2626" : "#0f172a", fontWeight: row.earlyMinutes !== "" ? 900 : 500 }}>{row.earlyMinutes}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })}
+              </div>
             )}
 
             {reportType === "late" && (

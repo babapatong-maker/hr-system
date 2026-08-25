@@ -1458,9 +1458,6 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
                   <input type="date" value={trainingEndDate} min={trainingStartDate || undefined} onChange={e => setTrainingEndDate(e.target.value)} style={inputStyle} />
                 </Field>
               </div>
-              <div style={{ fontSize: "0.74rem", color: "#64748b", lineHeight: 1.5 }}>
-                ระบบจะนับช่วงอบรมนี้เป็นวันทำงานตอนคิดเงินเดือน และยังคิดค่าเวรวันนี้ตามช่องเวรด้านบนถ้าเลือกเวรที่มีเงิน
-              </div>
             </div>
           )}
         </div>

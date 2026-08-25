@@ -24,6 +24,10 @@ const DEFAULT_DUTY_RATES = {
   "เวรหน้าประตู": 0,
 };
 const PAID_DUTY_OPTIONS = ["เวรรถ"];
+const WORK_ACTIVITY_OPTIONS = [
+  { value: "work", label: "ทำงานที่โรงเรียน" },
+  { value: "training", label: "ไปอบรม" },
+];
 const FREE_PERIOD_VALUE = "__FREE_PERIOD__";
 const DUTY_SETTING_PREFIX = "__DUTY__:";
 const LEAVE_TEACHER_LEVELS = ["อนุบาล", "ประถม", "มัธยม"];
@@ -270,6 +274,44 @@ function getDateKey(value) {
 function inMonthValue(value, month) {
   if (!value) return false;
   return getDateKey(value).startsWith(month);
+}
+
+function getLocalDateFromISO(dateKey) {
+  if (!dateKey) return null;
+  const [year, month, day] = String(dateKey).split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+}
+
+function toISODateKey(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getAttendanceWorkDateKeys(row, month = "") {
+  const keys = new Set();
+  if (row?.check_in) keys.add(getDateKey(row.check_in));
+
+  if (row?.work_activity === "training") {
+    const startKey = row.training_start_date || (row.check_in ? getDateKey(row.check_in) : "");
+    const endKey = row.training_end_date || startKey;
+    const startDate = getLocalDateFromISO(startKey);
+    const endDate = getLocalDateFromISO(endKey);
+    if (startDate && endDate && startDate <= endDate) {
+      const cursor = new Date(startDate);
+      let guard = 0;
+      while (cursor <= endDate && guard < 370) {
+        keys.add(toISODateKey(cursor));
+        cursor.setDate(cursor.getDate() + 1);
+        guard += 1;
+      }
+    }
+  }
+
+  return Array.from(keys).filter(key => !month || key.startsWith(month));
 }
 
 function loadLegacyPayrollConfig() {
@@ -1206,6 +1248,11 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
   const [todayOpenAttendances, setTodayOpenAttendances] = useState([]);
   const [staleOpenAttendance, setStaleOpenAttendance] = useState(null);
   const [duty, setDuty] = useState("ไม่มีเวร");
+  const [workActivity, setWorkActivity] = useState("work");
+  const [trainingLocation, setTrainingLocation] = useState("");
+  const [trainingStartDate, setTrainingStartDate] = useState(todayISO());
+  const [trainingEndDate, setTrainingEndDate] = useState(todayISO());
+  const [formError, setFormError] = useState("");
   const [savingAttendance, setSavingAttendance] = useState(false);
 
   useEffect(() => {
@@ -1296,15 +1343,44 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
 
   const handleSubmit = async () => {
     if (!isInZone || done || !selectedEmp || savingAttendance) return;
+    if (mode === "in" && workActivity === "training") {
+      if (!trainingLocation.trim()) {
+        setFormError("กรุณากรอกสถานที่อบรม");
+        return;
+      }
+      if (!trainingStartDate || !trainingEndDate) {
+        setFormError("กรุณาเลือกวันที่อบรมให้ครบ");
+        return;
+      }
+      if (trainingEndDate < trainingStartDate) {
+        setFormError("วันที่สิ้นสุดอบรมต้องไม่ก่อนวันที่เริ่มอบรม");
+        return;
+      }
+    }
+    setFormError("");
     setSavingAttendance(true);
     if (mode === "in") {
       if (openAttendance || todayOpenAttendances.length > 0) {
         setSavingAttendance(false);
         return;
       }
-      const { error } = await supabase.from("attendance").insert({ employee_id: selectedEmp, latitude: coords?.lat, longitude: coords?.lng, distance_from_school: distance, duty: duty });
+      const attendancePayload = {
+        employee_id: selectedEmp,
+        latitude: coords?.lat,
+        longitude: coords?.lng,
+        distance_from_school: distance,
+        duty,
+        work_activity: workActivity,
+        training_location: workActivity === "training" ? trainingLocation.trim() : null,
+        training_start_date: workActivity === "training" ? trainingStartDate : null,
+        training_end_date: workActivity === "training" ? trainingEndDate : null,
+      };
+      const { error } = await supabase.from("attendance").insert(attendancePayload);
       if (!error) finish();
-      else setSavingAttendance(false);
+      else {
+        setFormError(error.message);
+        setSavingAttendance(false);
+      }
     } else {
       const openIds = todayOpenAttendances.length > 0 ? todayOpenAttendances.map(row => row.id) : (openAttendance ? [openAttendance.id] : []);
       if (openIds.length === 0) {
@@ -1354,11 +1430,39 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
       </div>
 
       {mode === "in" && (
-        <div style={{ marginBottom: "1.25rem" }}>
-          <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "#475569", display: "block", marginBottom: "0.35rem" }}>🚦 เวรวันนี้</label>
-          <select value={duty} onChange={e => setDuty(e.target.value)} style={selectStyle}>
-            {DUTY_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
-          </select>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem", marginBottom: "1.25rem" }}>
+          {formError && <ErrorBox>{formError}</ErrorBox>}
+          <Field label="🚦 เวรวันนี้">
+            <select value={duty} onChange={e => setDuty(e.target.value)} style={selectStyle}>
+              {DUTY_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </Field>
+          <Field label="📌 วันนี้ทำงานแบบไหน">
+            <select value={workActivity} onChange={e => setWorkActivity(e.target.value)} style={selectStyle}>
+              {WORK_ACTIVITY_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </Field>
+          {workActivity === "training" && (
+            <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "14px", padding: "0.85rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              <Field label="สถานที่อบรม *">
+                <InputWithIcon icon={MapPin} value={trainingLocation} onChange={setTrainingLocation} placeholder="เช่น สพป., โรงแรม..., อบรมออนไลน์" />
+              </Field>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                <Field label="ตั้งแต่วันที่ *">
+                  <input type="date" value={trainingStartDate} onChange={e => {
+                    setTrainingStartDate(e.target.value);
+                    if (!trainingEndDate || trainingEndDate < e.target.value) setTrainingEndDate(e.target.value);
+                  }} style={inputStyle} />
+                </Field>
+                <Field label="ถึงวันที่ *">
+                  <input type="date" value={trainingEndDate} min={trainingStartDate || undefined} onChange={e => setTrainingEndDate(e.target.value)} style={inputStyle} />
+                </Field>
+              </div>
+              <div style={{ fontSize: "0.74rem", color: "#64748b", lineHeight: 1.5 }}>
+                ระบบจะนับช่วงอบรมนี้เป็นวันทำงานตอนคิดเงินเดือน และยังคิดค่าเวรวันนี้ตามช่องเวรด้านบนถ้าเลือกเวรที่มีเงิน
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1615,18 +1719,19 @@ function AttendancePage({ employees, activityLog, currentUser, settings, onRefre
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
             <thead>
               <tr style={{ borderBottom: "2px solid #f1f5f9" }}>
-                {["พนักงาน", "วันที่", "เข้างาน", "กลับบ้าน", "รวม", "สถานะ"].map(h => (
+                {["พนักงาน", "วันที่", "งาน/เวร", "เข้างาน", "กลับบ้าน", "รวม", "สถานะ"].map(h => (
                   <th key={h} style={{ padding: "0.5rem 0.75rem", textAlign: "left", color: "#94a3b8", fontWeight: 600, fontSize: "0.75rem", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={6} style={{ padding: "2rem", textAlign: "center", color: "#94a3b8" }}>ไม่มีข้อมูล</td></tr>
+                <tr><td colSpan={7} style={{ padding: "2rem", textAlign: "center", color: "#94a3b8" }}>ไม่มีข้อมูล</td></tr>
               ) : filtered.map((row, i) => {
                 const hours = row.check_out ? ((new Date(row.check_out) - new Date(row.check_in)) / 3600000).toFixed(1) : null;
                 const lateInfo = checkLate(row.check_in, settings?.work_start, settings?.late_grace_minutes);
                 const earlyInfo = row.check_out ? checkEarly(row.check_out, settings?.work_end) : null;
+                const isTraining = row.work_activity === "training";
                 return (
                   <tr key={row.id} style={{ borderBottom: "1px solid #f8fafc", background: i % 2 === 0 ? "#fff" : "#fafafa" }}>
                     <td style={{ padding: "0.65rem 0.75rem" }}>
@@ -1636,6 +1741,18 @@ function AttendancePage({ employees, activityLog, currentUser, settings, onRefre
                       </div>
                     </td>
                     <td style={{ padding: "0.65rem 0.75rem", color: "#475569" }}>{fmtDate(row.check_in)}</td>
+                    <td style={{ padding: "0.65rem 0.75rem" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", minWidth: 150 }}>
+                        <span style={{ background: isTraining ? "#dbeafe" : "#f1f5f9", color: isTraining ? "#1d4ed8" : "#475569", fontSize: "0.7rem", fontWeight: 800, padding: "0.2rem 0.5rem", borderRadius: "20px", width: "fit-content" }}>
+                          {isTraining ? `อบรม: ${row.training_location || "-"}` : (row.duty || "ไม่มีเวร")}
+                        </span>
+                        {isTraining && (
+                          <span style={{ color: "#64748b", fontSize: "0.68rem" }}>
+                            {row.training_start_date || "-"} ถึง {row.training_end_date || row.training_start_date || "-"}
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td style={{ padding: "0.65rem 0.75rem" }}><span style={{ background: "#dcfce7", color: "#16a34a", fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>{fmtTime(row.check_in)}</span></td>
                     <td style={{ padding: "0.65rem 0.75rem" }}>
                       {row.check_out ? <span style={{ background: "#fef3c7", color: "#d97706", fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>{fmtTime(row.check_out)}</span> : <span style={{ color: "#94a3b8", fontSize: "0.78rem" }}>ยังไม่กลับ</span>}
@@ -2514,10 +2631,16 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
 
     Promise.all([
       supabase.from("attendance").select("*").gte("check_in", monthStartTime).lt("check_in", monthEndTime),
+      supabase
+        .from("attendance")
+        .select("*")
+        .eq("work_activity", "training")
+        .lte("training_start_date", monthLastDate)
+        .gte("training_end_date", monthStartDate),
       supabase.from("leaves").select("*").eq("status", "approved").lte("start_date", monthLastDate).gte("end_date", monthStartDate),
-    ]).then(([attendanceResult, leaveResult]) => {
+    ]).then(([attendanceResult, trainingAttendanceResult, leaveResult]) => {
       if (!active) return;
-      const errors = [attendanceResult.error, leaveResult.error].filter(Boolean);
+      const errors = [attendanceResult.error, trainingAttendanceResult.error, leaveResult.error].filter(Boolean);
       if (errors.length > 0) {
         setPayrollAttendance([]);
         setPayrollLeaves([]);
@@ -2525,7 +2648,11 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
         setLoadingMonthData(false);
         return;
       }
-      setPayrollAttendance(attendanceResult.data || []);
+      const attendanceMap = new Map();
+      [...(attendanceResult.data || []), ...(trainingAttendanceResult.data || [])].forEach(row => {
+        if (row?.id) attendanceMap.set(row.id, row);
+      });
+      setPayrollAttendance(Array.from(attendanceMap.values()));
       setPayrollLeaves(leaveResult.data || []);
       setLoadingMonthData(false);
     });
@@ -2549,7 +2676,8 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
   const selectedAdjustment = payrollAdjustments[selectedEmployeeId] || { adjustment_add: 0, adjustment_deduct: 0, adjustment_note: "" };
   const allRows = employees.map(emp => {
     const employeeAttendance = monthAttendance.filter(row => row.employee_id === emp.id);
-    const attendanceDays = new Set(employeeAttendance.map(row => getDateKey(row.check_in))).size;
+    const attendanceDateKeys = new Set(employeeAttendance.flatMap(row => getAttendanceWorkDateKeys(row, month)));
+    const attendanceDays = attendanceDateKeys.size;
     const dutyCounts = DUTY_OPTIONS.reduce((acc, dutyName) => ({ ...acc, [dutyName]: 0 }), {});
     const lateCount = employeeAttendance.filter(row => checkLate(row.check_in, settings?.work_start, settings?.late_grace_minutes)?.late).length;
     const employeeLeaves = monthLeaves.filter(row => row.employee_id === emp.id);

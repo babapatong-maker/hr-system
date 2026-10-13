@@ -2523,6 +2523,9 @@ function emptyWeekPeriod(teachDate, periodNo) {
     homework_what: "",
     homework_page: "",
     homework_file: null,
+    worksheet_file: null,
+    youtube_links: [],
+    post_note: emptyPostNote(),
   };
 }
 
@@ -2555,6 +2558,9 @@ function normalizeSupervisionPeriod(period, weekStart) {
     homework_what: source.homework_what || source.homework_detail || "",
     homework_page: source.homework_page || "",
     homework_file: source.homework_file?.dataUrl ? source.homework_file : null,
+    worksheet_file: source.worksheet_file?.url || source.worksheet_file?.dataUrl ? source.worksheet_file : null,
+    youtube_links: cleanYoutubeLinks(source.youtube_links),
+    post_note: cleanPostNote(source.post_note),
   };
 }
 
@@ -2972,6 +2978,249 @@ function LinkLines({ value }) {
   );
 }
 
+
+// ─── LESSON PLAN EXTRAS: ใบงาน PDF / YouTube / บันทึกหลังสอน ─────────────────
+const LESSON_FILE_BUCKET = "lesson-files";
+const POST_NOTE_DOMAINS = [
+  { key: "k", label: "ด้านความรู้ (K)" },
+  { key: "p", label: "ด้านทักษะกระบวนการ (P)" },
+  { key: "a", label: "ด้านคุณลักษณะอันพึงประสงค์ (A)" },
+];
+const POST_NOTE_TEXTS = [
+  { key: "problems", label: "2. ปัญหา/อุปสรรค" },
+  { key: "solutions", label: "3. แนวทางแก้ไข/พัฒนา" },
+  { key: "suggestions", label: "4. ข้อเสนอแนะ" },
+];
+
+function emptyPostNote() {
+  return {
+    total: "",
+    k: { pass: "", fail: "" },
+    p: { pass: "", fail: "" },
+    a: { pass: "", fail: "" },
+    problems: "",
+    solutions: "",
+    suggestions: "",
+    teacher_sign: "",
+    teacher_date: "",
+    admin_comment: "",
+    admin_sign: "",
+    admin_date: "",
+  };
+}
+
+function countText(value) {
+  const digits = String(value ?? "").replace(/[^\d]/g, "").slice(0, 4);
+  return digits;
+}
+
+function cleanPostNote(raw) {
+  const base = emptyPostNote();
+  if (!raw || typeof raw !== "object") return base;
+  const text = (value, max = 2000) => String(value || "").slice(0, max);
+  const out = { ...base, total: countText(raw.total) };
+  POST_NOTE_DOMAINS.forEach(({ key }) => {
+    out[key] = { pass: countText(raw[key]?.pass), fail: countText(raw[key]?.fail) };
+  });
+  ["problems", "solutions", "suggestions", "admin_comment"].forEach(key => { out[key] = text(raw[key]); });
+  ["teacher_sign", "admin_sign"].forEach(key => { out[key] = text(raw[key], 120); });
+  ["teacher_date", "admin_date"].forEach(key => { out[key] = /^\d{4}-\d{2}-\d{2}$/.test(raw[key] || "") ? raw[key] : ""; });
+  return out;
+}
+
+function postNoteHasData(note) {
+  if (!note) return false;
+  return !!(note.total || POST_NOTE_DOMAINS.some(({ key }) => note[key]?.pass || note[key]?.fail)
+    || ["problems", "solutions", "suggestions", "teacher_sign", "admin_comment"].some(key => String(note[key] || "").trim()));
+}
+
+function postNotePercent(count, total) {
+  const n = Number(count);
+  const t = Number(total);
+  if (!t || !String(count ?? "").trim()) return "";
+  return `${((n / t) * 100).toFixed(2)}%`;
+}
+
+function cleanYoutubeLinks(list) {
+  const source = Array.isArray(list) ? list : String(list || "").split(/\n/);
+  return source.map(item => String(item || "").trim().slice(0, 300)).filter(Boolean).slice(0, 10);
+}
+
+function youtubeId(url) {
+  const text = String(url || "").trim();
+  const match = text.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/|v\/))([A-Za-z0-9_-]{11})/i);
+  return match ? match[1] : "";
+}
+
+function lessonFileHref(file) {
+  return file?.url || file?.dataUrl || "";
+}
+
+async function uploadLessonFile(file, employeeId) {
+  const safeName = String(file.name || "worksheet.pdf").replace(/[^A-Za-z0-9._-]+/g, "_").slice(-80);
+  const objectPath = `${employeeId || "unknown"}/${todayISO()}/${newSupervisionId()}-${safeName}`;
+  try {
+    const { error } = await supabase.storage
+      .from(LESSON_FILE_BUCKET)
+      .upload(objectPath, file, { contentType: file.type || "application/pdf", upsert: false });
+    if (!error) {
+      const { data } = supabase.storage.from(LESSON_FILE_BUCKET).getPublicUrl(objectPath);
+      if (data?.publicUrl) return { name: file.name, type: file.type || "application/pdf", url: data.publicUrl, path: objectPath, storage: "supabase" };
+    }
+  } catch {
+    // Storage ยังไม่ได้ตั้ง bucket → เก็บไฟล์ในแผนแบบเดิม (dataUrl)
+  }
+  if (file.size > SUPERVISION_FILE_LIMIT) throw new Error("ยังไม่ได้ตั้ง Storage bucket \"lesson-files\" ใน Supabase จึงเก็บไฟล์ได้ไม่เกิน 2.5 MB");
+  const dataUrl = await readFileAsDataUrl(file);
+  return { name: file.name, type: file.type || "application/pdf", dataUrl, storage: "inline" };
+}
+
+function localPlanKey(employeeId, weekStart) {
+  return `hr_lessonplan_${employeeId}_${weekStart}`;
+}
+
+function saveLocalPlan(employeeId, weekStart, plan) {
+  try { localStorage.setItem(localPlanKey(employeeId, weekStart), JSON.stringify({ ...plan, saved_local_at: new Date().toISOString() })); return true; } catch { return false; }
+}
+
+function loadLocalPlan(employeeId, weekStart) {
+  try {
+    const raw = localStorage.getItem(localPlanKey(employeeId, weekStart));
+    return raw ? parseSupervisionPlan(raw, weekStart) : null;
+  } catch { return null; }
+}
+
+function WorksheetLink({ file }) {
+  const href = lessonFileHref(file);
+  if (!href) return <div style={{ color: "#94a3b8", fontSize: "0.9rem" }}>ยังไม่ได้แนบใบงาน PDF</div>;
+  return (
+    <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+      <FileText size={18} color="#dc2626" />
+      <span style={{ fontWeight: 700, color: "#0f172a", wordBreak: "break-word" }}>{file.name || "ใบงาน.pdf"}</span>
+      <a href={href} target="_blank" rel="noreferrer" style={{ ...btnSecondary, flex: "none", textDecoration: "none" }}>เปิดดู</a>
+      <a href={href} download={file.name || "ใบงาน.pdf"} style={{ ...btnSecondary, flex: "none", textDecoration: "none" }}>ดาวน์โหลด</a>
+      {file.storage === "inline" && <span style={{ fontSize: "0.75rem", color: "#b45309" }}>(เก็บในแผน ยังไม่ได้ใช้ Storage)</span>}
+    </div>
+  );
+}
+
+function YoutubePreview({ url }) {
+  const [play, setPlay] = useState(false);
+  const id = youtubeId(url);
+  if (!id) return <a href={url} target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", wordBreak: "break-all" }}>{url}</a>;
+  return (
+    <div style={{ display: "grid", gap: "0.35rem", minWidth: 0 }}>
+      {play ? (
+        <iframe title={`youtube-${id}`} src={`https://www.youtube.com/embed/${id}`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture" allowFullScreen style={{ width: "100%", aspectRatio: "16 / 9", border: "none", borderRadius: "12px", background: "#000" }} />
+      ) : (
+        <button type="button" onClick={() => setPlay(true)} style={{ position: "relative", padding: 0, border: "none", background: "transparent", cursor: "pointer", borderRadius: "12px", overflow: "hidden" }}>
+          <img src={`https://img.youtube.com/vi/${id}/hqdefault.jpg`} alt="ตัวอย่างวิดีโอ YouTube" style={{ width: "100%", display: "block", aspectRatio: "16 / 9", objectFit: "cover" }} />
+          <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2.4rem", color: "#fff", textShadow: "0 2px 8px rgba(0,0,0,0.6)" }}>▶</span>
+        </button>
+      )}
+      <a href={url} target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", fontSize: "0.8rem", wordBreak: "break-all" }}>{url}</a>
+    </div>
+  );
+}
+
+function YoutubeGrid({ links }) {
+  const list = cleanYoutubeLinks(links);
+  if (list.length === 0) return <div style={{ color: "#94a3b8" }}>ไม่มีลิงก์ YouTube</div>;
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 220px), 1fr))", gap: "0.75rem" }}>
+      {list.map((url, index) => <YoutubePreview key={`${url}-${index}`} url={url} />)}
+    </div>
+  );
+}
+
+function YoutubeLinksEditor({ links, disabled, onChange }) {
+  const list = Array.isArray(links) && links.length ? links : [""];
+  const setAt = (index, value) => onChange(list.map((item, i) => (i === index ? value : item)));
+  return (
+    <div style={{ display: "grid", gap: "0.5rem" }}>
+      {list.map((url, index) => (
+        <div key={index} style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+          <input value={url} disabled={disabled} placeholder="https://www.youtube.com/watch?v=..." onChange={event => setAt(index, event.target.value)} style={{ ...periodInput, flex: 1 }} />
+          <button type="button" disabled={disabled} aria-label="ลบลิงก์" onClick={() => onChange(list.filter((_, i) => i !== index))} style={{ ...btnSecondary, flex: "none", color: "#dc2626" }}><X size={16} /></button>
+        </div>
+      ))}
+      {list.length < 10 && <button type="button" disabled={disabled} onClick={() => onChange([...list, ""])} style={{ ...btnSecondary, flex: "none", width: "fit-content" }}><Plus size={16} /> เพิ่มลิงก์ YouTube</button>}
+      <YoutubeGrid links={list} />
+    </div>
+  );
+}
+
+function PostNoteEditor({ note, disabled, teacherName, onChange }) {
+  const value = cleanPostNote(note);
+  const set = patch => onChange({ ...value, ...patch });
+  const setDomain = (key, field, raw) => set({ [key]: { ...value[key], [field]: countText(raw) } });
+  return (
+    <div style={{ display: "grid", gap: "0.75rem" }}>
+      <div style={{ fontWeight: 800, color: "#0f172a" }}>1. ผลการจัดการเรียนรู้</div>
+      <Field label="จำนวนนักเรียนทั้งหมด (คน)">
+        <input inputMode="numeric" value={value.total} disabled={disabled} onChange={event => set({ total: countText(event.target.value) })} style={{ ...periodInput, maxWidth: 160 }} />
+      </Field>
+      {POST_NOTE_DOMAINS.map(({ key, label }) => (
+        <div key={key} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.6rem 0.75rem", display: "grid", gap: "0.5rem" }}>
+          <div style={{ fontWeight: 700, color: "#334155" }}>{label}</div>
+          <div style={periodGrid}>
+            <Field label={`ผ่านเกณฑ์ (คน) ${postNotePercent(value[key].pass, value.total) && `· ${postNotePercent(value[key].pass, value.total)}`}`}>
+              <input inputMode="numeric" value={value[key].pass} disabled={disabled} onChange={event => setDomain(key, "pass", event.target.value)} style={periodInput} />
+            </Field>
+            <Field label={`ไม่ผ่านเกณฑ์ (คน) ${postNotePercent(value[key].fail, value.total) && `· ${postNotePercent(value[key].fail, value.total)}`}`}>
+              <input inputMode="numeric" value={value[key].fail} disabled={disabled} onChange={event => setDomain(key, "fail", event.target.value)} style={periodInput} />
+            </Field>
+          </div>
+        </div>
+      ))}
+      {POST_NOTE_TEXTS.map(({ key, label }) => (
+        <Field key={key} label={label}>
+          <textarea value={value[key]} disabled={disabled} onChange={event => set({ [key]: event.target.value })} style={periodArea} />
+        </Field>
+      ))}
+      <div style={periodGrid}>
+        <Field label="ลงชื่อผู้สอน">
+          <input value={value.teacher_sign} disabled={disabled} placeholder={teacherName || ""} onChange={event => set({ teacher_sign: event.target.value })} style={periodInput} />
+        </Field>
+        <Field label="วันที่บันทึก">
+          <input type="date" value={value.teacher_date} disabled={disabled} onChange={event => set({ teacher_date: event.target.value })} style={periodInput} />
+        </Field>
+      </div>
+      <PostNoteAdminRead note={value} />
+    </div>
+  );
+}
+
+function PostNoteAdminRead({ note }) {
+  return (
+    <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "12px", padding: "0.6rem 0.75rem" }}>
+      <div style={{ fontWeight: 800, color: "#1d4ed8" }}>5. ความเห็นผู้บริหาร/หัวหน้างานวิชาการ</div>
+      <FullText value={note?.admin_comment} />
+      {(note?.admin_sign || note?.admin_date) && <div style={{ fontSize: "0.85rem", color: "#334155", marginTop: "0.3rem" }}>ลงชื่อ {note.admin_sign || "-"} {note.admin_date ? `· ${formatThaiDateKey(note.admin_date)}` : ""}</div>}
+    </div>
+  );
+}
+
+function PostNoteRead({ note }) {
+  const value = cleanPostNote(note);
+  if (!postNoteHasData(value)) return <div style={{ color: "#94a3b8" }}>ยังไม่ได้บันทึกหลังสอน</div>;
+  return (
+    <div style={{ display: "grid", gap: "0.45rem" }}>
+      <div style={{ fontWeight: 800, color: "#0f172a" }}>1. ผลการจัดการเรียนรู้ {value.total ? `(นักเรียน ${value.total} คน)` : ""}</div>
+      {POST_NOTE_DOMAINS.map(({ key, label }) => (
+        <div key={key} style={{ color: "#0f172a", fontSize: "0.92rem" }}>
+          {label}: ผ่าน {value[key].pass || "-"} คน {postNotePercent(value[key].pass, value.total) && `(${postNotePercent(value[key].pass, value.total)})`} · ไม่ผ่าน {value[key].fail || "-"} คน {postNotePercent(value[key].fail, value.total) && `(${postNotePercent(value[key].fail, value.total)})`}
+        </div>
+      ))}
+      {POST_NOTE_TEXTS.map(({ key, label }) => (
+        <div key={key}><div style={{ fontWeight: 800, color: "#0f172a" }}>{label}</div><FullText value={value[key]} /></div>
+      ))}
+      <div style={{ color: "#334155", fontSize: "0.9rem" }}>ลงชื่อผู้สอน {value.teacher_sign || "-"} {value.teacher_date ? `· ${formatThaiDateKey(value.teacher_date)}` : ""}</div>
+      <PostNoteAdminRead note={value} />
+    </div>
+  );
+}
+
 const supervisionTextArea = { ...inputStyle, minHeight: 110, resize: "vertical", lineHeight: 1.55 };
 
 function clockLabel(value) {
@@ -2992,6 +3241,9 @@ function periodHasDetail(period) {
     || String(period?.media_detail || "").trim()
     || period?.homework === "yes"
     || period?.homework_file?.dataUrl
+    || period?.worksheet_file?.url || period?.worksheet_file?.dataUrl
+    || (period?.youtube_links || []).some(link => String(link || "").trim())
+    || postNoteHasData(period?.post_note)
     || String(period?.plan_unit || "").trim()
     || String(period?.plan_id || "").trim()
     || String(period?.plan_hour || "").trim()
@@ -3070,7 +3322,7 @@ function DayCard({ title, summary, children }) {
   );
 }
 
-function WeekPeriodEditor({ period, disabled, onChange, onPickFile }) {
+function WeekPeriodEditor({ period, disabled, onChange, onPickFile, onPickWorksheet, worksheetBusy, teacherName }) {
   const [open, setOpen] = useState(false);
   const { pack, unit, plan } = selectedPlanParts(period);
   const choose = patch => onChange(planChoicePatch(period, patch));
@@ -3141,13 +3393,29 @@ function WeekPeriodEditor({ period, disabled, onChange, onPickFile }) {
           <textarea value={period.lesson_summary || ""} onChange={event => onChange({ lesson_summary: event.target.value })} style={periodArea} />
         </Field>
       </QuietFold>
-      <QuietFold title="สื่อ">
-        <Field label="ลิงก์สื่อ">
+      <QuietFold title="สื่อ / ใบงาน / YouTube">
+        <Field label="ใบงาน (PDF)">
+          <label style={{ ...btnSecondary, flex: "none", width: "fit-content", cursor: disabled ? "not-allowed" : "pointer" }}>
+            <Upload size={16} /> {worksheetBusy ? "กำลังอัปโหลด..." : "อัปโหลดใบงาน PDF"}
+            <input type="file" accept=".pdf,application/pdf" disabled={disabled || worksheetBusy} onChange={onPickWorksheet} style={{ display: "none" }} />
+          </label>
+          <div style={{ marginTop: "0.6rem" }}><WorksheetLink file={period.worksheet_file} /></div>
+          {lessonFileHref(period.worksheet_file) && (
+            <button type="button" onClick={() => onChange({ worksheet_file: null })} style={{ ...btnSecondary, flex: "none", marginTop: "0.6rem", color: "#dc2626" }}>เอาใบงาน PDF ออก</button>
+          )}
+        </Field>
+        <Field label="ลิงก์ YouTube ที่ใช้สอน">
+          <YoutubeLinksEditor links={period.youtube_links} disabled={disabled} onChange={links => onChange({ youtube_links: links })} />
+        </Field>
+        <Field label="ลิงก์สื่ออื่น">
           <textarea value={period.media_links || ""} onChange={event => onChange({ media_links: event.target.value })} style={periodArea} />
         </Field>
         <Field label="สื่อโดยละเอียด">
           <textarea value={period.media_detail || ""} onChange={event => onChange({ media_detail: event.target.value })} style={periodArea} />
         </Field>
+      </QuietFold>
+      <QuietFold title="บันทึกหลังสอน (บันทึกหลังแผน)">
+        <PostNoteEditor note={period.post_note} disabled={disabled} teacherName={teacherName} onChange={note => onChange({ post_note: note })} />
       </QuietFold>
       <Field label="มีงานหรือการบ้านหรือไม่">
         <select value={period.homework === "yes" ? "yes" : "no"} onChange={event => {
@@ -3184,8 +3452,8 @@ function WeekPeriodEditor({ period, disabled, onChange, onPickFile }) {
   );
 }
 
-function SupervisionPeriodRead({ period }) {
-  const [open, setOpen] = useState(false);
+function SupervisionPeriodRead({ period, defaultOpen = false, adminSlot = null }) {
+  const [open, setOpen] = useState(defaultOpen);
   const choice = selectedPlanParts(period);
   const planLabel = choice.plan ? `แผน ${choice.plan.plan_no} ${choice.plan.title}` : "";
   const topicLabel = choice.hour ? `ชั่วโมงที่ ${choice.hour.hour}` : "";
@@ -3251,6 +3519,25 @@ function SupervisionPeriodRead({ period }) {
               <FullText value={period.media_detail} />
             </div>
           )}
+          {lessonFileHref(period.worksheet_file) && (
+            <div>
+              <div style={{ fontWeight: 800, color: "#0f172a" }}>ใบงาน (PDF)</div>
+              <WorksheetLink file={period.worksheet_file} />
+            </div>
+          )}
+          {cleanYoutubeLinks(period.youtube_links).length > 0 && (
+            <div>
+              <div style={{ fontWeight: 800, color: "#0f172a" }}>YouTube ที่ใช้สอน</div>
+              <YoutubeGrid links={period.youtube_links} />
+            </div>
+          )}
+          {postNoteHasData(period.post_note) && (
+            <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: "0.45rem" }}>
+              <div style={{ fontWeight: 800, color: "#0f172a", marginBottom: "0.3rem" }}>บันทึกหลังสอน</div>
+              <PostNoteRead note={period.post_note} />
+            </div>
+          )}
+          {adminSlot}
           {period.homework === "yes" && (
             <>
               <div>
@@ -3652,6 +3939,7 @@ function SupervisionTeacher({ currentUser }) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [worksheetBusy, setWorksheetBusy] = useState("");
 
   const applyPlan = (plan, id) => {
     const nextPeriods = periodsForEditor(plan, plan.week_start || weekStart);
@@ -3691,7 +3979,11 @@ function SupervisionTeacher({ currentUser }) {
         }
         if (active) applyPlan(plan, row?.id);
       } catch (err) {
-        if (active) setError(err.message || "โหลดแผนไม่สำเร็จ");
+        const local = loadLocalPlan(currentUser.id, weekStart);
+        if (active && local) {
+          applyPlan(local, null);
+          setError(`โหลดจากฐานข้อมูลไม่ได้ (${err.message || "เชื่อมต่อไม่สำเร็จ"}) แสดงฉบับที่เก็บไว้ในเครื่องนี้แทน`);
+        } else if (active) setError(err.message || "โหลดแผนไม่สำเร็จ");
       } finally {
         if (active) setLoading(false);
       }
@@ -3762,8 +4054,10 @@ function SupervisionTeacher({ currentUser }) {
         : effective === "submitted"
           ? (plan.late ? "บันทึกรายสัปดาห์แล้ว สถานะยังเป็นสาย" : "บันทึกรายสัปดาห์แล้ว")
           : "บันทึกฉบับร่างแล้ว");
+      saveLocalPlan(currentUser.id, weekStart, plan);
     } catch (err) {
-      setError(err.message || "บันทึกไม่สำเร็จ");
+      const kept = saveLocalPlan(currentUser.id, weekStart, plan);
+      setError(`${err.message || "บันทึกไม่สำเร็จ"}${kept ? " · เก็บสำรองไว้ในเครื่องนี้แล้ว (localStorage)" : ""}`);
     } finally {
       setSaving(false);
     }
@@ -3830,6 +4124,31 @@ function SupervisionTeacher({ currentUser }) {
     }
   };
 
+  const onPickWorksheet = async (event, periodId) => {
+    const picked = event.target.files?.[0];
+    event.target.value = "";
+    if (!picked) return;
+    if (!(picked.type === "application/pdf" || picked.name.toLowerCase().endsWith(".pdf"))) {
+      setError("ใบงานต้องเป็นไฟล์ PDF");
+      return;
+    }
+    if (picked.size > 20 * 1024 * 1024) {
+      setError("ไฟล์ PDF ต้องไม่เกิน 20 MB");
+      return;
+    }
+    setWorksheetBusy(periodId);
+    try {
+      const file = await uploadLessonFile(picked, currentUser.id);
+      updatePeriod(periodId, { worksheet_file: file });
+      setError("");
+      setMessage(file.storage === "supabase" ? "อัปโหลดใบงาน PDF แล้ว กดบันทึกเพื่อเก็บลงแผน" : "แนบใบงานแล้ว (ยังไม่มี Storage bucket จึงเก็บในแผน) กดบันทึกเพื่อเก็บ");
+    } catch (err) {
+      setError(err.message || "อัปโหลดไม่สำเร็จ");
+    } finally {
+      setWorksheetBusy("");
+    }
+  };
+
   const actionButtons = (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))", gap: "0.5rem" }}>
       <button type="button" onClick={copyPreviousWeek} disabled={saving || loading} style={{ ...btnSecondary, minHeight: 44 }}><Copy size={16} /> คัดลอกจากสัปดาห์ก่อน</button>
@@ -3893,6 +4212,9 @@ function SupervisionTeacher({ currentUser }) {
                     disabled={saving}
                     onChange={patch => updatePeriod(period.id, patch)}
                     onPickFile={event => onPickHomework(event, period.id)}
+                    onPickWorksheet={event => onPickWorksheet(event, period.id)}
+                    worksheetBusy={worksheetBusy === period.id}
+                    teacherName={currentUser.name}
                   />
                 ))}
               </DayCard>
@@ -4648,8 +4970,130 @@ function RollStatsPanel({ book, month, onMonth, title }) {
   );
 }
 
+
+// ─── ดูแผนสำหรับสอนแทน (อ่านอย่างเดียว ยกเว้นความเห็นผู้บริหาร) ──────────────
+function SubstitutePlanView({ employees, currentUser }) {
+  const isAdmin = currentUser?.role === "admin";
+  const teachers = (employees || []).filter(emp => emp.id !== currentUser?.id);
+  const [teacherId, setTeacherId] = useState("");
+  const [date, setDate] = useState(() => todayISO());
+  const [periodNo, setPeriodNo] = useState("");
+  const [row, setRow] = useState(null);
+  const [plan, setPlan] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [drafts, setDrafts] = useState({});
+  const weekStart = mondayOf(date);
+  const day = new Date(`${date}T00:00:00`).getDay();
+
+  useEffect(() => {
+    if (!teacherId) { setPlan(null); setRow(null); return undefined; }
+    let active = true;
+    setLoading(true);
+    setError("");
+    setMessage("");
+    (async () => {
+      try {
+        const rows = await fetchSupervisionRows(teacherId, weekStart);
+        if (!active) return;
+        setRow(rows[0] || null);
+        setPlan(rows[0] ? parseSupervisionPlan(rows[0].subject, weekStart) : null);
+      } catch (err) {
+        const local = loadLocalPlan(teacherId, weekStart);
+        if (active) { setPlan(local); setRow(null); setError(err.message || "โหลดแผนไม่สำเร็จ"); }
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [teacherId, weekStart]);
+
+  const periods = (plan?.periods || [])
+    .filter(period => period.teach_date === date && (!periodNo || String(period.period_no) === periodNo))
+    .sort((a, b) => a.period_no - b.period_no);
+  const teacher = (employees || []).find(emp => emp.id === teacherId);
+
+  const saveAdminComment = async (periodId) => {
+    if (!row || !plan) return;
+    const draft = drafts[periodId] || {};
+    const nextPeriods = plan.periods.map(period => period.id === periodId
+      ? { ...period, post_note: cleanPostNote({ ...period.post_note, admin_comment: draft.admin_comment ?? period.post_note?.admin_comment, admin_sign: draft.admin_sign ?? (period.post_note?.admin_sign || currentUser.name), admin_date: todayISO() }) }
+      : period);
+    const nextPlan = { ...plan, periods: nextPeriods };
+    try {
+      const id = await writeSupervisionPlan(teacherId, weekStart, nextPlan, row.id);
+      setRow({ ...row, id });
+      setPlan(nextPlan);
+      setMessage("บันทึกความเห็นผู้บริหารแล้ว");
+    } catch (err) {
+      setError(err.message || "บันทึกไม่สำเร็จ");
+    }
+  };
+
+  return (
+    <div style={{ display: "grid", gap: "1rem" }}>
+      <Card>
+        <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.75rem" }}>ดูแผนสำหรับสอนแทน</div>
+        <div style={periodGrid}>
+          <Field label="ครูเจ้าของแผน">
+            <select value={teacherId} onChange={event => setTeacherId(event.target.value)} style={periodSelect}>
+              <option value="">-- เลือกครู --</option>
+              {teachers.map(emp => <option key={emp.id} value={emp.id}>{emp.name}{emp.department ? ` — ${emp.department}` : ""}</option>)}
+            </select>
+          </Field>
+          <Field label="วันที่สอนแทน">
+            <input type="date" value={date} onChange={event => setDate(event.target.value)} style={periodInput} />
+          </Field>
+          <Field label="คาบ">
+            <select value={periodNo} onChange={event => setPeriodNo(event.target.value)} style={periodSelect}>
+              <option value="">ทุกคาบ</option>
+              {[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={String(n)}>คาบที่ {n}</option>)}
+            </select>
+          </Field>
+        </div>
+        <div style={{ fontSize: "0.8rem", color: "#64748b", marginTop: "0.6rem" }}>ดูได้อย่างเดียว เฉพาะเจ้าของแผนเท่านั้นที่แก้ไขแผนได้{isAdmin ? " · ผู้บริหารเขียนความเห็นท้ายบันทึกหลังสอนได้" : ""}</div>
+      </Card>
+      {error && <ErrorBox>{error}</ErrorBox>}
+      {message && <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", borderRadius: "10px", padding: "0.75rem 1rem", color: "#166534", fontWeight: 700 }}>{message}</div>}
+      {!teacherId ? null : loading ? (
+        <Card><div style={{ textAlign: "center", color: "#64748b", padding: "1.5rem" }}>กำลังโหลดแผน...</div></Card>
+      ) : day === 0 || day === 6 ? (
+        <Card><div style={{ textAlign: "center", color: "#64748b", padding: "1.5rem" }}>วันที่เลือกเป็นวันหยุด เลือกวันจันทร์ถึงศุกร์</div></Card>
+      ) : periods.length === 0 ? (
+        <Card><div style={{ textAlign: "center", color: "#64748b", padding: "1.5rem" }}>{teacher?.name || "ครู"} ยังไม่มีแผน{periodNo ? `คาบที่ ${periodNo} ` : ""}ของ{formatThaiDateKey(date)}</div></Card>
+      ) : (
+        <Card>
+          <div style={{ fontWeight: 800, color: "#0f172a", marginBottom: "0.6rem" }}>แผนของ {teacher?.name} · วัน{DAY_NAMES[day]} {formatThaiDateKey(date)}</div>
+          <div style={{ display: "grid", gap: "0.5rem" }}>
+            {periods.map(period => (
+              <SupervisionPeriodRead
+                key={period.id}
+                period={period}
+                defaultOpen={periods.length === 1}
+                adminSlot={isAdmin && row ? (
+                  <div style={{ display: "grid", gap: "0.5rem", borderTop: "1px solid #e2e8f0", paddingTop: "0.5rem" }}>
+                    <Field label="ความเห็นผู้บริหาร/หัวหน้างานวิชาการ">
+                      <textarea value={drafts[period.id]?.admin_comment ?? period.post_note?.admin_comment ?? ""} onChange={event => setDrafts(current => ({ ...current, [period.id]: { ...current[period.id], admin_comment: event.target.value } }))} style={periodArea} />
+                    </Field>
+                    <Field label="ลงชื่อ">
+                      <input value={drafts[period.id]?.admin_sign ?? (period.post_note?.admin_sign || currentUser.name || "")} onChange={event => setDrafts(current => ({ ...current, [period.id]: { ...current[period.id], admin_sign: event.target.value } }))} style={periodInput} />
+                    </Field>
+                    <button type="button" onClick={() => saveAdminComment(period.id)} style={{ ...btnSecondary, flex: "none", width: "fit-content" }}><Save size={16} /> บันทึกความเห็น</button>
+                  </div>
+                ) : null}
+              />
+            ))}
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 const ACADEMIC_TABS = [
   { key: "plan", label: "ส่งแผนรายสัปดาห์" },
+  { key: "substitute", label: "ดูแผนสำหรับสอนแทน" },
   { key: "roll", label: "เช็คชื่อนักเรียน/สถิติ" },
   ...ACADEMIC_EXTRA_TABS,
 ];
@@ -4679,7 +5123,8 @@ function AcademicPage({ employees, currentUser }) {
       </div>
       {tab === "plan" && <TeachingSupervisionPage employees={employees} currentUser={currentUser} />}
       {tab === "roll" && <StudentRollPage employees={employees} currentUser={currentUser} />}
-      {tab !== "plan" && tab !== "roll" && <AcademicExtra tab={tab} employees={employees} currentUser={currentUser} />}
+      {tab === "substitute" && <SubstitutePlanView employees={employees} currentUser={currentUser} />}
+      {tab !== "plan" && tab !== "roll" && tab !== "substitute" && <AcademicExtra tab={tab} employees={employees} currentUser={currentUser} />}
     </div>
   );
 }

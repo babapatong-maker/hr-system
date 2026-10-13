@@ -1,5 +1,8 @@
-﻿import { useState, useEffect, useCallback } from "react";
-import { createClient } from "@supabase/supabase-js";
+﻿import { useState, useEffect, useCallback, useRef } from "react";
+import { THAI_P2_PLAN_PACK } from "./lessonPlanCatalog.js";
+import { AcademicExtra, ACADEMIC_EXTRA_TABS, ACADEMIC_RECORD_ROOM, TEACHING_GRADE_GROUPS, loadAssignedPlanLevels, loadTeachingGrades, saveTeachingGrade } from "./academicRecords.jsx";
+import { read as readWorkbook, utils as xlsxUtils } from "xlsx";
+import { supabase } from "./supabase.js";
 import {
   Users, Building2, Clock, CheckCircle, XCircle, MapPin,
   Navigation, LogIn, LogOut, Settings, Bell, Search,
@@ -7,13 +10,23 @@ import {
   Shield, WifiOff, RefreshCw, UserPlus, DollarSign,
   Umbrella, AlertCircle, Activity, Home, X, Edit, Trash2, Save, Phone, Mail,
   Plus, Calendar, ArrowRightLeft, ArrowLeftRight, TrendingUp, User, Lock, Eye, EyeOff, Key, Menu,
-  BookOpen, ChevronLeft, Copy, Upload
+  BookOpen, ChevronLeft, ChevronUp, Copy, Upload
 } from "lucide-react";
 
-const supabase = createClient(
-  "https://iqhswfuddwltzxpggldc.supabase.co",
-  "sb_publishable_D8vUfkTd2LZMnsB7W1fvIQ_a1oVeJeO"
-);
+function isLocalPreview() {
+  if (typeof window === "undefined") return false;
+  const host = window.location.hostname;
+  return host === "localhost" || host === "127.0.0.1" || host === "::1";
+}
+
+function PreviewBanner() {
+  if (!isLocalPreview()) return null;
+  return (
+    <div style={{ width: "100%", alignSelf: "stretch", background: "#fef3c7", color: "#92400e", textAlign: "center", padding: "0.45rem 0.75rem", fontSize: "0.82rem", fontWeight: 700, lineHeight: 1.45 }}>
+      เว็บทดลองบนเครื่องนี้ ยังไม่ขึ้นระบบจริง ปรับหน้านี้ได้ก่อนเอาให้ครูทั้งโรงเรียนใช้
+    </div>
+  );
+}
 
 const SCHOOL_LAT = 15.596741;
 const SCHOOL_LNG = 100.652199;
@@ -627,21 +640,21 @@ function checkEarly(checkOutTime, workEnd) {
 const DEPT_OPTIONS = ["วิชาการ", "บริหาร", "พลศึกษา", "คณิตศาสตร์", "ภาษาไทย", "ศิลปะ", "วิทยาศาสตร์", "สังคมศึกษา", "ภาษาอังกฤษ", "การงานอาชีพ"];
 const DUTY_OPTIONS = ["ไม่มีเวร", "เวรรถ", "แลกชิพ", "เวรหน้าประตู"];
 const DAY_NAMES = ["", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์"];
-// แผนนิเทศเก็บในแถวของ teaching_schedule ที่ใช้ห้องนี้ และถูกซ่อนจากหน้าตารางสอน
+// แผนนิเทศและเช็คชื่อนักเรียนเก็บในแถวของ teaching_schedule ที่ใช้ห้องพิเศษ และถูกซ่อนจากหน้าตารางสอน
 // เพราะคีย์ของโปรเจกต์สร้างตารางใหม่ใน Supabase ไม่ได้
 const SUPERVISION_SCHEDULE_ROOM = "__TEACHING_SUPERVISION__";
-const SUPERVISION_DAILY_DAY = 9;
-const SUPERVISION_MEDIA_OPTIONS = ["หนังสือเรียน", "ใบงาน", "ใบความรู้", "PowerPoint", "วิดีโอ", "กระดาน", "สื่อของจริง", "เกมหรือกิจกรรม", "แบบฝึกหัด", "ออนไลน์"];
-const SUPERVISION_PERIOD_OPTIONS = ["จินตคณิต", "คาบ 1", "คาบ 2", "คาบ 3", "คาบ 4", "คาบ 5", "คาบ 6", "คาบ 7", "คาบ 8"];
+const STUDENT_ROLL_ROOM = "__STUDENT_ROLL__";
 const SUPERVISION_FILE_LIMIT = 2.5 * 1024 * 1024;
+const SUPERVISION_JSON_LIMIT = 3200000;
 const SUPERVISION_FILE_EXTENSIONS = [".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png", ".webp", ".gif"];
+const SUPERVISION_FILE_ACCEPT = ".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.gif,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*";
 
 const navItems = [
   { icon: Home, label: "หน้าหลัก", key: "dashboard", roles: ["admin", "employee"] },
   { icon: Users, label: "ข้อมูลพนักงาน", key: "employee", roles: ["admin"] },
   { icon: Clock, label: "ลงเวลาเข้า-ออก", key: "attendance", roles: ["admin", "employee"] },
   { icon: Calendar, label: "ตารางสอน", key: "schedule", roles: ["admin", "employee"] },
-  { icon: BookOpen, label: "นิเทศการสอน", key: "supervision", roles: ["admin", "employee"] },
+  { icon: BookOpen, label: "งานวิชาการ", key: "academic", roles: ["admin", "employee"] },
   { icon: Umbrella, label: "การลา", key: "leave", roles: ["admin", "employee"] },
   { icon: ArrowRightLeft, label: "ขอออกนอกสถานที่", key: "outing", roles: ["admin", "employee"] },
   { icon: DollarSign, label: "เงินเดือน", key: "finance", roles: ["admin"] },
@@ -754,8 +767,8 @@ function LoginPage({ onLogin }) {
 
     const user = data[0];
 
-    // 2. ถ้าเป็น admin ข้ามการเช็ค device
-    if (user.role === "admin") {
+    // เว็บทดลองบนเครื่องนี้ไม่ผูกเครื่อง เพื่อไม่ไปล็อกบัญชีครูจริง
+    if (user.role === "admin" || isLocalPreview()) {
       setLoading(false);
       localStorage.setItem("hr_user", JSON.stringify(user));
       onLogin(user);
@@ -813,7 +826,9 @@ function LoginPage({ onLogin }) {
   };
 
   return (
-    <div style={{ fontFamily: "'Sarabun', sans-serif", minHeight: "100vh", background: "linear-gradient(135deg, #1d4ed8 0%, #2563eb 50%, #3b82f6 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
+    <div style={{ fontFamily: "'Sarabun', sans-serif", minHeight: "100vh", background: "linear-gradient(135deg, #1d4ed8 0%, #2563eb 50%, #3b82f6 100%)", display: "flex", flexDirection: "column" }}>
+      <PreviewBanner />
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap'); * { box-sizing: border-box; margin: 0; padding: 0; } @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
 
       <div style={{ background: "#fff", borderRadius: "1.5rem", padding: "2.5rem 2rem", width: "100%", maxWidth: 400, boxShadow: "0 32px 80px rgba(0,0,0,0.3)" }}>
@@ -851,7 +866,9 @@ function LoginPage({ onLogin }) {
 
         <div style={{ marginTop: "1.5rem", padding: "0.75rem", background: "#eff6ff", borderRadius: "10px", fontSize: "0.78rem", color: "#1d4ed8", textAlign: "center" }}>
           💡 ทดสอบ: username <strong>admin1</strong> / password <strong>admin123</strong>
+          {isLocalPreview() && <div style={{ marginTop: "0.35rem" }}>ครูทดลอง: <strong>teacher.try</strong> / <strong>try1234</strong></div>}
         </div>
+      </div>
       </div>
     </div>
   );
@@ -1590,13 +1607,52 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
 }
 
 // ─── PAGES ────────────────────────────────────────────────────────────────────
-function EmployeePage({ employees, onRefresh }) {
+function EmployeePage({ employees, currentUser, onRefresh }) {
   const [showModal, setShowModal] = useState(false);
   const [editEmp, setEditEmp] = useState(null);
   const [search, setSearch] = useState("");
   const [deleting, setDeleting] = useState(null);
   const [devices, setDevices] = useState([]);
   const [salaryRows, setSalaryRows] = useState([]);
+  const [teachingGrades, setTeachingGrades] = useState({});
+  const [gradeBusyId, setGradeBusyId] = useState("");
+  const [gradeError, setGradeError] = useState("");
+  const gradeEpoch = useRef(0);
+
+  useEffect(() => {
+    let active = true;
+    const epoch = gradeEpoch.current;
+    loadTeachingGrades()
+      .then(map => { if (active && epoch === gradeEpoch.current) setTeachingGrades(map); })
+      .catch(err => { if (active && epoch === gradeEpoch.current) setGradeError(err.message || "โหลดชั้นที่สอนไม่สำเร็จ"); });
+    return () => { active = false; };
+  }, [employees]);
+
+  const changeTeachingGrade = async (employeeId, grade) => {
+    gradeEpoch.current += 1;
+    const previous = teachingGrades[employeeId] || "";
+    setTeachingGrades(current => {
+      const next = { ...current };
+      if (grade) next[employeeId] = grade;
+      else delete next[employeeId];
+      return next;
+    });
+    setGradeBusyId(employeeId);
+    setGradeError("");
+    try {
+      await saveTeachingGrade(employeeId, grade, currentUser?.id);
+    } catch (err) {
+      setTeachingGrades(current => {
+        const next = { ...current };
+        if (previous) next[employeeId] = previous;
+        else delete next[employeeId];
+        return next;
+      });
+      setGradeError(err.message || "บันทึกชั้นที่สอนไม่สำเร็จ");
+    } finally {
+      setGradeBusyId("");
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -1626,6 +1682,7 @@ function EmployeePage({ employees, onRefresh }) {
   return (
     <div>
       <PageHeader title="ข้อมูลพนักงาน" count={employees.length} onAdd={() => { setEditEmp(null); setShowModal(true); }} addLabel="เพิ่มพนักงาน" />
+      {gradeError && <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, padding: "0.75rem", color: "#dc2626", fontSize: "0.85rem", marginBottom: "1rem" }}>{gradeError}</div>}
       <div style={{ position: "relative", marginBottom: "1.25rem" }}>
         <Search size={15} color="#94a3b8" style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)" }} />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="ค้นหา..." style={{ ...inputStyle, maxWidth: 360, paddingLeft: "2.25rem" }} />
@@ -1650,11 +1707,22 @@ function EmployeePage({ employees, onRefresh }) {
                 return (
                   <tr key={emp.id} style={{ borderBottom: "1px solid #f8fafc" }}>
                     <td style={{ padding: "0.75rem 1rem", color: "#94a3b8", fontSize: "0.78rem" }}>{i + 1}</td>
-                    <td style={{ padding: "0.75rem 1rem" }}>
+                    <td style={{ padding: "0.75rem 1rem", minWidth: "11rem" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
                         <Avatar name={emp.name} index={i} />
                         <span style={{ fontWeight: 600, color: "#0f172a" }}>{emp.name}</span>
                       </div>
+                      <label style={{ display: "grid", gap: "0.15rem", marginTop: "0.4rem" }}>
+                        <span style={{ fontSize: "0.68rem", color: "#64748b", fontWeight: 700 }}>ชั้นที่สอน</span>
+                        <select aria-label={`ชั้นที่สอน ${emp.name}`} value={teachingGrades[emp.id] || ""} disabled={Boolean(gradeBusyId)} onChange={event => changeTeachingGrade(emp.id, event.target.value)} style={{ ...selectStyle, boxSizing: "border-box", fontSize: "16px", width: "100%", maxWidth: "12rem", minHeight: 40, padding: "0.35rem 0.5rem" }}>
+                          <option value="">ไม่ได้ประจำชั้น</option>
+                          {TEACHING_GRADE_GROUPS.map(([level, grades]) => (
+                            <optgroup key={level} label={level}>
+                              {grades.map(grade => <option key={grade} value={grade}>{grade}</option>)}
+                            </optgroup>
+                          ))}
+                        </select>
+                      </label>
                     </td>
                     <td style={{ padding: "0.75rem 1rem", color: "#475569", fontFamily: "monospace", fontSize: "0.8rem" }}>{emp.username || "-"}</td>
                     <td style={{ padding: "0.75rem 1rem" }}><span style={{ background: "#eff6ff", color: "#2563eb", fontSize: "0.75rem", fontWeight: 600, padding: "0.2rem 0.6rem", borderRadius: "20px" }}>{emp.department || "-"}</span></td>
@@ -2418,29 +2486,10 @@ function formatWeekLabel(mondayKey) {
   return `${formatThaiDateKey(mondayKey)} – ${formatThaiDateKey(shiftDateKey(mondayKey, 4))}`;
 }
 
-function defaultPeriodDate(mondayKey) {
-  const today = todayISO();
-  const friday = shiftDateKey(mondayKey, 4);
-  if (today >= mondayKey && today <= friday) return today;
-  return mondayKey;
-}
-
 function emptySupervisionPlan(weekStart) {
   return {
-    version: 2,
+    version: 4,
     week_start: weekStart,
-    week_topic: "",
-    short_plan: "",
-    media: [],
-    custom_media: [],
-    file: null,
-    taught_as_planned: "",
-    objective_percent: "",
-    problems: "",
-    remediation: "",
-    next_week_links: "",
-    next_week_file: null,
-    gradebook: [],
     signoff: null,
     observations: [],
     status: "",
@@ -2451,8 +2500,70 @@ function emptySupervisionPlan(weekStart) {
   };
 }
 
-function emptyDailyReport(date) {
-  return { version: 1, date, status: "", late: false, submitted_at: null, periods: [] };
+function emptyWeekPeriod(teachDate, periodNo) {
+  return {
+    id: newSupervisionId(),
+    teach_date: teachDate,
+    period_no: periodNo,
+    free: false,
+    plan_unit: "",
+    plan_id: "",
+    plan_hour: "",
+    lesson_page: "",
+    start_time: "",
+    end_time: "",
+    subject: "",
+    lesson_intro: "",
+    lesson_activity: "",
+    lesson_practice: "",
+    lesson_summary: "",
+    media_links: "",
+    media_detail: "",
+    homework: "no",
+    homework_what: "",
+    homework_page: "",
+    homework_file: null,
+  };
+}
+
+function normalizeSupervisionPeriod(period, weekStart) {
+  const source = period && typeof period === "object" ? period : {};
+  const numberMatch = String(source.period_no ?? source.period ?? "").match(/\d+/);
+  const friday = shiftDateKey(weekStart, 4);
+  let teachDate = /^\d{4}-\d{2}-\d{2}$/.test(source.teach_date || "") ? source.teach_date : weekStart;
+  if (teachDate < weekStart || teachDate > friday) teachDate = weekStart;
+  const periodNo = Math.min(6, Math.max(1, Number(numberMatch?.[0] || 1)));
+  return {
+    id: source.id || newSupervisionId(),
+    teach_date: teachDate,
+    period_no: periodNo,
+    free: !!source.free,
+    plan_unit: source.plan_unit || "",
+    plan_id: source.plan_id || "",
+    plan_hour: source.plan_hour ? String(source.plan_hour) : "",
+    lesson_page: source.lesson_page || "",
+    start_time: String(source.start_time || "").slice(0, 5),
+    end_time: String(source.end_time || "").slice(0, 5),
+    subject: source.subject || source.topic || "",
+    lesson_intro: source.lesson_intro || "",
+    lesson_activity: source.lesson_activity || (!source.lesson_intro && !source.lesson_practice && !source.lesson_summary ? (source.lesson || "") : ""),
+    lesson_practice: source.lesson_practice || "",
+    lesson_summary: source.lesson_summary || "",
+    media_links: source.media_links || "",
+    media_detail: source.media_detail || "",
+    homework: source.homework === "yes" ? "yes" : "no",
+    homework_what: source.homework_what || source.homework_detail || "",
+    homework_page: source.homework_page || "",
+    homework_file: source.homework_file?.dataUrl ? source.homework_file : null,
+  };
+}
+
+function periodsForEditor(plan, weekStart) {
+  const saved = Array.isArray(plan?.periods) ? plan.periods.map(period => normalizeSupervisionPeriod(period, weekStart)) : [];
+  return weekDates(weekStart).flatMap(date => Array.from({ length: 6 }, (_, index) => {
+    const periodNo = index + 1;
+    return saved.find(period => period.teach_date === date && period.period_no === periodNo) || emptyWeekPeriod(date, periodNo);
+  }));
 }
 
 function supervisionStatusFromStartTime(startTime) {
@@ -2474,13 +2585,32 @@ function bangkokDateKey(iso) {
   return new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
 }
 
-function resolveSubmission(nextStatus, previousStatus, previousSubmittedAt, previousLate, deadlineKey) {
+function bangkokDateTimeKey(iso) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(iso));
+  const pick = type => parts.find(part => part.type === type)?.value || "00";
+  return `${pick("year")}-${pick("month")}-${pick("day")}T${pick("hour")}:${pick("minute")}:${pick("second")}`;
+}
+
+function supervisionDeadlineStamp(weekStart) {
+  return `${shiftDateKey(weekStart, -1)}T15:00:00`;
+}
+
+function resolveSubmission(nextStatus, previousStatus, previousSubmittedAt, previousLate, weekStart) {
   if (nextStatus !== "submitted") return { status: nextStatus || "draft", submitted_at: null, late: false };
   if (previousStatus === "submitted" && previousSubmittedAt) {
     return { status: "submitted", submitted_at: previousSubmittedAt, late: !!previousLate };
   }
   const submittedAt = new Date().toISOString();
-  return { status: "submitted", submitted_at: submittedAt, late: bangkokDateKey(submittedAt) > deadlineKey };
+  return { status: "submitted", submitted_at: submittedAt, late: bangkokDateTimeKey(submittedAt) > supervisionDeadlineStamp(weekStart) };
 }
 
 function weekDates(mondayKey) {
@@ -2495,6 +2625,52 @@ function defaultDailyDate(mondayKey) {
   return mondayKey;
 }
 
+const KINDER_ACTIVITIES = [
+  { key: "move", label: "เคลื่อนไหวและจังหวะ" },
+  { key: "experience", label: "เสริมประสบการณ์" },
+  { key: "art", label: "ศิลปะสร้างสรรค์" },
+  { key: "corner", label: "เล่นตามมุม" },
+  { key: "outdoor", label: "เล่นกลางแจ้ง" },
+  { key: "game", label: "เกมการศึกษา" },
+];
+
+function emptyKinderActivities() {
+  return { move: "", experience: "", art: "", corner: "", outdoor: "", game: "" };
+}
+
+function emptyKinderDay(date) {
+  return { date, off: false, activities: emptyKinderActivities() };
+}
+
+function normalizeKinderDay(day, weekStart) {
+  const friday = shiftDateKey(weekStart, 4);
+  let date = /^\d{4}-\d{2}-\d{2}$/.test(day?.date || "") ? day.date : weekStart;
+  if (date < weekStart || date > friday) date = weekStart;
+  const activities = emptyKinderActivities();
+  KINDER_ACTIVITIES.forEach(item => {
+    activities[item.key] = String(day?.activities?.[item.key] || "").replace(/\s+/g, " ").trim().slice(0, 500);
+  });
+  return { date, off: !!day?.off, activities };
+}
+
+function kinderDaysForEditor(plan, weekStart) {
+  const saved = Array.isArray(plan?.days) ? plan.days.map(day => normalizeKinderDay(day, weekStart)) : [];
+  return weekDates(weekStart).map(date => saved.find(day => day.date === date) || emptyKinderDay(date));
+}
+
+function kinderDayReady(day) {
+  if (day?.off) return true;
+  return KINDER_ACTIVITIES.every(item => String(day?.activities?.[item.key] || "").trim());
+}
+
+function kinderDaySummary(day) {
+  if (day?.off) return "วันนี้ไม่มีแผนสอน";
+  const filled = KINDER_ACTIVITIES.filter(item => String(day?.activities?.[item.key] || "").trim());
+  if (filled.length === 0) return "ยังไม่ได้กรอก";
+  const first = String(day.activities[filled[0].key] || "").trim();
+  return filled.length === KINDER_ACTIVITIES.length ? first : `กรอกแล้ว ${filled.length}/6 · ${first}`;
+}
+
 function parseSupervisionPlan(subject, weekStart) {
   try {
     const parsed = JSON.parse(subject || "{}");
@@ -2503,13 +2679,13 @@ function parseSupervisionPlan(subject, weekStart) {
       ...emptySupervisionPlan(weekStart),
       ...parsed,
       week_start: weekStart,
-      media: Array.isArray(parsed.media) ? parsed.media : [],
-      custom_media: Array.isArray(parsed.custom_media) ? parsed.custom_media : [],
-      gradebook: Array.isArray(parsed.gradebook) ? parsed.gradebook : [],
+      kind: parsed.kind === "kindergarten" ? "kindergarten" : "",
+      unit: String(parsed.unit || "").trim().slice(0, 80),
+      room: String(parsed.room || "").trim().slice(0, 40),
+      days: Array.isArray(parsed.days) ? parsed.days.map(day => normalizeKinderDay(day, weekStart)) : [],
       observations: Array.isArray(parsed.observations) ? parsed.observations : [],
-      periods: Array.isArray(parsed.periods) ? parsed.periods : [],
+      periods: Array.isArray(parsed.periods) ? parsed.periods.map(period => normalizeSupervisionPeriod(period, weekStart)) : [],
       signoff: parsed.signoff || null,
-      next_week_file: parsed.next_week_file || null,
       late: !!parsed.late,
     };
   } catch {
@@ -2517,20 +2693,10 @@ function parseSupervisionPlan(subject, weekStart) {
   }
 }
 
-function parseDailyReport(subject, date) {
-  try {
-    const parsed = JSON.parse(subject || "{}");
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return emptyDailyReport(date);
-    return { ...emptyDailyReport(date), ...parsed, date, periods: Array.isArray(parsed.periods) ? parsed.periods : [] };
-  } catch {
-    return emptyDailyReport(date);
-  }
-}
-
-function periodReflectionStatus(period) {
-  const filled = [period?.what_happened, period?.what_worked, period?.next_adjustment].every(value => String(value || "").trim());
-  if (!filled || period?.reflection_saved === false) return "pending";
-  return "recorded";
+async function fetchTeacherLevel(employeeId) {
+  const { data, error } = await supabase.from("salary_settings").select("leave_deduct_types").eq("employee_id", employeeId).limit(1);
+  if (error) throw new Error(error.message);
+  return parseEmployeePayrollMeta(data?.[0]?.leave_deduct_types).teacher_level || "";
 }
 
 function newSupervisionId() {
@@ -2586,10 +2752,10 @@ function SchedulePage({ employees, currentUser, onRefresh }) {
     const { data } = await supabase
       .from("teaching_schedule")
       .select("*, employees(name, department)")
-      .or(`class_room.is.null,class_room.neq.${SUPERVISION_SCHEDULE_ROOM}`)
+      .or(`class_room.is.null,and(class_room.neq.${SUPERVISION_SCHEDULE_ROOM},class_room.neq.${STUDENT_ROLL_ROOM},class_room.neq.${ACADEMIC_RECORD_ROOM})`)
       .order("day_of_week")
       .order("period");
-    setSchedules((data || []).filter(row => row.class_room !== SUPERVISION_SCHEDULE_ROOM));
+    setSchedules((data || []).filter(row => row.class_room !== SUPERVISION_SCHEDULE_ROOM && row.class_room !== STUDENT_ROLL_ROOM && row.class_room !== ACADEMIC_RECORD_ROOM));
   };
 
   useEffect(() => {
@@ -2728,7 +2894,7 @@ function ScheduleModal({ employees, onClose, onSave }) {
 function SupervisionStatusBadge({ status }) {
   const map = {
     submitted: { bg: "#dcfce7", color: "#166534", label: "ส่งแล้ว" },
-    late: { bg: "#fef3c7", color: "#b45309", label: "ส่งเลท" },
+    late: { bg: "#fef3c7", color: "#b45309", label: "สาย" },
     draft: { bg: "#fff7ed", color: "#c2410c", label: "ฉบับร่าง" },
     missing: { bg: "#fee2e2", color: "#b91c1c", label: "ยังไม่ส่ง" },
     pending: { bg: "#fff7ed", color: "#c2410c", label: "รอท้ายคาบ" },
@@ -2739,35 +2905,12 @@ function SupervisionStatusBadge({ status }) {
   return <span style={{ background: item.bg, color: item.color, fontSize: "0.72rem", fontWeight: 800, padding: "0.2rem 0.6rem", borderRadius: "20px", whiteSpace: "nowrap" }}>{item.label}</span>;
 }
 
-function SupervisionModeSwitch({ mode, onChange }) {
-  return (
-    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-      {[{ key: "daily", label: "รายวัน" }, { key: "weekly", label: "รายสัปดาห์" }].map(item => (
-        <button key={item.key} type="button" onClick={() => onChange(item.key)} style={{
-          border: `1.5px solid ${mode === item.key ? "#2563eb" : "#e2e8f0"}`,
-          background: mode === item.key ? "#eff6ff" : "#fff",
-          color: mode === item.key ? "#1d4ed8" : "#475569",
-          borderRadius: "10px",
-          padding: "0.65rem 0.9rem",
-          fontWeight: 800,
-          cursor: "pointer",
-          fontFamily: "inherit",
-        }}>{item.label}</button>
-      ))}
-    </div>
-  );
-}
-
 function supervisionBoardGroup(status) {
   if (status === "submitted") return "submitted";
   if (status === "late") return "late";
   return "missing";
 }
 
-const DAILY_PUNCTUAL = [{ value: "ontime", label: "ตรงเวลา" }, { value: "late", label: "เข้าสาย" }];
-const DAILY_ACTIVITY = [{ value: "done", label: "ดำเนินตามคาบ" }, { value: "partial", label: "ทำได้บางส่วน" }];
-const DAILY_ROOM = [{ value: "tidy", label: "เรียบร้อย" }, { value: "needs_work", label: "ต้องปรับปรุง" }];
-const PLAN_PROGRESS = [{ value: "yes", label: "สอนได้ตามแผน" }, { value: "partial", label: "สอนได้บางส่วน" }, { value: "no", label: "สอนไม่ทันแผน" }];
 const OBSERVATION_MATCH = [{ value: "yes", label: "ตรงกับบันทึก" }, { value: "partial", label: "ตรงบางส่วน" }, { value: "no", label: "ไม่ตรงกับบันทึก" }];
 
 function labelOf(options, value) {
@@ -2795,14 +2938,14 @@ function WeekSwitcher({ weekStart, onChange, disabled = false }) {
 }
 
 function SupervisionFileBlock({ file }) {
-  if (!file?.dataUrl) return <div style={{ color: "#94a3b8", fontSize: "0.9rem" }}>ยังไม่มีไฟล์แผน</div>;
+  if (!file?.dataUrl) return <div style={{ color: "#94a3b8", fontSize: "0.9rem" }}>ยังไม่มีไฟล์</div>;
   const isImage = String(file.type || "").startsWith("image/") || String(file.dataUrl).startsWith("data:image/");
   const isPdf = file.type === "application/pdf" || String(file.name || "").toLowerCase().endsWith(".pdf");
   return (
     <div style={{ display: "grid", gap: "0.75rem" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-        <div style={{ fontWeight: 800, color: "#0f172a", wordBreak: "break-word" }}>{file.name || "ไฟล์แผน"}</div>
-        <a href={file.dataUrl} download={file.name || "แผนการสอน"} style={{ ...btnSecondary, flex: "none", textDecoration: "none" }}>ดาวน์โหลด</a>
+        <div style={{ fontWeight: 800, color: "#0f172a", wordBreak: "break-word" }}>{file.name || "ไฟล์"}</div>
+        <a href={file.dataUrl} download={file.name || "ไฟล์"} style={{ ...btnSecondary, flex: "none", textDecoration: "none" }}>ดาวน์โหลด</a>
       </div>
       {isImage && <img src={file.dataUrl} alt={file.name || "ไฟล์แผน"} style={{ width: "100%", maxHeight: 320, objectFit: "contain", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }} />}
       {isPdf && <iframe title={file.name || "ไฟล์แผน"} src={file.dataUrl} style={{ width: "100%", height: 420, border: "1px solid #e2e8f0", borderRadius: "12px", background: "#fff" }} />}
@@ -2829,238 +2972,430 @@ function LinkLines({ value }) {
   );
 }
 
-function mediaChipStyle(active) {
-  return {
-    border: `1.5px solid ${active ? "#2563eb" : "#e2e8f0"}`,
-    background: active ? "#eff6ff" : "#fff",
-    color: active ? "#1d4ed8" : "#475569",
-    borderRadius: "999px",
-    padding: "0.45rem 0.8rem",
-    fontWeight: 700,
-    cursor: "pointer",
-    fontFamily: "inherit",
-    fontSize: "0.82rem",
-  };
-}
-
 const supervisionTextArea = { ...inputStyle, minHeight: 110, resize: "vertical", lineHeight: 1.55 };
 
-function DailyReportView({ report }) {
-  if (!report || (report.periods || []).length === 0) return <div style={{ color: "#94a3b8" }}>ยังไม่มีรายงานวันนี้</div>;
+function clockLabel(value) {
+  const text = String(value || "").slice(0, 5);
+  return text || "……";
+}
+
+function periodHasDetail(period) {
+  return !!(period?.start_time
+    || period?.end_time
+    || String(period?.subject || "").trim()
+    || String(period?.lesson_intro || "").trim()
+    || String(period?.lesson_activity || "").trim()
+    || String(period?.lesson_practice || "").trim()
+    || String(period?.lesson_summary || "").trim()
+    || String(period?.lesson || "").trim()
+    || String(period?.media_links || "").trim()
+    || String(period?.media_detail || "").trim()
+    || period?.homework === "yes"
+    || period?.homework_file?.dataUrl
+    || String(period?.plan_unit || "").trim()
+    || String(period?.plan_id || "").trim()
+    || String(period?.plan_hour || "").trim()
+    || String(period?.lesson_page || "").trim());
+}
+
+function periodIsBlank(period) {
+  return !period?.free && !periodHasDetail(period);
+}
+
+function selectedPlanParts(period) {
+  const pack = THAI_P2_PLAN_PACK;
+  const unit = pack.units.find(item => item.name === period?.plan_unit);
+  const plan = unit?.plans.find(item => item.id === period?.plan_id);
+  const hour = plan?.periods.find(item => String(item.hour) === String(period?.plan_hour || ""));
+  return { pack, unit, plan, hour };
+}
+
+function planChoicePatch(period, patch) {
+  if (patch.plan_unit !== undefined && patch.plan_unit !== period.plan_unit) {
+    return { plan_unit: patch.plan_unit, plan_id: "", plan_hour: "", lesson_page: "" };
+  }
+  if (patch.plan_id !== undefined && patch.plan_id !== period.plan_id) {
+    const pack = THAI_P2_PLAN_PACK;
+    return {
+      plan_id: patch.plan_id,
+      plan_hour: "",
+      lesson_page: "",
+      subject: patch.plan_id && !String(period.subject || "").trim() ? pack.subject : period.subject,
+    };
+  }
+  if (patch.plan_hour !== undefined && patch.plan_hour !== String(period.plan_hour || "")) {
+    const hour = selectedPlanParts({ ...period, plan_hour: patch.plan_hour }).hour;
+    return { plan_hour: patch.plan_hour, lesson_page: hour ? (hour.pages || []).join(", ") : "" };
+  }
+  return patch;
+}
+
+function periodFoldSummary(period, plan) {
+  const planLabel = plan ? `แผน ${plan.plan_no} ${plan.title}` : "";
+  const detail = String(period?.subject || "").trim() || planLabel;
+  if (period?.free && detail) return `คาบว่าง · ${detail}`;
+  if (period?.free) return "คาบว่าง";
+  return detail || "ยังไม่ได้กรอก";
+}
+
+const periodInput = { ...inputStyle, boxSizing: "border-box", minWidth: 0, maxWidth: "100%", fontSize: "16px" };
+const periodSelect = { ...periodInput };
+const periodArea = { ...supervisionTextArea, boxSizing: "border-box", minWidth: 0, maxWidth: "100%", fontSize: "16px", minHeight: 96 };
+const periodGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 170px), 1fr))", gap: "0.75rem", minWidth: 0 };
+
+function QuietFold({ title, children }) {
+  const [open, setOpen] = useState(false);
   return (
-    <div style={{ display: "grid", gap: "0.75rem" }}>
-      {report.periods.map(period => (
-        <div key={period.id || `${period.period}-${period.room}`} style={{ border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.9rem", display: "grid", gap: "0.35rem" }}>
-          <div style={{ fontWeight: 800, color: "#0f172a" }}>{period.period || "-"} · {period.subject || "-"} · ห้อง {period.room || "-"}</div>
-          <div style={{ color: "#334155" }}>เข้าสอน: {labelOf(DAILY_PUNCTUAL, period.punctual) || "-"} · กิจกรรม: {labelOf(DAILY_ACTIVITY, period.activity) || "-"} · ห้องเรียน: {labelOf(DAILY_ROOM, period.room_state) || "-"}</div>
-          <div style={{ color: "#334155" }}>มา {period.present || 0} · สาย {period.late_count || 0} · ลา {period.leave_count || 0} · ขาด {period.absent_count || 0}</div>
-          <div><strong>พฤติกรรม: </strong><FullText value={period.behavior_note} /></div>
-          <div><strong>กิจกรรมตามคาบ: </strong><FullText value={period.activity_note} /></div>
-          <div><strong>ความสะอาดและบรรยากาศ: </strong><FullText value={period.room_note} /></div>
-          <div style={{ color: "#334155" }}>การบ้าน: {period.homework === "yes" ? `มี${period.homework_detail ? ` — ${period.homework_detail}` : ""}${period.homework_due ? ` กำหนดส่ง ${formatThaiDateKey(period.homework_due)}` : ""}` : "ไม่มี"}</div>
-        </div>
-      ))}
+    <div style={{ borderTop: "1px solid #f1f5f9", minWidth: 0 }}>
+      <button type="button" aria-expanded={open} onClick={() => setOpen(value => !value)} style={{ width: "100%", minHeight: 44, display: "flex", alignItems: "center", gap: "0.4rem", border: "none", background: "transparent", fontFamily: "inherit", textAlign: "left", cursor: "pointer", padding: "0.2rem 0" }}>
+        <span style={{ fontWeight: 800, color: "#0f172a", flex: 1 }}>{title}</span>
+        {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+      </button>
+      {open && <div style={{ display: "grid", gap: "0.75rem", minWidth: 0, paddingBottom: "0.35rem" }}>{children}</div>}
     </div>
   );
 }
 
-function DailySupervisionEditor({ currentUser, weekStart }) {
-  const [date, setDate] = useState(() => defaultDailyDate(weekStart));
-  const [rowId, setRowId] = useState(null);
-  const [periods, setPeriods] = useState([]);
-  const [status, setStatus] = useState("");
-  const [late, setLate] = useState(false);
-  const [submittedAt, setSubmittedAt] = useState(null);
-  const [draft, setDraft] = useState({ period: "คาบ 1", subject: "", room: "", punctual: "ontime", present: "", late_count: "", leave_count: "", absent_count: "", behavior_note: "", activity: "done", activity_note: "", room_state: "tidy", room_note: "", homework: "no", homework_detail: "", homework_due: "" });
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-
-  useEffect(() => { setDate(defaultDailyDate(weekStart)); }, [weekStart]);
-
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
-    setError("");
-    setMessage("");
-    (async () => {
-      try {
-        const rows = await fetchSupervisionRows(currentUser.id, date, SUPERVISION_DAILY_DAY);
-        if (!active) return;
-        const report = rows[0] ? parseDailyReport(rows[0].subject, date) : emptyDailyReport(date);
-        setRowId(rows[0]?.id || null);
-        setPeriods(report.periods || []);
-        setStatus(report.status || (rows[0] ? supervisionStatusFromStartTime(rows[0].start_time) : ""));
-        setLate(!!report.late || supervisionStatusFromStartTime(rows[0]?.start_time) === "late");
-        setSubmittedAt(report.submitted_at || null);
-      } catch (err) {
-        if (active) setError(err.message || "โหลดรายงานรายวันไม่สำเร็จ");
-      } finally {
-        if (active) setLoading(false);
-      }
-    })();
-    return () => { active = false; };
-  }, [currentUser.id, date]);
-
-  const saveDaily = async (nextStatus) => {
-    const alreadySent = status === "submitted" || status === "late";
-    const effective = alreadySent ? "submitted" : nextStatus;
-    if (effective === "submitted" && periods.length === 0) {
-      setError("เพิ่มอย่างน้อย 1 คาบก่อนส่งรายงานวันนี้");
-      return;
-    }
-    setSaving(true);
-    setError("");
-    setMessage("");
-    try {
-      const timing = resolveSubmission(effective, status === "late" ? "submitted" : status, submittedAt, late, date);
-      const report = { ...emptyDailyReport(date), periods, status: timing.status, late: timing.late, submitted_at: timing.submitted_at };
-      const id = await writeSupervisionPlan(currentUser.id, date, report, rowId, SUPERVISION_DAILY_DAY);
-      setRowId(id);
-      setStatus(timing.status);
-      setLate(timing.late);
-      setSubmittedAt(timing.submitted_at);
-      setMessage(effective !== "submitted"
-        ? "บันทึกรายวันฉบับร่างแล้ว"
-        : alreadySent
-          ? (timing.late ? "บันทึกรายงานวันนี้แล้ว สถานะยังเป็นส่งเลท" : "บันทึกรายงานวันนี้แล้ว")
-          : (timing.late ? "ส่งรายงานวันนี้แล้ว สถานะส่งเลท" : "ส่งรายงานวันนี้แล้ว"));
-    } catch (err) {
-      setError(err.message || "บันทึกรายวันไม่สำเร็จ");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const addPeriod = () => {
-    if (!draft.subject.trim() || !draft.room.trim()) {
-      setError("กรุณากรอกวิชาและห้อง");
-      return;
-    }
-    setPeriods(current => [...current, { ...draft, id: newSupervisionId(), subject: draft.subject.trim(), room: draft.room.trim() }]);
-    setDraft(current => ({ ...current, subject: "", room: "", behavior_note: "", activity_note: "", room_note: "", homework: "no", homework_detail: "", homework_due: "", present: "", late_count: "", leave_count: "", absent_count: "" }));
-    setError("");
-    setMessage("เพิ่มคาบในรายงานวันนี้แล้ว กดบันทึกหรือส่งเพื่อเก็บข้อมูล");
-  };
-
-  const shownStatus = status === "submitted" && late ? "late" : (status || "missing");
-
+function DayCard({ title, summary, children }) {
+  const [open, setOpen] = useState(false);
   return (
-    <div style={{ display: "grid", gap: "1rem" }}>
-      <Card>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
-          <div>
-            <div style={{ fontWeight: 800, color: "#0f172a" }}>รายงานสิ้นวันของ {currentUser.name}</div>
-            <div style={{ fontSize: "0.8rem", color: "#64748b" }}>เช็กชื่อ พฤติกรรม และการบ้าน ใช้เวลาไม่กี่นาที</div>
-          </div>
-          <SupervisionStatusBadge status={shownStatus} />
-        </div>
-        <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap", marginTop: "0.9rem" }}>
-          {weekDates(weekStart).map(day => (
-            <button key={day} type="button" onClick={() => setDate(day)} style={mediaChipStyle(date === day)}>{formatThaiDateKey(day)}</button>
-          ))}
-        </div>
-      </Card>
-      {error && <ErrorBox>{error}</ErrorBox>}
-      {message && <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", borderRadius: "10px", padding: "0.75rem 1rem", color: "#166534", fontWeight: 700 }}>{message}</div>}
-      {loading ? <Card><div style={{ textAlign: "center", color: "#64748b", padding: "1.5rem" }}>กำลังโหลดรายงานวันนี้...</div></Card> : (
-        <Card>
-          <div style={{ fontWeight: 800, color: "#0f172a", marginBottom: "0.8rem" }}>เพิ่มคาบของ {formatThaiDateKey(date)}</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "0.75rem" }}>
-            <Field label="คาบ"><select value={draft.period} onChange={event => setDraft(current => ({ ...current, period: event.target.value }))} style={selectStyle}>{SUPERVISION_PERIOD_OPTIONS.map(option => <option key={option}>{option}</option>)}</select></Field>
-            <Field label="วิชา"><input value={draft.subject} onChange={event => setDraft(current => ({ ...current, subject: event.target.value }))} placeholder="เช่น คณิตศาสตร์" style={inputStyle} /></Field>
-            <Field label="ห้อง"><input value={draft.room} onChange={event => setDraft(current => ({ ...current, room: event.target.value }))} placeholder="เช่น ป.4/1" style={inputStyle} /></Field>
-            <Field label="เข้าสอน"><select value={draft.punctual} onChange={event => setDraft(current => ({ ...current, punctual: event.target.value }))} style={selectStyle}>{DAILY_PUNCTUAL.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></Field>
-            {[["มา", "present"], ["สาย", "late_count"], ["ลา", "leave_count"], ["ขาด", "absent_count"]].map(([label, key]) => (
-              <Field key={key} label={label}><input type="number" min="0" value={draft[key]} onChange={event => setDraft(current => ({ ...current, [key]: event.target.value }))} style={inputStyle} /></Field>
-            ))}
-            <Field label="กิจกรรมตามคาบ"><select value={draft.activity} onChange={event => setDraft(current => ({ ...current, activity: event.target.value }))} style={selectStyle}>{DAILY_ACTIVITY.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></Field>
-            <Field label="ห้องเรียน"><select value={draft.room_state} onChange={event => setDraft(current => ({ ...current, room_state: event.target.value }))} style={selectStyle}>{DAILY_ROOM.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></Field>
-            <Field label="การบ้าน"><select value={draft.homework} onChange={event => setDraft(current => ({ ...current, homework: event.target.value }))} style={selectStyle}><option value="no">ไม่มี</option><option value="yes">มี</option></select></Field>
-            {draft.homework === "yes" && <Field label="กำหนดส่ง"><input type="date" value={draft.homework_due} onChange={event => setDraft(current => ({ ...current, homework_due: event.target.value }))} style={inputStyle} /></Field>}
-          </div>
-          <div style={{ display: "grid", gap: "0.75rem", marginTop: "0.75rem" }}>
-            <Field label="หมายเหตุพฤติกรรมสำคัญ ถ้ามี"><input value={draft.behavior_note} onChange={event => setDraft(current => ({ ...current, behavior_note: event.target.value }))} placeholder="เช่น มีนักเรียนทะเลาะกัน 2 คน" style={inputStyle} /></Field>
-            <Field label="รายละเอียดกิจกรรมตามคาบ"><input value={draft.activity_note} onChange={event => setDraft(current => ({ ...current, activity_note: event.target.value }))} placeholder="สอนเรื่องอะไร และทำได้ตามคาบหรือไม่" style={inputStyle} /></Field>
-            <Field label="ความสะอาดและบรรยากาศห้อง"><input value={draft.room_note} onChange={event => setDraft(current => ({ ...current, room_note: event.target.value }))} placeholder="ห้องเรียบร้อย หรือต้องเก็บของ" style={inputStyle} /></Field>
-            {draft.homework === "yes" && <Field label="การบ้านที่มอบหมาย"><input value={draft.homework_detail} onChange={event => setDraft(current => ({ ...current, homework_detail: event.target.value }))} placeholder="เช่น ใบงานหน้า 12 ข้อ 1-5" style={inputStyle} /></Field>}
-          </div>
-          <button type="button" onClick={addPeriod} disabled={saving} style={{ ...btnPrimary, flex: "none", marginTop: "0.9rem", background: "linear-gradient(135deg, #2563eb, #1d4ed8)", color: "#fff" }}><Plus size={16} /> เพิ่มคาบวันนี้</button>
-          <div style={{ display: "grid", gap: "0.75rem", marginTop: "1rem" }}>
-            {periods.length === 0 && <div style={{ color: "#94a3b8" }}>ยังไม่มีคาบในวันนี้</div>}
-            {periods.map(period => (
-              <div key={period.id} style={{ border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.8rem" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", alignItems: "center" }}>
-                  <div style={{ fontWeight: 800, color: "#0f172a" }}>{period.period} · {period.subject} · {period.room}</div>
-                  <button type="button" onClick={() => setPeriods(current => current.filter(item => item.id !== period.id))} style={{ ...btnSecondary, flex: "none", color: "#dc2626" }}><Trash2 size={14} /></button>
-                </div>
-                <div style={{ color: "#475569", fontSize: "0.85rem", marginTop: "0.35rem" }}>มา {period.present || 0} สาย {period.late_count || 0} ลา {period.leave_count || 0} ขาด {period.absent_count || 0} · {labelOf(DAILY_PUNCTUAL, period.punctual)} · การบ้าน{period.homework === "yes" ? "มี" : "ไม่มี"}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "1rem" }}>
-            <button type="button" onClick={() => saveDaily("draft")} disabled={saving} style={{ ...btnSecondary, flex: "none" }}><Save size={16} /> บันทึกฉบับร่าง</button>
-            <button type="button" onClick={() => saveDaily("submitted")} disabled={saving} style={{ ...btnPrimary, flex: "none", background: "linear-gradient(135deg, #16a34a, #15803d)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}><CheckCircle size={16} /> ส่งรายงานวันนี้</button>
-          </div>
-        </Card>
+    <Card>
+      <button type="button" aria-expanded={open} onClick={() => setOpen(value => !value)} style={{ width: "100%", minHeight: 48, display: "flex", alignItems: "center", gap: "0.55rem", border: "none", background: "transparent", fontFamily: "inherit", textAlign: "left", cursor: "pointer", padding: 0 }}>
+        <span style={{ fontWeight: 800, fontSize: "1.05rem", color: "#0f172a", flex: "0 0 auto" }}>{title}</span>
+        <span style={{ color: "#64748b", fontSize: "0.8rem", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summary}</span>
+        {open ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+      </button>
+      {open && <div style={{ display: "grid", gap: "0.45rem", minWidth: 0, marginTop: "0.75rem" }}>{children}</div>}
+    </Card>
+  );
+}
+
+function WeekPeriodEditor({ period, disabled, onChange, onPickFile }) {
+  const [open, setOpen] = useState(false);
+  const { pack, unit, plan } = selectedPlanParts(period);
+  const choose = patch => onChange(planChoicePatch(period, patch));
+  const summary = periodFoldSummary(period, plan);
+  return (
+    <div style={{ border: "1px solid #e2e8f0", borderRadius: "12px", padding: open ? "0.75rem" : "0.35rem 0.5rem", display: "grid", gap: "0.75rem", minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", minWidth: 0 }}>
+        <button type="button" aria-expanded={open} aria-label={open ? `หุบคาบที่ ${period.period_no}` : `เปิดคาบที่ ${period.period_no}`} onClick={() => setOpen(value => !value)} style={{ width: 44, height: 44, flex: "none", border: "1px solid #e2e8f0", borderRadius: "10px", background: "#fff", color: "#1d4ed8", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+          {open ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+        </button>
+        <button type="button" onClick={() => setOpen(value => !value)} style={{ flex: 1, minWidth: 0, textAlign: "left", background: "transparent", border: "none", padding: "0.25rem 0", fontFamily: "inherit", cursor: "pointer" }}>
+          <div style={{ fontWeight: 800, color: "#0f172a" }}>คาบที่ {period.period_no}</div>
+          {!open && <div style={{ fontSize: "0.8rem", color: period.free ? "#64748b" : "#475569", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{summary}</div>}
+        </button>
+        <label style={{ display: "flex", alignItems: "center", gap: "0.35rem", minHeight: 44, flex: "none", fontWeight: 700, color: "#475569", cursor: disabled ? "not-allowed" : "pointer" }}>
+          <input type="checkbox" checked={!!period.free} disabled={disabled} onChange={event => onChange({ free: event.target.checked })} />
+          คาบว่าง
+        </label>
+      </div>
+      {open && (
+      <>
+      <div style={periodGrid}>
+        <Field label="หน่วย">
+          <select value={period.plan_unit || ""} disabled={disabled} onChange={event => choose({ plan_unit: event.target.value })} style={periodSelect}>
+            <option value="">ไม่ใช้แผนในระบบ</option>
+            {pack.units.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}
+          </select>
+        </Field>
+        <Field label="แผน">
+          <select value={plan?.id || ""} disabled={disabled || !unit} onChange={event => choose({ plan_id: event.target.value })} style={periodSelect}>
+            <option value="">ไม่เลือกแผน</option>
+            {(unit?.plans || []).map(item => <option key={item.id} value={item.id}>แผน {item.plan_no} {item.title}</option>)}
+          </select>
+        </Field>
+        <Field label="เรื่อง">
+          <select value={period.plan_hour || ""} disabled={disabled || !plan} onChange={event => choose({ plan_hour: event.target.value })} style={periodSelect}>
+            <option value="">ไม่เลือกเรื่อง</option>
+            {(plan?.periods || []).map(item => <option key={item.hour} value={String(item.hour)}>ชั่วโมงที่ {item.hour}</option>)}
+          </select>
+        </Field>
+        <Field label="หน้า">
+          <input value={period.lesson_page || ""} disabled={disabled} onChange={event => onChange({ lesson_page: event.target.value })} style={periodInput} />
+        </Field>
+      </div>
+      {plan?.objectives?.length > 0 && <div style={{ fontSize: "0.8rem", color: "#64748b", lineHeight: 1.5 }}>จุดประสงค์: {plan.objectives.join(" · ")}</div>}
+      <div style={periodGrid}>
+        <Field label="เวลาเริ่ม">
+          <input type="time" value={period.start_time || ""} onChange={event => onChange({ start_time: event.target.value })} style={periodInput} />
+        </Field>
+        <Field label="เวลาสิ้นสุด">
+          <input type="time" value={period.end_time || ""} onChange={event => onChange({ end_time: event.target.value })} style={periodInput} />
+        </Field>
+      </div>
+      <Field label="วิชา">
+        <input value={period.subject || ""} onChange={event => onChange({ subject: event.target.value })} style={periodInput} />
+      </Field>
+      <QuietFold title="รายละเอียดการสอน">
+        <Field label="1. ขั้นนำเข้าสู่บทเรียน">
+          <textarea value={period.lesson_intro || ""} onChange={event => onChange({ lesson_intro: event.target.value })} style={periodArea} />
+        </Field>
+        <Field label="2. ขั้นจัดกิจกรรมการเรียนรู้">
+          <textarea value={period.lesson_activity || ""} onChange={event => onChange({ lesson_activity: event.target.value })} style={periodArea} />
+        </Field>
+        <Field label="3. ขั้นฝึกฝนประยุกต์">
+          <textarea value={period.lesson_practice || ""} onChange={event => onChange({ lesson_practice: event.target.value })} style={periodArea} />
+        </Field>
+        <Field label="4. ขั้นสรุป">
+          <textarea value={period.lesson_summary || ""} onChange={event => onChange({ lesson_summary: event.target.value })} style={periodArea} />
+        </Field>
+      </QuietFold>
+      <QuietFold title="สื่อ">
+        <Field label="ลิงก์สื่อ">
+          <textarea value={period.media_links || ""} onChange={event => onChange({ media_links: event.target.value })} style={periodArea} />
+        </Field>
+        <Field label="สื่อโดยละเอียด">
+          <textarea value={period.media_detail || ""} onChange={event => onChange({ media_detail: event.target.value })} style={periodArea} />
+        </Field>
+      </QuietFold>
+      <Field label="มีงานหรือการบ้านหรือไม่">
+        <select value={period.homework === "yes" ? "yes" : "no"} onChange={event => {
+          const homework = event.target.value;
+          onChange(homework === "yes" ? { homework } : { homework, homework_what: "", homework_page: "", homework_file: null });
+        }} style={periodSelect}>
+          <option value="no">ไม่มี</option>
+          <option value="yes">มี</option>
+        </select>
+      </Field>
+      {period.homework === "yes" && (
+        <>
+          <Field label="งานหรือการบ้านคืออะไร">
+            <textarea value={period.homework_what || ""} onChange={event => onChange({ homework_what: event.target.value })} style={periodArea} />
+          </Field>
+          <Field label="หน้าเท่าไร">
+            <input value={period.homework_page || ""} onChange={event => onChange({ homework_page: event.target.value })} style={periodInput} />
+          </Field>
+          <Field label="ใบงาน">
+            <label style={{ ...btnSecondary, flex: "none", width: "fit-content" }}>
+              <Upload size={16} /> อัปโหลดใบงาน
+              <input type="file" accept={SUPERVISION_FILE_ACCEPT} onChange={onPickFile} style={{ display: "none" }} />
+            </label>
+            <div style={{ marginTop: "0.75rem" }}><SupervisionFileBlock file={period.homework_file} /></div>
+            {period.homework_file?.dataUrl && (
+              <button type="button" onClick={() => onChange({ homework_file: null })} style={{ ...btnSecondary, flex: "none", marginTop: "0.75rem", color: "#dc2626" }}>เอาใบงานออก</button>
+            )}
+          </Field>
+        </>
+      )}
+      </>
       )}
     </div>
   );
 }
 
-function TeachingSupervisionPage({ employees, currentUser }) {
-  if (currentUser?.role === "admin") return <SupervisionAdmin employees={employees} currentUser={currentUser} />;
-  return <SupervisionTeacher currentUser={currentUser} />;
+function SupervisionPeriodRead({ period }) {
+  const [open, setOpen] = useState(false);
+  const choice = selectedPlanParts(period);
+  const planLabel = choice.plan ? `แผน ${choice.plan.plan_no} ${choice.plan.title}` : "";
+  const topicLabel = choice.hour ? `ชั่วโมงที่ ${choice.hour.hour}` : "";
+  const summary = periodFoldSummary(period, choice.plan);
+  if (!period.free && !periodHasDetail(period)) {
+    return <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "0.7rem 0.8rem", color: "#94a3b8" }}>คาบที่ {period.period_no} · ยังไม่ได้กรอก</div>;
+  }
+  if (period.free && !periodHasDetail(period)) {
+    return <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "0.7rem 0.8rem", fontWeight: 800, color: "#64748b" }}>คาบที่ {period.period_no} · คาบว่าง</div>;
+  }
+  return (
+    <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "0.55rem 0.7rem", display: "grid", gap: "0.45rem", minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", minWidth: 0 }}>
+        <button type="button" aria-expanded={open} aria-label={open ? `หุบคาบที่ ${period.period_no}` : `เปิดคาบที่ ${period.period_no}`} onClick={() => setOpen(value => !value)} style={{ width: 44, height: 44, flex: "none", border: "1px solid #e2e8f0", borderRadius: "10px", background: "#fff", color: "#1d4ed8", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+          {open ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+        </button>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 800, color: "#0f172a" }}>คาบที่ {period.period_no} · {clockLabel(period.start_time)} - {clockLabel(period.end_time)}</div>
+          {!open && <div style={{ fontSize: "0.8rem", color: "#475569", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{summary}</div>}
+        </div>
+      </div>
+      {open && (
+        <div style={{ display: "grid", gap: "0.45rem", minWidth: 0 }}>
+          {(choice.unit || planLabel || topicLabel || period.lesson_page) && (
+            <div style={{ color: "#0f172a", lineHeight: 1.55 }}>
+              {choice.unit && <div><strong>หน่วย: </strong>{choice.unit.name}</div>}
+              {planLabel && <div><strong>แผน: </strong>{planLabel}</div>}
+              {topicLabel && <div><strong>เรื่อง: </strong>{topicLabel}</div>}
+              {period.lesson_page && <div style={{ overflowWrap: "anywhere" }}><strong>หน้า: </strong>{period.lesson_page}</div>}
+            </div>
+          )}
+          {String(period.subject || "").trim() && <div style={{ color: "#0f172a" }}><strong>วิชา: </strong>{period.subject}</div>}
+          {[
+            ["1. ขั้นนำเข้าสู่บทเรียน", period.lesson_intro],
+            ["2. ขั้นจัดกิจกรรมการเรียนรู้", period.lesson_activity],
+            ["3. ขั้นฝึกฝนประยุกต์", period.lesson_practice],
+            ["4. ขั้นสรุป", period.lesson_summary],
+          ].filter(([, value]) => String(value || "").trim()).length > 0 && (
+            <div style={{ display: "grid", gap: "0.45rem" }}>
+              <div style={{ fontWeight: 800, color: "#0f172a" }}>รายละเอียดการสอน</div>
+              {[
+                ["1. ขั้นนำเข้าสู่บทเรียน", period.lesson_intro],
+                ["2. ขั้นจัดกิจกรรมการเรียนรู้", period.lesson_activity],
+                ["3. ขั้นฝึกฝนประยุกต์", period.lesson_practice],
+                ["4. ขั้นสรุป", period.lesson_summary],
+              ].filter(([, value]) => String(value || "").trim()).map(([label, value]) => (
+                <div key={label}>
+                  <div style={{ fontWeight: 800, color: "#0f172a" }}>{label}</div>
+                  <FullText value={value} />
+                </div>
+              ))}
+            </div>
+          )}
+          {String(period.media_links || "").trim() && (
+            <div>
+              <div style={{ fontWeight: 800, color: "#0f172a" }}>ลิงก์สื่อ</div>
+              <LinkLines value={period.media_links} />
+            </div>
+          )}
+          {String(period.media_detail || "").trim() && (
+            <div>
+              <div style={{ fontWeight: 800, color: "#0f172a" }}>สื่อโดยละเอียด</div>
+              <FullText value={period.media_detail} />
+            </div>
+          )}
+          {period.homework === "yes" && (
+            <>
+              <div>
+                <div style={{ fontWeight: 800, color: "#0f172a" }}>คืองานอะไร</div>
+                <FullText value={period.homework_what} />
+              </div>
+              <div style={{ color: "#0f172a" }}><strong>หน้า: </strong>{period.homework_page || "-"}</div>
+              <div>
+                <div style={{ fontWeight: 800, color: "#0f172a" }}>ใบงาน</div>
+                {period.homework_file?.dataUrl ? <SupervisionFileBlock file={period.homework_file} /> : <div style={{ color: "#94a3b8" }}>ไม่ได้แนบใบงาน</div>}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
-function SupervisionTeacher({ currentUser }) {
-  const [mode, setMode] = useState("daily");
+function SupervisionWeekView({ periods, weekStart }) {
+  return (
+    <div style={{ display: "grid", gap: "0.75rem" }}>
+      {weekDates(weekStart).map((date, index) => {
+        const dayPeriods = Array.from({ length: 6 }, (_, slot) => {
+          const periodNo = slot + 1;
+          return (periods || []).find(period => period.teach_date === date && Number(period.period_no) === periodNo)
+            || { id: `${date}-${periodNo}`, teach_date: date, period_no: periodNo, free: false };
+        });
+        const filled = dayPeriods.filter(period => period.free || periodHasDetail(period)).length;
+        return (
+          <DayCard key={date} title={`วัน${DAY_NAMES[index + 1]}`} summary={`${formatThaiDateKey(date)} · ${filled}/6`}>
+            {dayPeriods.map(period => (
+              <SupervisionPeriodRead key={period.id || `${date}-${period.period_no}`} period={period} />
+            ))}
+          </DayCard>
+        );
+      })}
+    </div>
+  );
+}
+
+function KindergartenDayEditor({ day, dayName, disabled, onChange }) {
+  const [open, setOpen] = useState(false);
+  const summary = kinderDaySummary(day);
+  const setActivity = (key, value) => onChange({ activities: { ...day.activities, [key]: value.slice(0, 500) } });
+  return (
+    <div style={{ border: "1px solid #e2e8f0", borderRadius: "12px", padding: open ? "0.75rem" : "0.35rem 0.5rem", display: "grid", gap: "0.75rem", minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", minWidth: 0, flexWrap: "wrap" }}>
+        <button type="button" aria-expanded={open} aria-label={open ? `หุบวัน${dayName}` : `เปิดวัน${dayName}`} onClick={() => setOpen(value => !value)} style={{ width: 44, height: 44, flex: "none", border: "1px solid #e2e8f0", borderRadius: "10px", background: "#fff", color: "#1d4ed8", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+          {open ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+        </button>
+        <button type="button" onClick={() => setOpen(value => !value)} style={{ flex: "1 1 120px", minWidth: 0, textAlign: "left", background: "transparent", border: "none", padding: "0.25rem 0", fontFamily: "inherit", cursor: "pointer" }}>
+          <div style={{ fontWeight: 800, color: "#0f172a" }}>วัน{dayName}</div>
+          {!open && <div style={{ fontSize: "0.8rem", color: day.off ? "#64748b" : "#475569", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{summary}</div>}
+        </button>
+        <label style={{ display: "flex", alignItems: "center", gap: "0.35rem", minHeight: 44, flex: "none", fontWeight: 700, color: "#475569", cursor: disabled ? "not-allowed" : "pointer" }}>
+          <input type="checkbox" checked={!!day.off} disabled={disabled} onChange={event => onChange({ off: event.target.checked })} />
+          ไม่มีแผนสอน
+        </label>
+      </div>
+      {open && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: "0.75rem", minWidth: 0 }}>
+          {KINDER_ACTIVITIES.map(item => (
+            <Field key={item.key} label={item.label}>
+              <textarea value={day.activities?.[item.key] || ""} disabled={disabled} onChange={event => setActivity(item.key, event.target.value)} style={{ ...periodArea, minHeight: 72 }} />
+            </Field>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function KindergartenWeekView({ plan, weekStart }) {
+  const days = kinderDaysForEditor(plan, weekStart);
+  return (
+    <div style={{ display: "grid", gap: "0.75rem", minWidth: 0 }}>
+      <div style={{ fontWeight: 800, color: "#0f172a" }}>หน่วย {plan.unit || "-"} · ห้อง {plan.room || "-"}</div>
+      {days.map((day, index) => (
+        <KindergartenDayRead key={day.date} day={day} dayName={DAY_NAMES[index + 1]} dateLabel={formatThaiDateKey(day.date)} />
+      ))}
+    </div>
+  );
+}
+
+function KindergartenDayRead({ day, dayName, dateLabel }) {
+  const [open, setOpen] = useState(false);
+  const summary = kinderDaySummary(day);
+  return (
+    <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "0.55rem 0.7rem", display: "grid", gap: "0.45rem", minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", minWidth: 0 }}>
+        <button type="button" aria-expanded={open} aria-label={open ? `หุบวัน${dayName}` : `เปิดวัน${dayName}`} onClick={() => setOpen(value => !value)} style={{ width: 44, height: 44, flex: "none", border: "1px solid #e2e8f0", borderRadius: "10px", background: "#fff", color: "#1d4ed8", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+          {open ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+        </button>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 800, color: "#0f172a" }}>วัน{dayName} · {dateLabel}</div>
+          {!open && <div style={{ fontSize: "0.8rem", color: "#475569", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{summary}</div>}
+        </div>
+      </div>
+      {open && (
+        <div style={{ display: "grid", gap: "0.45rem" }}>
+          {day.off && <div style={{ fontWeight: 800, color: "#64748b" }}>วันนี้ไม่มีแผนสอน</div>}
+          {KINDER_ACTIVITIES.filter(item => String(day.activities?.[item.key] || "").trim()).map(item => (
+            <div key={item.key}>
+              <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.label}</div>
+              <FullText value={day.activities[item.key]} />
+            </div>
+          ))}
+          {!day.off && !KINDER_ACTIVITIES.some(item => String(day.activities?.[item.key] || "").trim()) && <div style={{ color: "#94a3b8" }}>ยังไม่ได้กรอก</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function KindergartenSupervisionTeacher({ currentUser }) {
   const [weekStart, setWeekStart] = useState(() => mondayOf(todayISO()));
   const [rowId, setRowId] = useState(null);
-  const [weekTopic, setWeekTopic] = useState("");
-  const [shortPlan, setShortPlan] = useState("");
-  const [media, setMedia] = useState([]);
-  const [customMedia, setCustomMedia] = useState([]);
-  const [customDraft, setCustomDraft] = useState("");
-  const [file, setFile] = useState(null);
-  const [taughtAsPlanned, setTaughtAsPlanned] = useState("");
-  const [objectivePercent, setObjectivePercent] = useState("");
-  const [problems, setProblems] = useState("");
-  const [remediation, setRemediation] = useState("");
-  const [nextWeekLinks, setNextWeekLinks] = useState("");
-  const [nextWeekFile, setNextWeekFile] = useState(null);
-  const [gradebook, setGradebook] = useState([]);
-  const [gradeDraft, setGradeDraft] = useState({ subject: "", room: "", score_item: "", missing_students: "", note: "" });
+  const [unit, setUnit] = useState("");
+  const [room, setRoom] = useState("");
+  const [days, setDays] = useState([]);
+  const [baseline, setBaseline] = useState("");
   const [signoff, setSignoff] = useState(null);
   const [observations, setObservations] = useState([]);
-  const [periods, setPeriods] = useState([]);
   const [status, setStatus] = useState("");
   const [late, setLate] = useState(false);
   const [submittedAt, setSubmittedAt] = useState(null);
-  const [newPeriod, setNewPeriod] = useState(() => ({ teach_date: defaultPeriodDate(mondayOf(todayISO())), period: "คาบ 1", room: "", topic: "" }));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  const snapshot = (nextUnit, nextRoom, nextDays) => JSON.stringify({ unit: nextUnit, room: nextRoom, days: nextDays });
+
   const applyPlan = (plan, id) => {
+    const nextDays = kinderDaysForEditor(plan, plan.week_start || weekStart);
+    const nextUnit = plan.kind === "kindergarten" ? (plan.unit || "") : "";
+    const nextRoom = plan.kind === "kindergarten" ? (plan.room || "") : "";
     setRowId(id || null);
-    setWeekTopic(plan.week_topic || "");
-    setShortPlan(plan.short_plan || "");
-    setMedia(Array.isArray(plan.media) ? plan.media : []);
-    setCustomMedia(Array.isArray(plan.custom_media) ? plan.custom_media : []);
-    setFile(plan.file || null);
-    setTaughtAsPlanned(plan.taught_as_planned || "");
-    setObjectivePercent(plan.objective_percent ?? "");
-    setProblems(plan.problems || "");
-    setRemediation(plan.remediation || "");
-    setNextWeekLinks(plan.next_week_links || "");
-    setNextWeekFile(plan.next_week_file || null);
-    setGradebook(Array.isArray(plan.gradebook) ? plan.gradebook : []);
+    setUnit(nextUnit);
+    setRoom(nextRoom);
+    setDays(nextDays);
+    setBaseline(snapshot(nextUnit, nextRoom, nextDays));
     setSignoff(plan.signoff || null);
     setObservations(Array.isArray(plan.observations) ? plan.observations : []);
-    setPeriods(Array.isArray(plan.periods) ? plan.periods : []);
     setStatus(plan.status || "");
     setLate(!!plan.late);
     setSubmittedAt(plan.submitted_at || null);
@@ -3071,7 +3406,6 @@ function SupervisionTeacher({ currentUser }) {
     setLoading(true);
     setError("");
     setMessage("");
-    setNewPeriod({ teach_date: defaultPeriodDate(weekStart), period: "คาบ 1", room: "", topic: "" });
     (async () => {
       try {
         const rows = await fetchSupervisionRows(currentUser.id, weekStart);
@@ -3091,7 +3425,7 @@ function SupervisionTeacher({ currentUser }) {
           plan.status = "draft";
           plan.late = false;
         }
-        applyPlan(plan, row?.id);
+        if (active) applyPlan(plan, row?.id);
       } catch (err) {
         if (active) setError(err.message || "โหลดแผนไม่สำเร็จ");
       } finally {
@@ -3103,56 +3437,60 @@ function SupervisionTeacher({ currentUser }) {
 
   const formPlan = (nextStatus = status || "draft") => {
     const previous = status === "late" ? "submitted" : status;
-    const timing = resolveSubmission(nextStatus, previous, submittedAt, late, shiftDateKey(weekStart, 4));
+    const timing = resolveSubmission(nextStatus, previous, submittedAt, late, weekStart);
     return {
-      version: 2,
+      version: 4,
+      kind: "kindergarten",
       week_start: weekStart,
-      week_topic: weekTopic,
-      short_plan: shortPlan,
-      media,
-      custom_media: customMedia,
-      file,
-      taught_as_planned: taughtAsPlanned,
-      objective_percent: objectivePercent,
-      problems,
-      remediation,
-      next_week_links: nextWeekLinks,
-      next_week_file: nextWeekFile,
-      gradebook,
+      unit: unit.trim().slice(0, 80),
+      room: room.trim().slice(0, 40),
+      days,
+      periods: [],
       signoff,
       observations,
       status: timing.status,
       late: timing.late,
       submitted_at: timing.submitted_at,
-      periods,
     };
   };
 
   const savePlan = async (nextStatus) => {
     const alreadySent = status === "submitted" || status === "late";
     const effective = alreadySent ? "submitted" : nextStatus;
-    if (effective === "submitted" && (!weekTopic.trim() || !shortPlan.trim() || !taughtAsPlanned || objectivePercent === "" || !problems.trim() || !remediation.trim())) {
-      setError("ก่อนส่งรายสัปดาห์ กรอกแผน ผลการจัดกิจกรรม ร้อยละที่ผ่านจุดประสงค์ ปัญหา และแนวทางซ่อมเสริม");
-      return;
+    if (effective === "submitted") {
+      if (!unit.trim() || !room.trim()) {
+        setError("ส่งได้เมื่อกรอกหน่วยประจำสัปดาห์และห้อง");
+        return;
+      }
+      const missingDays = days.flatMap((day, index) => kinderDayReady(day) ? [] : [`วัน${DAY_NAMES[index + 1]}`]);
+      if (missingDays.length > 0) {
+        setError(`ส่งได้เมื่อครบทุกวันจันทร์ถึงศุกร์ ยังขาด ${missingDays.join(" ")} ให้กรอกกิจกรรมหลักครบ 6 อย่าง หรือติ๊กไม่มีแผนสอน`);
+        return;
+      }
     }
-    if (effective === "submitted" && !file && !nextWeekFile && !nextWeekLinks.trim()) {
-      setError("แนบไฟล์แผน หรือใส่ลิงก์สื่อสัปดาห์หน้า ก่อนส่ง");
+    const plan = formPlan(effective);
+    if (JSON.stringify(plan).length > SUPERVISION_JSON_LIMIT) {
+      setError("แผนยาวเกินที่ฐานเก็บได้");
       return;
     }
     setSaving(true);
     setError("");
     setMessage("");
     try {
-      const plan = formPlan(effective);
       const id = await writeSupervisionPlan(currentUser.id, weekStart, plan, rowId);
+      const nextDays = kinderDaysForEditor(plan, weekStart);
       setRowId(id);
+      setUnit(plan.unit);
+      setRoom(plan.room);
+      setDays(nextDays);
+      setBaseline(snapshot(plan.unit, plan.room, nextDays));
       setStatus(plan.status);
       setLate(plan.late);
       setSubmittedAt(plan.submitted_at);
       setMessage(!alreadySent && effective === "submitted"
-        ? (plan.late ? "ส่งรายสัปดาห์แล้ว สถานะส่งเลท" : "ส่งให้ฝ่ายวิชาการแล้ว")
+        ? (plan.late ? "ส่งรายสัปดาห์แล้ว สถานะสาย" : "ส่งให้ฝ่ายวิชาการแล้ว")
         : effective === "submitted"
-          ? (plan.late ? "บันทึกรายสัปดาห์แล้ว สถานะยังเป็นส่งเลท" : "บันทึกรายสัปดาห์แล้ว")
+          ? (plan.late ? "บันทึกรายสัปดาห์แล้ว สถานะยังเป็นสาย" : "บันทึกรายสัปดาห์แล้ว")
           : "บันทึกฉบับร่างแล้ว");
     } catch (err) {
       setError(err.message || "บันทึกไม่สำเร็จ");
@@ -3161,32 +3499,14 @@ function SupervisionTeacher({ currentUser }) {
     }
   };
 
-  const persistPeriods = async (nextPeriods, successMessage) => {
-    setSaving(true);
-    setError("");
-    setMessage("");
-    try {
-      const nextStatus = status || "draft";
-      const plan = { ...formPlan(nextStatus), periods: nextPeriods };
-      const id = await writeSupervisionPlan(currentUser.id, weekStart, plan, rowId);
-      setRowId(id);
-      setPeriods(nextPeriods);
-      setStatus(plan.status);
-      setLate(plan.late);
-      setSubmittedAt(plan.submitted_at);
-      setMessage(successMessage);
-      return true;
-    } catch (err) {
-      setError(err.message || "บันทึกคาบไม่สำเร็จ");
-      return false;
-    } finally {
-      setSaving(false);
-    }
+  const changeWeek = (next) => {
+    if (next === weekStart || loading || saving) return;
+    if (snapshot(unit, room, days) !== baseline && !window.confirm("ยังไม่ได้บันทึก สิ่งที่กรอกอยู่จะหายไปเมื่อเปลี่ยนสัปดาห์")) return;
+    setWeekStart(next);
   };
 
   const copyPreviousWeek = async () => {
-    const dirty = weekTopic.trim() || shortPlan.trim() || media.length || customMedia.length || file || periods.length || taughtAsPlanned || String(objectivePercent).trim() || problems.trim() || remediation.trim() || nextWeekLinks.trim() || nextWeekFile || gradebook.length;
-    if (dirty && !window.confirm("คัดลอกจากสัปดาห์ก่อนจะแทนที่สิ่งที่กรอกอยู่ ข้อมูลจะยังไม่ถูกบันทึกจนกว่าจะกดบันทึกเอง")) return;
+    if (snapshot(unit, room, days) !== baseline && !window.confirm("คัดลอกจากสัปดาห์ก่อนจะแทนที่สิ่งที่กรอกอยู่ ข้อมูลจะยังไม่ถูกบันทึกจนกว่าจะกดบันทึกเอง")) return;
     setSaving(true);
     setError("");
     setMessage("");
@@ -3194,33 +3514,17 @@ function SupervisionTeacher({ currentUser }) {
       const previousWeek = shiftDateKey(weekStart, -7);
       const rows = await fetchSupervisionRows(currentUser.id, previousWeek);
       const plan = rows[0] ? parseSupervisionPlan(rows[0].subject, previousWeek) : null;
-      const hasContent = plan && (plan.week_topic || plan.short_plan || plan.media?.length || plan.custom_media?.length || plan.file || plan.next_week_file || plan.next_week_links || plan.periods?.length);
-      if (!hasContent) {
-        setError("ยังไม่มีแผนของสัปดาห์ก่อน");
+      if (plan?.kind !== "kindergarten" || (!plan.unit && !plan.room && !(plan.days || []).some(day => day.off || KINDER_ACTIVITIES.some(item => String(day.activities?.[item.key] || "").trim())))) {
+        setError("ยังไม่มีแผนอนุบาลของสัปดาห์ก่อน");
         return;
       }
-      setWeekTopic(plan.week_topic || "");
-      setShortPlan(plan.short_plan || "");
-      setMedia(plan.media || []);
-      setCustomMedia(plan.custom_media || []);
-      setFile(plan.file || null);
-      setNextWeekLinks(plan.next_week_links || "");
-      setNextWeekFile(plan.next_week_file || null);
-      setPeriods((plan.periods || []).map(period => ({
-        id: newSupervisionId(),
-        teach_date: period.teach_date ? shiftDateKey(period.teach_date, 7) : defaultPeriodDate(weekStart),
-        period: period.period || "คาบ 1",
-        room: period.room || "",
-        topic: period.topic || "",
-        what_happened: "",
-        what_worked: "",
-        next_adjustment: "",
-      })));
-      setTaughtAsPlanned("");
-      setObjectivePercent("");
-      setProblems("");
-      setRemediation("");
-      setGradebook([]);
+      const copiedDays = kinderDaysForEditor(plan, previousWeek).map(day => ({
+        ...day,
+        date: shiftDateKey(day.date, 7),
+      }));
+      setUnit(plan.unit || "");
+      setRoom(plan.room || "");
+      setDays(kinderDaysForEditor({ days: copiedDays }, weekStart));
       setMessage("คัดลอกจากสัปดาห์ก่อนแล้ว กดบันทึกฉบับร่างหรือส่งให้ฝ่ายวิชาการเพื่อเก็บข้อมูล");
     } catch (err) {
       setError(err.message || "คัดลอกไม่สำเร็จ");
@@ -3229,18 +3533,282 @@ function SupervisionTeacher({ currentUser }) {
     }
   };
 
-  const addCustomMedia = () => {
-    const value = customDraft.trim();
-    if (!value) return;
-    if (SUPERVISION_MEDIA_OPTIONS.includes(value)) {
-      setMedia(current => current.includes(value) ? current : [...current, value]);
-    } else {
-      setCustomMedia(current => current.includes(value) ? current : [...current, value]);
-    }
-    setCustomDraft("");
+  const updateDay = (date, patch) => {
+    setDays(current => current.map(day => day.date === date ? { ...day, ...patch } : day));
   };
 
-  const onPickFile = async (event, setter) => {
+  const actionButtons = (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))", gap: "0.5rem" }}>
+      <button type="button" onClick={copyPreviousWeek} disabled={saving || loading} style={{ ...btnSecondary, minHeight: 44 }}><Copy size={16} /> คัดลอกจากสัปดาห์ก่อน</button>
+      <button type="button" onClick={() => savePlan("draft")} disabled={saving || loading} style={{ ...btnSecondary, minHeight: 44 }}><Save size={16} /> บันทึกฉบับร่าง</button>
+      <button type="button" onClick={() => savePlan("submitted")} disabled={saving || loading} style={{ ...btnPrimary, minHeight: 44, background: "linear-gradient(135deg, #16a34a, #15803d)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}>
+        {saving ? <RefreshCw size={16} style={{ animation: "spin 1s linear infinite" }} /> : <CheckCircle size={16} />} ส่งให้ฝ่ายวิชาการ
+      </button>
+    </div>
+  );
+
+  return (
+    <div style={{ display: "grid", gap: "1rem", minWidth: 0 }}>
+      <WeekSwitcher weekStart={weekStart} onChange={changeWeek} disabled={saving || loading} />
+      {error && <ErrorBox>{error}</ErrorBox>}
+      {message && <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", borderRadius: "10px", padding: "0.75rem 1rem", color: "#166534", fontWeight: 700 }}>{message}</div>}
+      {loading ? (
+        <Card><div style={{ textAlign: "center", color: "#64748b", padding: "1.5rem" }}>กำลังโหลดแผนสัปดาห์...</div></Card>
+      ) : (
+        <>
+          <Card>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center", flexWrap: "wrap", marginBottom: "0.9rem" }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0f172a" }}>แผนอนุบาลของ {currentUser.name}</div>
+                <div style={{ fontSize: "0.8rem", color: "#b45309", fontWeight: 700, marginTop: "0.25rem" }}>ส่งไม่เกิน {formatThaiDateKey(shiftDateKey(weekStart, -1))} เวลา 15:00</div>
+              </div>
+              <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+                <SupervisionStatusBadge status={status === "submitted" && late ? "late" : (status || "missing")} />
+                {signoff?.at && <SupervisionStatusBadge status="approved" />}
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))", gap: "0.75rem", marginBottom: "0.9rem" }}>
+              <Field label="หน่วยประจำสัปดาห์">
+                <input value={unit} onChange={event => setUnit(event.target.value.slice(0, 80))} style={periodInput} />
+              </Field>
+              <Field label="ห้อง">
+                <input value={room} onChange={event => setRoom(event.target.value.slice(0, 40))} style={periodInput} />
+              </Field>
+            </div>
+            {signoff?.at && (
+              <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "12px", padding: "0.8rem", marginBottom: "0.9rem" }}>
+                <div style={{ fontWeight: 800, color: "#1d4ed8" }}>ฝ่ายวิชาการรับทราบแล้ว · {signoff.by || "ผู้บริหาร"} · {fmtDate(signoff.at)} {fmtTime(signoff.at)}</div>
+                <FullText value={signoff.comment} />
+              </div>
+            )}
+            {observations.length > 0 && (
+              <div style={{ display: "grid", gap: "0.45rem", marginBottom: "0.9rem" }}>
+                {observations.map(item => (
+                  <div key={item.id} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.75rem" }}>
+                    <div style={{ fontWeight: 800, color: "#0f172a" }}>นิเทศในห้อง {formatThaiDateKey(item.date)} · {labelOf(OBSERVATION_MATCH, item.match) || "-"}</div>
+                    <FullText value={item.note} />
+                  </div>
+                ))}
+              </div>
+            )}
+            {actionButtons}
+            {submittedAt && status === "submitted" && <div style={{ marginTop: "0.7rem", fontSize: "0.78rem", color: "#64748b" }}>ส่งล่าสุด {fmtDate(submittedAt)} {fmtTime(submittedAt)}</div>}
+          </Card>
+          <Card>
+            <div style={{ display: "grid", gap: "0.45rem", minWidth: 0 }}>
+              {days.map((day, index) => (
+                <KindergartenDayEditor
+                  key={day.date}
+                  day={day}
+                  dayName={DAY_NAMES[index + 1]}
+                  disabled={saving}
+                  onChange={patch => updateDay(day.date, patch)}
+                />
+              ))}
+            </div>
+          </Card>
+          <Card>{actionButtons}</Card>
+        </>
+      )}
+    </div>
+  );
+}
+
+function TeachingSupervisionPage({ employees, currentUser }) {
+  const [level, setLevel] = useState(currentUser?.role === "admin" ? "" : null);
+  useEffect(() => {
+    if (currentUser?.role === "admin") return undefined;
+    let active = true;
+    Promise.all([
+      fetchTeacherLevel(currentUser.id).catch(() => ""),
+      loadAssignedPlanLevels().then(map => map[currentUser.id] || "").catch(() => ""),
+    ]).then(([payroll, assigned]) => {
+      if (!active) return;
+      if (assigned === "อนุบาล") setLevel("อนุบาล");
+      else if (assigned === "school") setLevel("");
+      else setLevel(payroll || "");
+    }).catch(() => {
+      if (active) setLevel("");
+    });
+    return () => { active = false; };
+  }, [currentUser?.id, currentUser?.role]);
+  if (currentUser?.role === "admin") return <SupervisionAdmin employees={employees} currentUser={currentUser} />;
+  if (level === null) return <Card><div style={{ textAlign: "center", color: "#64748b", padding: "1.5rem" }}>กำลังโหลดแผนสัปดาห์...</div></Card>;
+  if (level === "อนุบาล") return <KindergartenSupervisionTeacher currentUser={currentUser} />;
+  return <SupervisionTeacher currentUser={currentUser} />;
+}
+
+function SupervisionTeacher({ currentUser }) {
+  const [weekStart, setWeekStart] = useState(() => mondayOf(todayISO()));
+  const [rowId, setRowId] = useState(null);
+  const [periods, setPeriods] = useState([]);
+  const [baseline, setBaseline] = useState("[]");
+  const [signoff, setSignoff] = useState(null);
+  const [observations, setObservations] = useState([]);
+  const [status, setStatus] = useState("");
+  const [late, setLate] = useState(false);
+  const [submittedAt, setSubmittedAt] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  const applyPlan = (plan, id) => {
+    const nextPeriods = periodsForEditor(plan, plan.week_start || weekStart);
+    setRowId(id || null);
+    setPeriods(nextPeriods);
+    setBaseline(JSON.stringify(nextPeriods));
+    setSignoff(plan.signoff || null);
+    setObservations(Array.isArray(plan.observations) ? plan.observations : []);
+    setStatus(plan.status || "");
+    setLate(!!plan.late);
+    setSubmittedAt(plan.submitted_at || null);
+  };
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError("");
+    setMessage("");
+    (async () => {
+      try {
+        const rows = await fetchSupervisionRows(currentUser.id, weekStart);
+        if (!active) return;
+        const extras = rows.slice(1).map(row => row.id);
+        if (extras.length) await supabase.from("teaching_schedule").delete().in("id", extras);
+        const row = rows[0];
+        const plan = row ? parseSupervisionPlan(row.subject, weekStart) : emptySupervisionPlan(weekStart);
+        const timed = row ? supervisionStatusFromStartTime(row.start_time) : "";
+        if (timed === "late") {
+          plan.status = "submitted";
+          plan.late = true;
+        } else if (timed === "submitted") {
+          plan.status = "submitted";
+          plan.late = false;
+        } else if (timed === "draft") {
+          plan.status = "draft";
+          plan.late = false;
+        }
+        if (active) applyPlan(plan, row?.id);
+      } catch (err) {
+        if (active) setError(err.message || "โหลดแผนไม่สำเร็จ");
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [currentUser.id, weekStart]);
+
+  const formPlan = (nextStatus = status || "draft") => {
+    const previous = status === "late" ? "submitted" : status;
+    const timing = resolveSubmission(nextStatus, previous, submittedAt, late, weekStart);
+    return {
+      version: 4,
+      week_start: weekStart,
+      periods: periods.filter(period => !periodIsBlank(period)),
+      signoff,
+      observations,
+      status: timing.status,
+      late: timing.late,
+      submitted_at: timing.submitted_at,
+    };
+  };
+
+  const savePlan = async (nextStatus) => {
+    const alreadySent = status === "submitted" || status === "late";
+    const effective = alreadySent ? "submitted" : nextStatus;
+    const filled = periods.filter(period => !periodIsBlank(period));
+    const taught = filled.filter(period => !period.free);
+    if (effective === "submitted") {
+      const missingDays = weekDates(weekStart).flatMap((date, index) => (
+        periods.some(period => period.teach_date === date && periodIsBlank(period)) ? [`วัน${DAY_NAMES[index + 1]}`] : []
+      ));
+      if (missingDays.length > 0) {
+        setError(`ส่งได้เมื่อครบทุกวันจันทร์ถึงศุกร์ ยังขาด ${missingDays.join(" ")} ให้กรอกคาบหรือติ๊กคาบว่าง`);
+        return;
+      }
+      if (taught.some(period => !period.start_time || !period.end_time || !String(period.subject || "").trim() || ![period.lesson_intro, period.lesson_activity, period.lesson_practice, period.lesson_summary].some(value => String(value || "").trim()))) {
+        setError("ทุกคาบที่สอนต้องมีเวลาเริ่ม เวลาเลิก วิชา และรายละเอียดการสอนอย่างน้อย 1 ขั้น ก่อนส่ง");
+        return;
+      }
+      if (taught.some(period => period.start_time >= period.end_time)) {
+        setError("เวลาเลิกต้องหลังเวลาเริ่ม");
+        return;
+      }
+      if (taught.some(period => period.homework === "yes" && !String(period.homework_what || "").trim() && !period.homework_file?.dataUrl)) {
+        setError("คาบที่มีการบ้าน ต้องบอกว่างานคืออะไร หรืออัปโหลดใบงาน");
+        return;
+      }
+    }
+    const plan = formPlan(effective);
+    if (JSON.stringify(plan).length > SUPERVISION_JSON_LIMIT) {
+      setError("ไฟล์ใบงานรวมกันใหญ่เกินที่ฐานเก็บได้ ลดขนาดไฟล์ หรือวางลิงก์แทน");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      const id = await writeSupervisionPlan(currentUser.id, weekStart, plan, rowId);
+      const nextPeriods = periodsForEditor(plan, weekStart);
+      setRowId(id);
+      setPeriods(nextPeriods);
+      setBaseline(JSON.stringify(nextPeriods));
+      setStatus(plan.status);
+      setLate(plan.late);
+      setSubmittedAt(plan.submitted_at);
+      setMessage(!alreadySent && effective === "submitted"
+        ? (plan.late ? "ส่งรายสัปดาห์แล้ว สถานะสาย" : "ส่งให้ฝ่ายวิชาการแล้ว")
+        : effective === "submitted"
+          ? (plan.late ? "บันทึกรายสัปดาห์แล้ว สถานะยังเป็นสาย" : "บันทึกรายสัปดาห์แล้ว")
+          : "บันทึกฉบับร่างแล้ว");
+    } catch (err) {
+      setError(err.message || "บันทึกไม่สำเร็จ");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const changeWeek = (next) => {
+    if (next === weekStart || loading || saving) return;
+    if (JSON.stringify(periods) !== baseline && !window.confirm("ยังไม่ได้บันทึก คาบที่กรอกอยู่จะหายไปเมื่อเปลี่ยนสัปดาห์")) return;
+    setWeekStart(next);
+  };
+
+  const copyPreviousWeek = async () => {
+    if (JSON.stringify(periods) !== baseline && !window.confirm("คัดลอกจากสัปดาห์ก่อนจะแทนที่สิ่งที่กรอกอยู่ ข้อมูลจะยังไม่ถูกบันทึกจนกว่าจะกดบันทึกเอง")) return;
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      const previousWeek = shiftDateKey(weekStart, -7);
+      const rows = await fetchSupervisionRows(currentUser.id, previousWeek);
+      const plan = rows[0] ? parseSupervisionPlan(rows[0].subject, previousWeek) : null;
+      const copied = (plan?.periods || []).filter(period => !periodIsBlank(period));
+      if (copied.length === 0) {
+        setError("ยังไม่มีแผนของสัปดาห์ก่อน");
+        return;
+      }
+      setPeriods(periodsForEditor({
+        periods: copied.map(period => ({
+          ...period,
+          id: newSupervisionId(),
+          teach_date: period.teach_date ? shiftDateKey(period.teach_date, 7) : weekStart,
+        })),
+      }, weekStart));
+      setMessage("คัดลอกจากสัปดาห์ก่อนแล้ว กดบันทึกฉบับร่างหรือส่งให้ฝ่ายวิชาการเพื่อเก็บข้อมูล");
+    } catch (err) {
+      setError(err.message || "คัดลอกไม่สำเร็จ");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updatePeriod = (id, patch) => {
+    setPeriods(current => current.map(period => period.id === id ? { ...period, ...patch } : period));
+  };
+
+  const onPickHomework = async (event, periodId) => {
     const picked = event.target.files?.[0];
     event.target.value = "";
     if (!picked) return;
@@ -3254,64 +3822,38 @@ function SupervisionTeacher({ currentUser }) {
     }
     try {
       const dataUrl = await readFileAsDataUrl(picked);
-      setter({ name: picked.name, type: picked.type || "", dataUrl });
+      updatePeriod(periodId, { homework: "yes", homework_file: { name: picked.name, type: picked.type || "", dataUrl } });
       setError("");
-      setMessage("เลือกไฟล์แล้ว กดบันทึกเพื่อเก็บไฟล์นี้");
+      setMessage("เลือกใบงานแล้ว กดบันทึกฉบับร่างหรือส่งให้ฝ่ายวิชาการเพื่อเก็บไฟล์");
     } catch (err) {
       setError(err.message || "อ่านไฟล์ไม่สำเร็จ");
     }
   };
 
-  const addPeriod = async () => {
-    if (!newPeriod.teach_date || !newPeriod.period || !newPeriod.room.trim() || !newPeriod.topic.trim()) {
-      setError("กรุณากรอกวันที่ คาบ ห้อง และหัวข้อ");
-      return;
-    }
-    const friday = shiftDateKey(weekStart, 4);
-    if (newPeriod.teach_date < weekStart || newPeriod.teach_date > friday) {
-      setError("วันที่คาบต้องอยู่ในสัปดาห์ที่เลือก");
-      return;
-    }
-    const nextPeriods = [...periods, {
-      id: newSupervisionId(),
-      teach_date: newPeriod.teach_date,
-      period: newPeriod.period,
-      room: newPeriod.room.trim(),
-      topic: newPeriod.topic.trim(),
-      what_happened: "",
-      what_worked: "",
-      next_adjustment: "",
-    }];
-    const saved = await persistPeriods(nextPeriods, "เพิ่มคาบแล้ว สถานะรอท้ายคาบ");
-    if (saved) setNewPeriod({ teach_date: defaultPeriodDate(weekStart), period: "คาบ 1", room: "", topic: "" });
-  };
-
-  const updatePeriod = (id, key, value) => {
-    setPeriods(current => current.map(period => {
-      if (period.id !== id) return period;
-      const next = { ...period, [key]: value };
-      if (["what_happened", "what_worked", "next_adjustment"].includes(key)) next.reflection_saved = false;
-      return next;
-    }));
-  };
+  const actionButtons = (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))", gap: "0.5rem" }}>
+      <button type="button" onClick={copyPreviousWeek} disabled={saving || loading} style={{ ...btnSecondary, minHeight: 44 }}><Copy size={16} /> คัดลอกจากสัปดาห์ก่อน</button>
+      <button type="button" onClick={() => savePlan("draft")} disabled={saving || loading} style={{ ...btnSecondary, minHeight: 44 }}><Save size={16} /> บันทึกฉบับร่าง</button>
+      <button type="button" onClick={() => savePlan("submitted")} disabled={saving || loading} style={{ ...btnPrimary, minHeight: 44, background: "linear-gradient(135deg, #16a34a, #15803d)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}>
+        {saving ? <RefreshCw size={16} style={{ animation: "spin 1s linear infinite" }} /> : <CheckCircle size={16} />} ส่งให้ฝ่ายวิชาการ
+      </button>
+    </div>
+  );
 
   return (
     <div style={{ display: "grid", gap: "1rem" }}>
-      <PageHeader title="นิเทศการสอน" />
-      <WeekSwitcher weekStart={weekStart} onChange={setWeekStart} disabled={saving} />
-      <SupervisionModeSwitch mode={mode} onChange={setMode} />
-      {mode === "daily" && <DailySupervisionEditor currentUser={currentUser} weekStart={weekStart} />}
-      {mode === "weekly" && error && <ErrorBox>{error}</ErrorBox>}
-      {mode === "weekly" && message && <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", borderRadius: "10px", padding: "0.75rem 1rem", color: "#166534", fontWeight: 700 }}>{message}</div>}
-      {mode === "weekly" && (loading ? (
+      <WeekSwitcher weekStart={weekStart} onChange={changeWeek} disabled={saving || loading} />
+      {error && <ErrorBox>{error}</ErrorBox>}
+      {message && <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", borderRadius: "10px", padding: "0.75rem 1rem", color: "#166534", fontWeight: 700 }}>{message}</div>}
+      {loading ? (
         <Card><div style={{ textAlign: "center", color: "#64748b", padding: "1.5rem" }}>กำลังโหลดแผนสัปดาห์...</div></Card>
       ) : (
         <>
           <Card>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center", flexWrap: "wrap", marginBottom: "1rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center", flexWrap: "wrap", marginBottom: "0.9rem" }}>
               <div>
                 <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0f172a" }}>แผนสัปดาห์ของ {currentUser.name}</div>
-                <div style={{ fontSize: "0.8rem", color: "#64748b" }}>{currentUser.department || "พนักงาน"}</div>
+                <div style={{ fontSize: "0.8rem", color: "#b45309", fontWeight: 700, marginTop: "0.25rem" }}>ส่งไม่เกิน {formatThaiDateKey(shiftDateKey(weekStart, -1))} เวลา 15:00</div>
               </div>
               <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
                 <SupervisionStatusBadge status={status === "submitted" && late ? "late" : (status || "missing")} />
@@ -3334,199 +3876,37 @@ function SupervisionTeacher({ currentUser }) {
                 ))}
               </div>
             )}
-            <div style={{ display: "grid", gap: "0.9rem" }}>
-              <Field label="อาทิตย์นี้สอนอะไร">
-                <textarea value={weekTopic} onChange={event => setWeekTopic(event.target.value)} style={supervisionTextArea} placeholder="หัวข้อหรือหน่วยที่สอนในสัปดาห์นี้" />
-              </Field>
-              <Field label="แผนระยะสั้น">
-                <textarea value={shortPlan} onChange={event => setShortPlan(event.target.value)} style={supervisionTextArea} placeholder="สิ่งที่จะทำในสัปดาห์นี้" />
-              </Field>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.75rem" }}>
-                <Field label="ผลการจัดกิจกรรม">
-                  <select value={taughtAsPlanned} onChange={event => setTaughtAsPlanned(event.target.value)} style={selectStyle}>
-                    <option value="">-- เลือก --</option>
-                    {PLAN_PROGRESS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </select>
-                </Field>
-                <Field label="ร้อยละของนักเรียนที่ผ่านจุดประสงค์">
-                  <input type="number" min="0" max="100" value={objectivePercent} onChange={event => setObjectivePercent(event.target.value)} placeholder="0-100" style={inputStyle} />
-                </Field>
-              </div>
-              <Field label="ปัญหา/อุปสรรคที่พบ">
-                <textarea value={problems} onChange={event => setProblems(event.target.value)} style={supervisionTextArea} placeholder="เช่น เด็กไม่เข้าใจเรื่องตัวส่วน หรือเวลาไม่พอ ถ้าไม่มีให้ใส่ ไม่มี" />
-              </Field>
-              <Field label="แนวทางแก้ไข/ซ่อมเสริม และปัญหาผู้เรียนรายบุคคล">
-                <textarea value={remediation} onChange={event => setRemediation(event.target.value)} style={supervisionTextArea} placeholder="วิธีช่วยกลุ่มที่ไม่ผ่านจุดประสงค์ และชื่อเด็กที่ต้องดูแล" />
-              </Field>
-              <Field label="ใช้สื่ออะไรบ้าง">
-                <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap" }}>
-                  {SUPERVISION_MEDIA_OPTIONS.map(option => (
-                    <button key={option} type="button" onClick={() => setMedia(current => current.includes(option) ? current.filter(item => item !== option) : [...current, option])} style={mediaChipStyle(media.includes(option))}>{option}</button>
-                  ))}
-                </div>
-                <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
-                  <input value={customDraft} onChange={event => setCustomDraft(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); addCustomMedia(); } }} placeholder="พิมพ์สื่อเพิ่มเอง" style={{ ...inputStyle, flex: "1 1 180px" }} />
-                  <button type="button" onClick={addCustomMedia} style={{ ...btnSecondary, flex: "none" }}><Plus size={16} /> เพิ่มสื่อ</button>
-                </div>
-                {customMedia.length > 0 && (
-                  <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap", marginTop: "0.75rem" }}>
-                    {customMedia.map(item => (
-                      <button key={item} type="button" onClick={() => setCustomMedia(current => current.filter(value => value !== item))} style={mediaChipStyle(true)}>{item} ×</button>
-                    ))}
-                  </div>
-                )}
-              </Field>
-              <Field label="ไฟล์แผน (PDF, Word, รูป ไม่เกิน 2.5 MB)">
-                <label style={{ ...btnSecondary, flex: "none", width: "fit-content" }}>
-                  <Upload size={16} /> เลือกไฟล์
-                  <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.gif,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*" onChange={event => onPickFile(event, setFile)} style={{ display: "none" }} />
-                </label>
-                <div style={{ marginTop: "0.75rem" }}>
-                  <SupervisionFileBlock file={file} />
-                </div>
-                {file && <button type="button" onClick={() => setFile(null)} style={{ ...btnSecondary, flex: "none", marginTop: "0.75rem", color: "#dc2626" }}>เอาไฟล์ออก</button>}
-              </Field>
-              <Field label="ลิงก์สื่อสัปดาห์หน้า">
-                <textarea value={nextWeekLinks} onChange={event => setNextWeekLinks(event.target.value)} style={supervisionTextArea} placeholder="ลิงก์สไลด์ ใบงาน หรือแบบทดสอบ ที่จะใช้สัปดาห์หน้า" />
-              </Field>
-              <Field label="ไฟล์แผนหรือสื่อสัปดาห์หน้า (PDF, Word, รูป ไม่เกิน 2.5 MB)">
-                <label style={{ ...btnSecondary, flex: "none", width: "fit-content" }}>
-                  <Upload size={16} /> เลือกไฟล์สัปดาห์หน้า
-                  <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.gif,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*" onChange={event => onPickFile(event, setNextWeekFile)} style={{ display: "none" }} />
-                </label>
-                <div style={{ marginTop: "0.75rem" }}><SupervisionFileBlock file={nextWeekFile} /></div>
-                {nextWeekFile && <button type="button" onClick={() => setNextWeekFile(null)} style={{ ...btnSecondary, flex: "none", marginTop: "0.75rem", color: "#dc2626" }}>เอาไฟล์สัปดาห์หน้าออก</button>}
-              </Field>
-            </div>
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "1rem" }}>
-              <button type="button" onClick={copyPreviousWeek} disabled={saving} style={{ ...btnSecondary, flex: "none" }}><Copy size={16} /> คัดลอกจากสัปดาห์ก่อน</button>
-              <button type="button" onClick={() => savePlan("draft")} disabled={saving} style={{ ...btnSecondary, flex: "none" }}><Save size={16} /> บันทึกฉบับร่าง</button>
-              <button type="button" onClick={() => savePlan("submitted")} disabled={saving} style={{ ...btnPrimary, flex: "none", background: "linear-gradient(135deg, #16a34a, #15803d)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}>
-                {saving ? <RefreshCw size={16} style={{ animation: "spin 1s linear infinite" }} /> : <CheckCircle size={16} />} ส่งให้ฝ่ายวิชาการ
-              </button>
-            </div>
+            {actionButtons}
             {submittedAt && status === "submitted" && <div style={{ marginTop: "0.7rem", fontSize: "0.78rem", color: "#64748b" }}>ส่งล่าสุด {fmtDate(submittedAt)} {fmtTime(submittedAt)}</div>}
           </Card>
-
-          <Card>
-            <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.35rem" }}>ท้ายคาบ</div>
-            <div style={{ fontSize: "0.8rem", color: "#64748b", marginBottom: "1rem" }}>เพิ่มคาบในสัปดาห์นี้ แล้วกลับมาบันทึกหลังสอน</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.75rem" }}>
-              <Field label="วันที่">
-                <input type="date" min={weekStart} max={shiftDateKey(weekStart, 4)} value={newPeriod.teach_date} onChange={event => setNewPeriod(current => ({ ...current, teach_date: event.target.value }))} style={inputStyle} />
-              </Field>
-              <Field label="คาบ">
-                <select value={newPeriod.period} onChange={event => setNewPeriod(current => ({ ...current, period: event.target.value }))} style={selectStyle}>
-                  {SUPERVISION_PERIOD_OPTIONS.map(option => <option key={option}>{option}</option>)}
-                </select>
-              </Field>
-              <Field label="ห้อง">
-                <input value={newPeriod.room} onChange={event => setNewPeriod(current => ({ ...current, room: event.target.value }))} placeholder="เช่น ป.4/1" style={inputStyle} />
-              </Field>
-              <Field label="หัวข้อ">
-                <input value={newPeriod.topic} onChange={event => setNewPeriod(current => ({ ...current, topic: event.target.value }))} placeholder="หัวข้อที่สอน" style={inputStyle} />
-              </Field>
-            </div>
-            <button type="button" onClick={addPeriod} disabled={saving} style={{ ...btnPrimary, flex: "none", marginTop: "0.9rem", background: "linear-gradient(135deg, #2563eb, #1d4ed8)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}>
-              <Plus size={16} /> เพิ่มคาบ
-            </button>
-
-            <div style={{ display: "grid", gap: "0.75rem", marginTop: "1rem" }}>
-              {periods.length === 0 && <div style={{ color: "#94a3b8", textAlign: "center", padding: "1rem" }}>ยังไม่มีคาบในสัปดาห์นี้</div>}
-              {periods.map(period => {
-                const reflection = periodReflectionStatus(period);
-                return (
-                  <div key={period.id} style={{ border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.9rem", display: "grid", gap: "0.75rem" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-                      <div style={{ fontWeight: 800, color: "#0f172a" }}>{formatThaiDateKey(period.teach_date)} · {period.period} · {period.room}</div>
-                      <SupervisionStatusBadge status={reflection} />
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.75rem" }}>
-                      <Field label="วันที่">
-                        <input type="date" min={weekStart} max={shiftDateKey(weekStart, 4)} value={period.teach_date || ""} onChange={event => updatePeriod(period.id, "teach_date", event.target.value)} style={inputStyle} />
-                      </Field>
-                      <Field label="คาบ">
-                        <select value={period.period || "คาบ 1"} onChange={event => updatePeriod(period.id, "period", event.target.value)} style={selectStyle}>
-                          {SUPERVISION_PERIOD_OPTIONS.map(option => <option key={option}>{option}</option>)}
-                        </select>
-                      </Field>
-                      <Field label="ห้อง">
-                        <input value={period.room || ""} onChange={event => updatePeriod(period.id, "room", event.target.value)} style={inputStyle} />
-                      </Field>
-                      <Field label="หัวข้อ">
-                        <input value={period.topic || ""} onChange={event => updatePeriod(period.id, "topic", event.target.value)} style={inputStyle} />
-                      </Field>
-                    </div>
-                    <Field label="คาบนี้เกิดอะไรขึ้น">
-                      <textarea value={period.what_happened || ""} onChange={event => updatePeriod(period.id, "what_happened", event.target.value)} style={supervisionTextArea} />
-                    </Field>
-                    <Field label="สิ่งที่ทำได้">
-                      <textarea value={period.what_worked || ""} onChange={event => updatePeriod(period.id, "what_worked", event.target.value)} style={supervisionTextArea} />
-                    </Field>
-                    <Field label="ครั้งหน้าจะปรับอะไร">
-                      <textarea value={period.next_adjustment || ""} onChange={event => updatePeriod(period.id, "next_adjustment", event.target.value)} style={supervisionTextArea} />
-                    </Field>
-                    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                      <button type="button" onClick={() => {
-                        const nextPeriods = periods.map(item => {
-                          if (item.id !== period.id) return item;
-                          const filled = [item.what_happened, item.what_worked, item.next_adjustment].every(value => String(value || "").trim());
-                          return { ...item, reflection_saved: filled };
-                        });
-                        const savedPeriod = nextPeriods.find(item => item.id === period.id);
-                        persistPeriods(nextPeriods, savedPeriod?.reflection_saved ? "บันทึกท้ายคาบแล้ว" : "บันทึกคาบแล้ว ยังรอท้ายคาบ");
-                      }} disabled={saving} style={{ ...btnPrimary, flex: "none", background: "linear-gradient(135deg, #2563eb, #1d4ed8)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}>
-                        <Save size={16} /> บันทึกท้ายคาบ
-                      </button>
-                      <button type="button" onClick={() => { if (window.confirm("ลบคาบนี้?")) persistPeriods(periods.filter(item => item.id !== period.id), "ลบคาบแล้ว"); }} disabled={saving} style={{ ...btnSecondary, flex: "none", color: "#dc2626" }}>
-                        <Trash2 size={16} /> ลบคาบ
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-
-          <Card>
-            <div style={{ fontWeight: 800, color: "#0f172a", marginBottom: "0.35rem" }}>คะแนนเก็บประจำสัปดาห์</div>
-            <div style={{ fontSize: "0.8rem", color: "#64748b", marginBottom: "0.8rem" }}>อัปเดตคะแนนหรือรายชื่อเด็กที่ไม่ส่งงาน แล้วกดบันทึกรายสัปดาห์</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.75rem" }}>
-              <Field label="วิชา"><input value={gradeDraft.subject} onChange={event => setGradeDraft(current => ({ ...current, subject: event.target.value }))} style={inputStyle} /></Field>
-              <Field label="ห้อง"><input value={gradeDraft.room} onChange={event => setGradeDraft(current => ({ ...current, room: event.target.value }))} style={inputStyle} /></Field>
-              <Field label="รายการคะแนน"><input value={gradeDraft.score_item} onChange={event => setGradeDraft(current => ({ ...current, score_item: event.target.value }))} placeholder="เช่น คะแนนใบงานหน่วย 3" style={inputStyle} /></Field>
-              <Field label="เด็กที่ไม่ส่งงาน"><input value={gradeDraft.missing_students} onChange={event => setGradeDraft(current => ({ ...current, missing_students: event.target.value }))} placeholder="ชื่อเด็ก คั่นด้วยจุลภาค" style={inputStyle} /></Field>
-            </div>
-            <Field label="หมายเหตุคะแนน"><input value={gradeDraft.note} onChange={event => setGradeDraft(current => ({ ...current, note: event.target.value }))} style={{ ...inputStyle, marginTop: "0.75rem" }} /></Field>
-            <button type="button" onClick={() => {
-              if (!gradeDraft.subject.trim() || !gradeDraft.score_item.trim()) { setError("กรุณากรอกวิชาและรายการคะแนน"); return; }
-              setGradebook(current => [...current, { ...gradeDraft, id: newSupervisionId(), subject: gradeDraft.subject.trim(), score_item: gradeDraft.score_item.trim() }]);
-              setGradeDraft({ subject: "", room: "", score_item: "", missing_students: "", note: "" });
-              setError("");
-            }} style={{ ...btnSecondary, flex: "none", marginTop: "0.75rem" }}><Plus size={16} /> เพิ่มรายการคะแนน</button>
-            <div style={{ display: "grid", gap: "0.5rem", marginTop: "0.8rem" }}>
-              {gradebook.length === 0 && <div style={{ color: "#94a3b8" }}>ยังไม่มีรายการคะแนน</div>}
-              {gradebook.map(item => (
-                <div key={item.id} style={{ border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.75rem", display: "flex", justifyContent: "space-between", gap: "0.75rem" }}>
-                  <div>
-                    <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.subject} · {item.room || "-"} · {item.score_item}</div>
-                    <div style={{ color: "#475569", fontSize: "0.85rem" }}>ไม่ส่ง: {item.missing_students || "-"}{item.note ? ` · ${item.note}` : ""}</div>
-                  </div>
-                  <button type="button" onClick={() => setGradebook(current => current.filter(row => row.id !== item.id))} style={{ ...btnSecondary, flex: "none", color: "#dc2626" }}><Trash2 size={14} /></button>
-                </div>
-              ))}
-            </div>
-          </Card>
+          {weekDates(weekStart).map((date, index) => {
+            const dayPeriods = periods
+              .filter(period => period.teach_date === date)
+              .sort((a, b) => (Number(a.period_no) || 0) - (Number(b.period_no) || 0));
+            const filled = dayPeriods.filter(period => !periodIsBlank(period)).length;
+            return (
+              <DayCard key={date} title={`วัน${DAY_NAMES[index + 1]}`} summary={`${formatThaiDateKey(date)} · ${filled}/6`}>
+                {dayPeriods.map(period => (
+                  <WeekPeriodEditor
+                    key={period.id}
+                    period={period}
+                    disabled={saving}
+                    onChange={patch => updatePeriod(period.id, patch)}
+                    onPickFile={event => onPickHomework(event, period.id)}
+                  />
+                ))}
+              </DayCard>
+            );
+          })}
+          <Card>{actionButtons}</Card>
         </>
-      ))}
+      )}
     </div>
   );
 }
 
 function SupervisionAdmin({ employees, currentUser }) {
-  const [mode, setMode] = useState("daily");
   const [weekStart, setWeekStart] = useState(() => mondayOf(todayISO()));
-  const [dailyDate, setDailyDate] = useState(() => defaultDailyDate(mondayOf(todayISO())));
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -3538,8 +3918,27 @@ function SupervisionAdmin({ employees, currentUser }) {
   const [observation, setObservation] = useState({ date: todayISO(), match: "yes", note: "" });
   const [savingReview, setSavingReview] = useState(false);
   const [reviewMessage, setReviewMessage] = useState("");
+  const [levels, setLevels] = useState({});
 
-  useEffect(() => { setDailyDate(defaultDailyDate(weekStart)); }, [weekStart]);
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      supabase.from("salary_settings").select("employee_id, leave_deduct_types").not("employee_id", "is", null),
+      loadAssignedPlanLevels().catch(() => ({})),
+    ]).then(([salary, assigned]) => {
+      if (!active) return;
+      const map = {};
+      (salary.data || []).forEach(row => {
+        if (row.employee_id) map[row.employee_id] = parseEmployeePayrollMeta(row.leave_deduct_types).teacher_level || "";
+      });
+      Object.entries(assigned || {}).forEach(([id, level]) => {
+        if (level === "อนุบาล") map[id] = "อนุบาล";
+        if (level === "school") map[id] = "";
+      });
+      setLevels(map);
+    });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -3554,8 +3953,8 @@ function SupervisionAdmin({ employees, currentUser }) {
           .from("teaching_schedule")
           .select("id, employee_id, start_time, end_time, created_at")
           .eq("class_room", SUPERVISION_SCHEDULE_ROOM)
-          .eq("day_of_week", mode === "daily" ? SUPERVISION_DAILY_DAY : 0)
-          .eq("period", weekPeriodKey(mode === "daily" ? dailyDate : weekStart));
+          .eq("day_of_week", 0)
+          .eq("period", weekPeriodKey(weekStart));
         if (loadError) throw new Error(loadError.message);
         if (!active) return;
         const latest = new Map();
@@ -3571,7 +3970,7 @@ function SupervisionAdmin({ employees, currentUser }) {
       }
     })();
     return () => { active = false; };
-  }, [weekStart, dailyDate, mode]);
+  }, [weekStart]);
 
   const statusOf = (employeeId) => {
     const row = rows.find(item => item.employee_id === employeeId);
@@ -3598,28 +3997,15 @@ function SupervisionAdmin({ employees, currentUser }) {
     setError("");
     setReviewMessage("");
     try {
-      if (mode === "daily") {
-        const loaded = await fetchSupervisionRows(teacher.id, dailyDate, SUPERVISION_DAILY_DAY);
-        const row = loaded[0];
-        const report = row ? parseDailyReport(row.subject, dailyDate) : emptyDailyReport(dailyDate);
-        setDetail({ rowId: row?.id || null, status: row ? supervisionStatusFromStartTime(row.start_time) : "missing", report });
-        return;
-      }
       const loaded = await fetchSupervisionRows(teacher.id, weekStart);
       const row = loaded[0];
       const plan = row ? parseSupervisionPlan(row.subject, weekStart) : emptySupervisionPlan(weekStart);
-      const daily = [];
-      for (const day of weekDates(weekStart)) {
-        const dayRows = await fetchSupervisionRows(teacher.id, day, SUPERVISION_DAILY_DAY);
-        daily.push({ date: day, status: dayRows[0] ? supervisionStatusFromStartTime(dayRows[0].start_time) : "missing", report: dayRows[0] ? parseDailyReport(dayRows[0].subject, day) : emptyDailyReport(day) });
-      }
       setSignoffComment(plan.signoff?.comment || "");
       setObservation({ date: defaultDailyDate(weekStart), match: "yes", note: "" });
       setDetail({
         rowId: row?.id || null,
         status: row ? supervisionStatusFromStartTime(row.start_time) : "missing",
         plan,
-        daily,
       });
     } catch (err) {
       setError(err.message || "เปิดแผนไม่สำเร็จ");
@@ -3630,15 +4016,14 @@ function SupervisionAdmin({ employees, currentUser }) {
   };
 
   const selectedTeacher = teachers.find(teacher => teacher.id === selectedId);
-  const scopeLabel = mode === "daily" ? formatThaiDateKey(dailyDate) : "สัปดาห์นี้";
   const boardGroups = [
     { key: "submitted", label: "ส่งแล้ว" },
-    { key: "late", label: "ส่งเลท" },
+    { key: "late", label: "สาย" },
     { key: "missing", label: "ยังไม่ส่ง" },
   ];
 
   const saveReview = async (kind) => {
-    if (!selectedTeacher || mode !== "weekly") return;
+    if (!selectedTeacher) return;
     if (kind === "observation" && !observation.note.trim()) {
       setError("กรุณาพิมพ์สิ่งที่เห็นในห้องเรียน");
       return;
@@ -3686,22 +4071,13 @@ function SupervisionAdmin({ employees, currentUser }) {
 
   return (
     <div style={{ display: "grid", gap: "1rem" }}>
-      <PageHeader title="นิเทศการสอน" count={teachers.length} />
       <WeekSwitcher weekStart={weekStart} onChange={setWeekStart} />
-      <SupervisionModeSwitch mode={mode} onChange={setMode} />
-      {mode === "daily" && (
-        <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap" }}>
-          {weekDates(weekStart).map(day => (
-            <button key={day} type="button" onClick={() => setDailyDate(day)} style={mediaChipStyle(dailyDate === day)}>{formatThaiDateKey(day)}</button>
-          ))}
-        </div>
-      )}
       {error && <ErrorBox>{error}</ErrorBox>}
       {reviewMessage && <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", borderRadius: "10px", padding: "0.75rem 1rem", color: "#166534", fontWeight: 700 }}>{reviewMessage}</div>}
-      <div style={{ fontSize: "0.8rem", color: "#64748b" }}>เขียว = ส่งตรงเวลา · เหลือง = ส่งเลท · แดง = ยังไม่ส่งหรือฉบับร่าง · {scopeLabel}</div>
+      <div style={{ fontSize: "0.8rem", color: "#64748b" }}>เขียว = ส่งตรงเวลา · เหลือง = สาย · แดง = ยังไม่ส่งหรือฉบับร่าง · ส่งไม่เกินวันอาทิตย์ก่อนสัปดาห์ เวลา 15:00</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.75rem" }}>
-        <StatCard stat={{ label: "ส่งแล้ว", value: loading ? "..." : counts.submitted, icon: CheckCircle, color: "#16a34a", bg: "#ecfdf5", trend: scopeLabel }} />
-        <StatCard stat={{ label: "ส่งเลท", value: loading ? "..." : counts.late, icon: Clock, color: "#d97706", bg: "#fffbeb", trend: "ส่งหลังกำหนด" }} />
+        <StatCard stat={{ label: "ส่งแล้ว", value: loading ? "..." : counts.submitted, icon: CheckCircle, color: "#16a34a", bg: "#ecfdf5", trend: "สัปดาห์นี้" }} />
+        <StatCard stat={{ label: "สาย", value: loading ? "..." : counts.late, icon: Clock, color: "#d97706", bg: "#fffbeb", trend: "หลังวันอาทิตย์ 15:00" }} />
         <StatCard stat={{ label: "ยังไม่ส่ง", value: loading ? "..." : counts.missing, icon: AlertCircle, color: "#dc2626", bg: "#fef2f2", trend: "รวมฉบับร่าง" }} />
       </div>
 
@@ -3713,23 +4089,16 @@ function SupervisionAdmin({ employees, currentUser }) {
               <Avatar name={selectedTeacher.name} />
               <div>
                 <div style={{ fontSize: "1.15rem", fontWeight: 800, color: "#0f172a" }}>{selectedTeacher.name}</div>
-                <div style={{ fontSize: "0.8rem", color: "#64748b" }}>{selectedTeacher.department || "-"} · {selectedTeacher.position || "พนักงาน"}</div>
+                <div style={{ fontSize: "0.8rem", color: "#64748b" }}>{selectedTeacher.department || "-"} · {selectedTeacher.position || "พนักงาน"}{levels[selectedTeacher.id] === "อนุบาล" ? " · อนุบาล" : ""}</div>
               </div>
             </div>
             <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
               <SupervisionStatusBadge status={detail?.status || statusOf(selectedTeacher.id)} />
-              {mode === "weekly" && plan?.signoff?.at && <SupervisionStatusBadge status="approved" />}
+              {plan?.signoff?.at && <SupervisionStatusBadge status="approved" />}
             </div>
           </div>
           {detailLoading || !detail ? (
             <div style={{ color: "#64748b", padding: "1rem 0" }}>กำลังเปิดรายละเอียด...</div>
-          ) : mode === "daily" ? (
-            <div style={{ display: "grid", gap: "0.75rem" }}>
-              <div style={{ fontWeight: 800, color: "#0f172a" }}>รายงานรายวัน {formatThaiDateKey(dailyDate)}</div>
-              <div style={{ fontSize: "0.82rem", color: "#64748b" }}>เข้าสอนตรงเวลา ยอดมา สาย ลา ขาด กิจกรรมตามคาบ และความสะอาดห้องเรียน</div>
-              {detail.report?.submitted_at && <div style={{ fontSize: "0.8rem", color: "#64748b" }}>ส่งล่าสุด {fmtDate(detail.report.submitted_at)} {fmtTime(detail.report.submitted_at)}</div>}
-              <DailyReportView report={detail.report} />
-            </div>
           ) : plan ? (
             <div style={{ display: "grid", gap: "1rem" }}>
               {plan.submitted_at && <div style={{ fontSize: "0.8rem", color: "#64748b" }}>ส่งล่าสุด {fmtDate(plan.submitted_at)} {fmtTime(plan.submitted_at)}</div>}
@@ -3750,105 +4119,10 @@ function SupervisionAdmin({ employees, currentUser }) {
                 </div>
               )}
               <div>
-                <div style={{ fontWeight: 800, color: "#0f172a", marginBottom: "0.35rem" }}>อาทิตย์นี้สอนอะไร</div>
-                <FullText value={plan.week_topic} />
-              </div>
-              <div>
-                <div style={{ fontWeight: 800, color: "#0f172a", marginBottom: "0.35rem" }}>แผนระยะสั้น</div>
-                <FullText value={plan.short_plan} />
-              </div>
-              <div>
-                <div style={{ fontWeight: 800, color: "#0f172a", marginBottom: "0.35rem" }}>ผลการจัดกิจกรรม</div>
-                <div style={{ color: "#0f172a" }}>{labelOf(PLAN_PROGRESS, plan.taught_as_planned) || "ไม่มีข้อมูล"} · ผ่านจุดประสงค์ {plan.objective_percent === "" || plan.objective_percent == null ? "-" : `${plan.objective_percent}%`}</div>
-              </div>
-              <div>
-                <div style={{ fontWeight: 800, color: "#0f172a", marginBottom: "0.35rem" }}>ปัญหา/อุปสรรค</div>
-                <FullText value={plan.problems} />
-              </div>
-              <div>
-                <div style={{ fontWeight: 800, color: "#0f172a", marginBottom: "0.35rem" }}>แนวทางแก้ไข/ซ่อมเสริม และปัญหาผู้เรียนรายบุคคล</div>
-                <FullText value={plan.remediation} />
-              </div>
-              <div>
-                <div style={{ fontWeight: 800, color: "#0f172a", marginBottom: "0.35rem" }}>สื่อ</div>
-                {[...(plan.media || []), ...(plan.custom_media || [])].length === 0 ? (
-                  <div style={{ color: "#94a3b8" }}>ไม่มีข้อมูล</div>
-                ) : (
-                  <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-                    {[...(plan.media || []), ...(plan.custom_media || [])].map(item => (
-                      <span key={item} style={mediaChipStyle(true)}>{item}</span>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div>
-                <div style={{ fontWeight: 800, color: "#0f172a", marginBottom: "0.35rem" }}>ไฟล์แผนสัปดาห์นี้</div>
-                <SupervisionFileBlock file={plan.file} />
-              </div>
-              <div>
-                <div style={{ fontWeight: 800, color: "#0f172a", marginBottom: "0.35rem" }}>ลิงก์สื่อสัปดาห์หน้า</div>
-                <LinkLines value={plan.next_week_links} />
-              </div>
-              <div>
-                <div style={{ fontWeight: 800, color: "#0f172a", marginBottom: "0.35rem" }}>ไฟล์แผนหรือสื่อสัปดาห์หน้า</div>
-                <SupervisionFileBlock file={plan.next_week_file} />
-              </div>
-              <div>
-                <div style={{ fontWeight: 800, color: "#0f172a", marginBottom: "0.75rem" }}>บันทึกทุกคาบ</div>
-                {(plan.periods || []).length === 0 ? (
-                  <div style={{ color: "#94a3b8" }}>ยังไม่มีคาบ</div>
-                ) : (
-                  <div style={{ display: "grid", gap: "0.75rem" }}>
-                    {plan.periods.map(period => (
-                      <div key={period.id || `${period.teach_date}-${period.period}-${period.topic}`} style={{ border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.9rem", display: "grid", gap: "0.55rem" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-                          <div style={{ fontWeight: 800, color: "#0f172a" }}>{formatThaiDateKey(period.teach_date)} · {period.period || "-"} · ห้อง {period.room || "-"}</div>
-                          <SupervisionStatusBadge status={periodReflectionStatus(period)} />
-                        </div>
-                        <div style={{ color: "#334155" }}><strong>หัวข้อ: </strong>{period.topic || "-"}</div>
-                        <div>
-                          <div style={{ fontWeight: 800, color: "#0f172a" }}>คาบนี้เกิดอะไรขึ้น</div>
-                          <FullText value={period.what_happened} />
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: 800, color: "#0f172a" }}>สิ่งที่ทำได้</div>
-                          <FullText value={period.what_worked} />
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: 800, color: "#0f172a" }}>ครั้งหน้าจะปรับอะไร</div>
-                          <FullText value={period.next_adjustment} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div>
-                <div style={{ fontWeight: 800, color: "#0f172a", marginBottom: "0.5rem" }}>คะแนนเก็บประจำสัปดาห์</div>
-                {(plan.gradebook || []).length === 0 ? <div style={{ color: "#94a3b8" }}>ยังไม่มีรายการคะแนน</div> : (
-                  <div style={{ display: "grid", gap: "0.45rem" }}>
-                    {plan.gradebook.map((item, index) => (
-                      <div key={item.id || index} style={{ border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.75rem" }}>
-                        <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.subject || "-"} · {item.room || "-"} · {item.score_item || "-"}</div>
-                        <div style={{ color: "#475569", fontSize: "0.85rem" }}>ไม่ส่ง: {item.missing_students || "-"}{item.note ? ` · ${item.note}` : ""}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div>
-                <div style={{ fontWeight: 800, color: "#0f172a", marginBottom: "0.5rem" }}>รายงานรายวันในสัปดาห์นี้</div>
-                <div style={{ display: "grid", gap: "0.75rem" }}>
-                  {(detail.daily || []).map(day => (
-                    <div key={day.date} style={{ border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.8rem", display: "grid", gap: "0.45rem" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-                        <div style={{ fontWeight: 800, color: "#0f172a" }}>{formatThaiDateKey(day.date)}</div>
-                        <SupervisionStatusBadge status={day.status} />
-                      </div>
-                      <DailyReportView report={day.report} />
-                    </div>
-                  ))}
-                </div>
+                <div style={{ fontWeight: 800, color: "#0f172a", marginBottom: "0.75rem" }}>{plan.kind === "kindergarten" ? "แผนอนุบาลรายสัปดาห์" : "แผนรายสัปดาห์"}</div>
+                {plan.kind === "kindergarten"
+                  ? <KindergartenWeekView plan={plan} weekStart={weekStart} />
+                  : <SupervisionWeekView periods={plan.periods} weekStart={weekStart} />}
               </div>
               <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: "1rem", display: "grid", gap: "0.75rem" }}>
                 <div style={{ fontWeight: 800, color: "#0f172a" }}>รับทราบ/อนุมัติ</div>
@@ -3862,19 +4136,19 @@ function SupervisionAdmin({ employees, currentUser }) {
               </div>
               <div style={{ display: "grid", gap: "0.75rem" }}>
                 <div style={{ fontWeight: 800, color: "#0f172a" }}>นิเทศในห้อง</div>
-                <div style={{ fontSize: "0.8rem", color: "#64748b" }}>เทียบสิ่งที่เห็นในห้องกับบันทึกหลังสอนของครู</div>
+                <div style={{ fontSize: "0.8rem", color: "#64748b" }}>เทียบสิ่งที่เห็นในห้องกับแผนที่ครูเขียนไว้</div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.75rem" }}>
                   <Field label="วันที่นิเทศ">
                     <input type="date" min={weekStart} max={shiftDateKey(weekStart, 4)} value={observation.date} onChange={event => setObservation(current => ({ ...current, date: event.target.value }))} style={inputStyle} />
                   </Field>
-                  <Field label="เทียบกับบันทึกของครู">
+                  <Field label="เทียบกับแผนของครู">
                     <select value={observation.match} onChange={event => setObservation(current => ({ ...current, match: event.target.value }))} style={selectStyle}>
                       {OBSERVATION_MATCH.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </select>
                   </Field>
                 </div>
                 <Field label="สิ่งที่เห็นในห้อง">
-                  <textarea value={observation.note} onChange={event => setObservation(current => ({ ...current, note: event.target.value }))} style={supervisionTextArea} placeholder="เช่น สื่อและกิจกรรมตรงกับที่ครูบันทึก หรือเด็กยังไม่เข้าใจเรื่องเศษส่วน" />
+                  <textarea value={observation.note} onChange={event => setObservation(current => ({ ...current, note: event.target.value }))} style={supervisionTextArea} />
                 </Field>
                 <button type="button" onClick={() => saveReview("observation")} disabled={savingReview} style={{ ...btnSecondary, flex: "none" }}>
                   <Save size={16} /> บันทึกการนิเทศในห้อง
@@ -3914,10 +4188,10 @@ function SupervisionAdmin({ employees, currentUser }) {
                             <Avatar name={teacher.name} index={index} />
                             <span style={{ flex: 1, minWidth: 0 }}>
                               <span style={{ display: "block", fontWeight: 800, color: "#0f172a" }}>{teacher.name || "-"}</span>
-                              <span style={{ display: "block", fontSize: "0.75rem", color: "#64748b" }}>{teacher.department || "-"}</span>
+                              <span style={{ display: "block", fontSize: "0.75rem", color: "#64748b" }}>{teacher.department || "-"}{levels[teacher.id] === "อนุบาล" ? " · อนุบาล" : ""}</span>
                             </span>
                             <SupervisionStatusBadge status={status} />
-                            {mode === "weekly" && signedOff(teacher.id) && <SupervisionStatusBadge status="approved" />}
+                            {signedOff(teacher.id) && <SupervisionStatusBadge status="approved" />}
                             <ChevronRight size={16} color="#94a3b8" />
                           </button>
                         );
@@ -3929,6 +4203,882 @@ function SupervisionAdmin({ employees, currentUser }) {
             })
           )}
         </Card>
+      )}
+    </div>
+  );
+}
+
+const ROLL_STATUSES = [
+  { value: "present", label: "มา", color: "#166534", bg: "#dcfce7", border: "#86efac" },
+  { value: "absent", label: "ขาด", color: "#b91c1c", bg: "#fee2e2", border: "#fca5a5" },
+  { value: "personal", label: "ลากิจ", color: "#b45309", bg: "#fef3c7", border: "#fcd34d" },
+  { value: "sick", label: "ลาป่วย", color: "#1d4ed8", bg: "#dbeafe", border: "#93c5fd" },
+];
+const ROLL_STATUS_VALUES = new Set(ROLL_STATUSES.map(item => item.value));
+const STUDENT_ROLL_MAX = 80;
+const ROSTER_HEADER_CELLS = new Set(["เลขที่", "ชื่อ", "นามสกุล", "ชื่อ-สกุล", "ชื่อสกุล", "ชื่อนักเรียน", "name", "student", "no", "no.", "ลำดับ", "ชั้น", "ห้อง"]);
+
+function emptyRollBook() {
+  return { version: 1, class_name: "", students: [], days: {} };
+}
+
+function rollCounts(students, marks) {
+  const counts = { present: 0, absent: 0, personal: 0, sick: 0, unset: 0, total: students.length };
+  students.forEach(student => {
+    const status = marks?.[student.id];
+    if (ROLL_STATUS_VALUES.has(status)) counts[status] += 1;
+    else counts.unset += 1;
+  });
+  return counts;
+}
+
+function sameMarks(left, right) {
+  const keys = new Set([...Object.keys(left || {}), ...Object.keys(right || {})]);
+  for (const key of keys) {
+    if ((left?.[key] || "") !== (right?.[key] || "")) return false;
+  }
+  return true;
+}
+
+function cleanRollStudents(students) {
+  return (Array.isArray(students) ? students : [])
+    .map((student, index) => ({
+      id: String(student?.id || newSupervisionId()),
+      number: String(student?.number || index + 1).trim().slice(0, 4) || String(index + 1),
+      name: String(student?.name || "").replace(/\s+/g, " ").trim().slice(0, 40),
+      surname: String(student?.surname || "").replace(/\s+/g, " ").trim().slice(0, 40),
+    }))
+    .filter(student => student.name)
+    .slice(0, STUDENT_ROLL_MAX);
+}
+
+function parseRollBook(subject) {
+  try {
+    const parsed = JSON.parse(subject || "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return emptyRollBook();
+    const days = {};
+    if (parsed.days && typeof parsed.days === "object" && !Array.isArray(parsed.days)) {
+      Object.entries(parsed.days).forEach(([date, day]) => {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+        const marks = {};
+        const source = day?.marks && typeof day.marks === "object" ? day.marks : {};
+        Object.entries(source).forEach(([id, status]) => {
+          if (ROLL_STATUS_VALUES.has(status)) marks[id] = status;
+        });
+        days[date] = { saved_at: day?.saved_at || null, marks };
+      });
+    }
+    return {
+      version: 1,
+      class_name: String(parsed.class_name || "").trim().slice(0, 40),
+      students: cleanRollStudents(parsed.students),
+      days,
+    };
+  } catch {
+    return emptyRollBook();
+  }
+}
+
+function isClassToken(value) {
+  const text = String(value || "").trim();
+  return /^(ป|ม|อ)\.?\s*\d/.test(text) || /^อนุบาล/.test(text) || /^\d+\/\d+$/.test(text);
+}
+
+function isRosterHeader(cells) {
+  const useful = cells.map(cell => String(cell || "").trim()).filter(Boolean);
+  if (useful.length === 0) return false;
+  return useful.every(cell => ROSTER_HEADER_CELLS.has(cell) || ROSTER_HEADER_CELLS.has(cell.toLowerCase()));
+}
+
+function splitRosterLine(line) {
+  if (line.includes("\t")) return line.split("\t").map(cell => cell.trim());
+  const separator = line.includes(",") ? "," : (line.includes(";") ? ";" : "");
+  if (!separator) return [line.trim()];
+  const cells = [];
+  let current = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (char === '"') {
+      if (quoted && line[index + 1] === '"') {
+        current += '"';
+        index += 1;
+        continue;
+      }
+      quoted = !quoted;
+      continue;
+    }
+    if (char === separator && !quoted) {
+      cells.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  cells.push(current.trim());
+  return cells;
+}
+
+function parseRosterText(text) {
+  const lines = String(text || "").replace(/^\uFEFF/, "").split(/\r?\n/);
+  const students = [];
+  let auto = 1;
+  let headerChecked = false;
+  let truncated = false;
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line || /^sep=./i.test(line)) continue;
+    const cells = splitRosterLine(line).map(cell => cell.trim());
+    if (cells.every(cell => !cell)) continue;
+    if (!headerChecked) {
+      headerChecked = true;
+      if (isRosterHeader(cells)) continue;
+    }
+    let number = "";
+    let nameCells = cells;
+    const firstNumber = cells[0].match(/^(\d{1,3})$/);
+    const inlineNumber = cells.length === 1 ? cells[0].match(/^(\d{1,3})(?:\s*[.)\-]\s*|\s+)(.+)$/) : null;
+    if (firstNumber && cells.length > 1) {
+      number = firstNumber[1];
+      nameCells = cells.slice(1);
+    } else if (inlineNumber) {
+      number = inlineNumber[1];
+      nameCells = [inlineNumber[2]];
+    }
+    const name = nameCells
+      .map(cell => cell.trim())
+      .filter(cell => cell && !isClassToken(cell))
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 80);
+    if (name.length < 2) continue;
+    if (students.length >= STUDENT_ROLL_MAX) {
+      truncated = true;
+      break;
+    }
+    students.push({ id: newSupervisionId(), number: number || String(auto), name });
+    auto += 1;
+  }
+  students.truncated = truncated;
+  return students;
+}
+
+function mergeRoster(existing, incoming) {
+  const used = new Set();
+  return incoming.map(student => {
+    const samePerson = existing.find(item => !used.has(item.id) && item.name === student.name && (item.surname || "") === (student.surname || "") && String(item.number) === String(student.number));
+    const sameName = existing.find(item => !used.has(item.id) && item.name === student.name && (item.surname || "") === (student.surname || ""));
+    const match = samePerson || sameName;
+    if (!match) return student;
+    used.add(match.id);
+    return { id: match.id, number: student.number, name: student.name, surname: student.surname || "" };
+  });
+}
+
+function studentLabel(student) {
+  return [student?.name, student?.surname].map(part => String(part || "").trim()).filter(Boolean).join(" ");
+}
+
+function classHintFromRows(rows) {
+  const text = rows.slice(0, 6).flat().join(" ");
+  const room = text.match(/(ป|ม|อ)\.?\s*(\d+)\s*\/\s*(\d+)/);
+  if (room) return `${room[1]}.${room[2]}/${room[3]}`;
+  const primary = text.match(/ประถมศึกษาปีที่\s*(\d+)/);
+  if (primary) return `ป.${primary[1]}`;
+  const secondary = text.match(/มัธยมศึกษาปีที่\s*(\d+)/);
+  if (secondary) return `ม.${secondary[1]}`;
+  const kinder = text.match(/อนุบาล(?:\s*(\d+))?/);
+  if (kinder) return kinder[1] ? `อ.${kinder[1]}` : "อนุบาล";
+  return "";
+}
+
+function studentsFromTable(rows) {
+  const table = Array.isArray(rows) ? rows : [];
+  let headerIndex = -1;
+  let nameCol = -1;
+  let surnameCol = -1;
+  let numberCol = -1;
+  for (let index = 0; index < Math.min(table.length, 20); index += 1) {
+    const cells = (table[index] || []).map(cell => String(cell || "").trim());
+    const compact = cells.map(cell => cell.replace(/\s+/g, ""));
+    const nameAt = compact.findIndex(cell => cell.includes("ชื่อ"));
+    if (nameAt < 0) continue;
+    headerIndex = index;
+    nameCol = nameAt;
+    numberCol = compact.findIndex(cell => ["ที่", "เลขที่", "ลำดับ", "no", "no."].includes(cell.toLowerCase()));
+    const surnameAt = compact.findIndex((cell, cellIndex) => cellIndex !== nameAt && (cell === "สกุล" || cell === "นามสกุล" || cell.includes("สกุล")));
+    if (surnameAt >= 0) surnameCol = surnameAt;
+    else if (compact[nameAt].includes("สกุล") || !compact[nameAt + 1]) surnameCol = nameAt + 1;
+    break;
+  }
+  const students = [];
+  let truncated = false;
+  const start = headerIndex >= 0 ? headerIndex + 1 : 0;
+  for (let index = start; index < table.length; index += 1) {
+    const cells = (table[index] || []).map(cell => String(cell || "").trim());
+    if (headerIndex < 0) {
+      const line = cells.filter(Boolean).join(",");
+      if (!line) continue;
+      const parsed = parseRosterText(line);
+      parsed.forEach(student => {
+        if (students.length >= STUDENT_ROLL_MAX) truncated = true;
+        else students.push(student);
+      });
+      continue;
+    }
+    let name = cells[nameCol] || "";
+    let surname = surnameCol >= 0 ? (cells[surnameCol] || "") : "";
+    if (/^\d+(\.\d+)?$/.test(surname)) surname = "";
+    name = name.replace(/\s+/g, " ").trim();
+    surname = surname.replace(/\s+/g, " ").trim();
+    if (!/[ก-๙A-Za-z]/.test(name)) continue;
+    if (/หน่วยที่|คะแนน|ภาคเรียน|กลุ่มสาระ|รหัสวิชา|ชั้นประถม|ชั้นมัธยม|^รวม/.test(name)) continue;
+    if (students.length >= STUDENT_ROLL_MAX) {
+      truncated = true;
+      break;
+    }
+    const numberCell = numberCol >= 0 ? cells[numberCol] : "";
+    students.push({
+      id: newSupervisionId(),
+      number: /^\d{1,3}$/.test(numberCell) ? numberCell : String(students.length + 1),
+      name: name.slice(0, 40),
+      surname: surname.slice(0, 40),
+    });
+  }
+  students.truncated = truncated;
+  return students;
+}
+
+async function readRosterWorkbook(file) {
+  const name = String(file?.name || "").toLowerCase();
+  if (!/\.xlsx$|\.xls$/.test(name)) throw new Error("อัปได้เฉพาะไฟล์ Excel .xls หรือ .xlsx");
+  if (file.size > 5 * 1024 * 1024) throw new Error("ไฟล์ใหญ่เกิน 5 MB");
+  const workbook = readWorkbook(await file.arrayBuffer(), { type: "array" });
+  let students = [];
+  let className = "";
+  workbook.SheetNames.forEach(sheetName => {
+    const rows = xlsxUtils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: false, defval: "" });
+    const found = studentsFromTable(rows);
+    if (found.length > students.length) {
+      students = found;
+      className = classHintFromRows(rows);
+    }
+  });
+  if (students.truncated) throw new Error(`ห้องหนึ่งรับได้ไม่เกิน ${STUDENT_ROLL_MAX} คน`);
+  if (students.length === 0) throw new Error("ไม่พบชื่อและนามสกุลในไฟล์");
+  return { students, className };
+}
+
+async function fetchRollRows(employeeId) {
+  let query = supabase
+    .from("teaching_schedule")
+    .select("id, employee_id, subject, created_at")
+    .eq("class_room", STUDENT_ROLL_ROOM)
+    .eq("day_of_week", 0)
+    .eq("period", 0)
+    .order("created_at", { ascending: false });
+  if (employeeId) query = query.eq("employee_id", employeeId);
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+function dedupeRollRows(data) {
+  const latest = new Map();
+  (data || []).forEach(row => {
+    const current = latest.get(row.employee_id);
+    if (!current || String(row.created_at || "") > String(current.created_at || "")) latest.set(row.employee_id, row);
+  });
+  return [...latest.values()];
+}
+
+async function writeRollBook(employeeId, book, existingId) {
+  const subject = JSON.stringify({ ...book, version: 1, updated_at: new Date().toISOString() });
+  if (subject.length > SUPERVISION_JSON_LIMIT) throw new Error("ข้อมูลเช็คชื่อยาวเกินที่ระบบเก็บได้");
+  const payload = {
+    employee_id: employeeId,
+    day_of_week: 0,
+    period: 0,
+    class_room: STUDENT_ROLL_ROOM,
+    start_time: "00:00:00",
+    end_time: null,
+    subject,
+  };
+  const result = existingId
+    ? await supabase.from("teaching_schedule").update(payload).eq("id", existingId).select("id").single()
+    : await supabase.from("teaching_schedule").insert(payload).select("id").single();
+  if (result.error) throw new Error(result.error.message);
+  const rows = await fetchRollRows(employeeId);
+  const extras = rows.filter(row => row.id !== result.data.id).map(row => row.id);
+  if (extras.length) await supabase.from("teaching_schedule").delete().in("id", extras);
+  return result.data.id;
+}
+
+function RollCountChips({ counts }) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+      {ROLL_STATUSES.map(status => (
+        <span key={status.value} style={{ background: status.bg, color: status.color, border: `1px solid ${status.border}`, fontWeight: 800, fontSize: "0.78rem", borderRadius: 20, padding: "0.28rem 0.65rem" }}>{status.label} {counts[status.value]}</span>
+      ))}
+      {counts.unset > 0 && <span style={{ background: "#f1f5f9", color: "#64748b", fontWeight: 800, fontSize: "0.78rem", borderRadius: 20, padding: "0.28rem 0.65rem" }}>ยังไม่ติ๊ก {counts.unset}</span>}
+    </div>
+  );
+}
+
+function RollDateBar({ date, onChange }) {
+  const today = todayISO();
+  const go = (next) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(next || "") || next > today) return;
+    onChange(next);
+  };
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
+      <button type="button" onClick={() => go(shiftDateKey(date, -1))} aria-label="วันก่อน" style={{ ...btnSecondary, flex: "none", minWidth: 44, minHeight: 44, padding: "0.4rem" }}><ChevronLeft size={18} /></button>
+      <input type="date" max={today} value={date} onChange={event => go(event.target.value)} style={{ ...periodInput, width: "auto", flex: "1 1 150px", minHeight: 44 }} />
+      <button type="button" disabled={date >= today} onClick={() => go(shiftDateKey(date, 1))} aria-label="วันถัดไป" style={{ ...btnSecondary, flex: "none", minWidth: 44, minHeight: 44, padding: "0.4rem", opacity: date >= today ? 0.4 : 1 }}><ChevronRight size={18} /></button>
+      {date !== today && <button type="button" onClick={() => go(today)} style={{ ...btnSecondary, flex: "none", minHeight: 44 }}>วันนี้</button>}
+    </div>
+  );
+}
+
+function rollMonthSummary(book, month) {
+  const students = book?.students || [];
+  const days = Object.entries(book?.days || {})
+    .filter(([date, day]) => month && date.startsWith(month) && day?.saved_at)
+    .sort((left, right) => left[0].localeCompare(right[0]));
+  const totals = { present: 0, absent: 0, personal: 0, sick: 0, unset: 0, days: days.length };
+  const perStudent = students.map(student => {
+    const counts = { present: 0, absent: 0, personal: 0, sick: 0, unset: 0 };
+    days.forEach(([, day]) => {
+      const status = day.marks?.[student.id];
+      if (ROLL_STATUS_VALUES.has(status)) {
+        counts[status] += 1;
+        totals[status] += 1;
+      } else {
+        counts.unset += 1;
+        totals.unset += 1;
+      }
+    });
+    return { student, counts };
+  });
+  return { totals, perStudent };
+}
+
+function RollModeSwitch({ mode, onChange }) {
+  const items = [
+    { key: "check", label: "เช็คชื่อวันนี้" },
+    { key: "stats", label: "สถิติ" },
+  ];
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.35rem", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: "0.3rem" }}>
+      {items.map(item => {
+        const active = mode === item.key;
+        return (
+          <button key={item.key} type="button" onClick={() => onChange(item.key)} style={{ minHeight: 44, border: "none", borderRadius: 10, background: active ? "#eff6ff" : "transparent", color: active ? "#1d4ed8" : "#64748b", fontWeight: 800, fontFamily: "inherit", fontSize: "0.92rem", cursor: "pointer" }}>
+            {item.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function RollMarkRow({ student, value, disabled, onChange }) {
+  const label = studentLabel(student);
+  return (
+    <div style={{ display: "grid", width: "100%", boxSizing: "border-box", gridTemplateColumns: "minmax(0, 1fr) repeat(4, 3.15rem)", gap: "0.15rem", alignItems: "center", minHeight: 48, padding: "0.3rem 0", borderTop: "1px solid #f1f5f9", minWidth: 0 }}>
+      <div style={{ minWidth: 0, display: "flex", gap: "0.3rem", alignItems: "center" }}>
+        <span style={{ fontWeight: 800, color: "#64748b", flex: "0 0 auto" }}>{student.number}</span>
+        <span title={label} style={{ minWidth: 0, fontWeight: 800, fontSize: "0.86rem", lineHeight: 1.25, color: "#0f172a", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", wordBreak: "break-word" }}>{label}</span>
+      </div>
+      {ROLL_STATUSES.map(status => {
+        const active = value === status.value;
+        return (
+          <button
+            key={status.value}
+            type="button"
+            aria-pressed={active}
+            aria-label={`${label} ${status.label}`}
+            disabled={disabled}
+            onClick={() => onChange?.(status.value)}
+            style={{ boxSizing: "border-box", width: "100%", minHeight: 44, minWidth: 0, borderRadius: 10, border: `2px solid ${active ? status.color : "#e2e8f0"}`, background: active ? status.bg : "#fff", color: active ? status.color : "#64748b", fontWeight: 800, fontFamily: "inherit", fontSize: "0.68rem", cursor: disabled ? "default" : "pointer", padding: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", opacity: 1 }}
+          >
+            {status.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function RollStatsPanel({ book, month, onMonth, title }) {
+  const summary = rollMonthSummary(book, month);
+  return (
+    <Card>
+      <div style={{ display: "grid", gap: "0.8rem", minWidth: 0 }}>
+        <div>
+          <div style={{ fontWeight: 800, color: "#0f172a", fontSize: "1.05rem" }}>{title || "สถิติการเช็คชื่อ"}</div>
+          <div style={{ color: "#64748b", fontSize: "0.82rem" }}>นับจากวันที่บันทึกการเช็คชื่อแล้ว</div>
+        </div>
+        <Field label="เดือน">
+          <input type="month" value={month} max={todayISO().slice(0, 7)} onChange={event => onMonth(event.target.value)} style={{ ...periodInput, width: "100%", maxWidth: 240 }} />
+        </Field>
+        <div style={{ fontWeight: 800, color: "#0f172a" }}>เช็คชื่อแล้ว {summary.totals.days} วัน</div>
+        <RollCountChips counts={summary.totals} />
+        {book.students.length === 0 ? (
+          <div style={{ color: "#94a3b8" }}>ฝ่ายวิชาการยังไม่ได้อัปรายชื่อ สถิติจะขึ้นที่นี่</div>
+        ) : summary.totals.days === 0 ? (
+          <div style={{ color: "#94a3b8" }}>เดือนนี้ยังไม่มีการเช็คชื่อ</div>
+        ) : (
+          <div>
+            {summary.perStudent.map(({ student, counts }) => (
+              <div key={student.id} style={{ display: "grid", gap: "0.4rem", padding: "0.7rem 0", borderTop: "1px solid #f1f5f9", minWidth: 0 }}>
+                <div style={{ display: "flex", gap: "0.55rem", minWidth: 0 }}>
+                  <span style={{ fontWeight: 800, color: "#64748b", minWidth: "1.6rem" }}>{student.number}</span>
+                  <span style={{ fontWeight: 800, color: "#0f172a", wordBreak: "break-word" }}>{studentLabel(student)}</span>
+                </div>
+                <RollCountChips counts={counts} />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+const ACADEMIC_TABS = [
+  { key: "plan", label: "ส่งแผนรายสัปดาห์" },
+  { key: "roll", label: "เช็คชื่อนักเรียน/สถิติ" },
+  ...ACADEMIC_EXTRA_TABS,
+];
+
+function AcademicPage({ employees, currentUser }) {
+  const [tab, setTab] = useState("plan");
+  return (
+    <div style={{ display: "grid", gap: "1rem", minWidth: 0 }}>
+      <div style={{ position: "sticky", top: 0, zIndex: 30, background: "#f8fafc", paddingBottom: "0.15rem", minWidth: 0, maxWidth: "100%" }}>
+        <div role="tablist" aria-label="งานวิชาการ" style={{ display: "flex", gap: "0.35rem", overflowX: "auto", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: "0.35rem", boxShadow: "0 1px 6px rgba(15,23,42,0.04)", minWidth: 0, maxWidth: "100%" }}>
+          {ACADEMIC_TABS.map((item, index) => {
+            const active = tab === item.key;
+            return (
+              <button
+                key={item.key}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setTab(item.key)}
+                style={{ flex: "0 0 auto", minWidth: "max-content", minHeight: 44, border: "none", borderRadius: 10, padding: "0.55rem 0.9rem", background: active ? "linear-gradient(135deg, #2563eb, #1d4ed8)" : "transparent", color: active ? "#fff" : "#475569", fontWeight: 800, fontFamily: "inherit", fontSize: "0.92rem", cursor: "pointer", whiteSpace: "nowrap" }}
+              >
+                {index + 1}. {item.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      {tab === "plan" && <TeachingSupervisionPage employees={employees} currentUser={currentUser} />}
+      {tab === "roll" && <StudentRollPage employees={employees} currentUser={currentUser} />}
+      {tab !== "plan" && tab !== "roll" && <AcademicExtra tab={tab} employees={employees} currentUser={currentUser} />}
+    </div>
+  );
+}
+
+function StudentRollPage({ employees, currentUser }) {
+  if (currentUser?.role === "admin") return <StudentRollAdmin employees={employees} />;
+  return <StudentRollTeacher currentUser={currentUser} />;
+}
+
+function StudentRollTeacher({ currentUser }) {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [rowId, setRowId] = useState(null);
+  const [book, setBook] = useState(emptyRollBook);
+  const [baseline, setBaseline] = useState(emptyRollBook);
+  const [date, setDate] = useState(todayISO);
+  const [marks, setMarks] = useState({});
+  const [mode, setMode] = useState("check");
+  const [month, setMonth] = useState(() => todayISO().slice(0, 7));
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        setLoading(true);
+        setError("");
+        const rows = await fetchRollRows(currentUser.id);
+        if (!active) return;
+        const row = rows[0];
+        const loaded = row ? parseRollBook(row.subject) : emptyRollBook();
+        const today = todayISO();
+        setBook(loaded);
+        setBaseline(loaded);
+        setRowId(row?.id || null);
+        setDate(today);
+        setMarks({ ...(loaded.days[today]?.marks || {}) });
+        const extras = rows.slice(1).map(item => item.id);
+        if (extras.length) await supabase.from("teaching_schedule").delete().in("id", extras);
+      } catch (err) {
+        if (active) setError(err.message || "โหลดรายชื่อไม่สำเร็จ");
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [currentUser.id]);
+
+  const namedStudents = book.students.filter(student => student.name.trim());
+  const counts = rollCounts(namedStudents, marks);
+  const savedMarks = baseline.days[date]?.marks || {};
+  const className = book.class_name.trim();
+
+  const persist = async (nextBook, success) => {
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      const id = await writeRollBook(currentUser.id, nextBook, rowId);
+      setRowId(id);
+      setBook(nextBook);
+      setBaseline(nextBook);
+      setMarks({ ...(nextBook.days[date]?.marks || {}) });
+      setMessage(success);
+    } catch (err) {
+      setError(err.message || "บันทึกไม่สำเร็จ");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveMarks = () => {
+    const students = cleanRollStudents(book.students);
+    if (students.length === 0) { setError("ฝ่ายวิชาการยังไม่ได้อัปรายชื่อห้องนี้"); return; }
+    const clean = {};
+    students.forEach(student => {
+      if (ROLL_STATUS_VALUES.has(marks[student.id])) clean[student.id] = marks[student.id];
+    });
+    if (Object.keys(clean).length === 0) { setError("ติ๊กชื่อนักเรียนอย่างน้อย 1 คนก่อนบันทึก"); return; }
+    const nextBook = {
+      ...book,
+      students,
+      days: { ...book.days, [date]: { saved_at: new Date().toISOString(), marks: clean } },
+    };
+    const unset = students.length - Object.keys(clean).length;
+    persist(nextBook, unset > 0 ? `บันทึกการเช็คชื่อแล้ว ยังไม่ติ๊ก ${unset} คน` : "บันทึกการเช็คชื่อวันนี้แล้ว");
+  };
+
+  const changeDate = (next) => {
+    if (next === date) return;
+    if (!sameMarks(marks, savedMarks) && !window.confirm("การเช็คชื่อที่ยังไม่บันทึกจะไม่ถูกเก็บ เปลี่ยนวันเลยหรือไม่")) return;
+    setDate(next);
+    setMarks({ ...(baseline.days[next]?.marks || {}) });
+    setMessage("");
+    setError("");
+  };
+
+  const markAllPresent = () => {
+    const next = {};
+    namedStudents.forEach(student => { next[student.id] = "present"; });
+    setMarks(next);
+    setError("");
+  };
+
+  return (
+    <div style={{ display: "grid", gap: "1rem", minWidth: 0 }}>
+      {error && <ErrorBox>{error}</ErrorBox>}
+      {message && <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", borderRadius: "10px", padding: "0.75rem 1rem", color: "#166534", fontWeight: 700 }}>{message}</div>}
+      {loading ? (
+        <Card><div style={{ color: "#64748b" }}>กำลังโหลดรายชื่อ...</div></Card>
+      ) : (
+        <>
+          <RollModeSwitch mode={mode} onChange={setMode} />
+          {mode === "stats" ? (
+            <RollStatsPanel book={book} month={month} onMonth={setMonth} title={className ? `สถิติห้อง ${className}` : "สถิติห้องของฉัน"} />
+          ) : namedStudents.length === 0 ? (
+            <Card>
+              <div style={{ fontWeight: 800, color: "#0f172a", fontSize: "1.05rem" }}>เช็คชื่อนักเรียน</div>
+              <div style={{ color: "#64748b", fontSize: "0.84rem", lineHeight: 1.55, marginTop: "0.45rem" }}>ยังไม่มีรายชื่อห้องนี้ ฝ่ายวิชาการอัปไฟล์ Excel ให้ หน้านี้แยกจากลงเวลาเข้างานของครู</div>
+            </Card>
+          ) : (
+            <Card padding="0.85rem">
+              <div style={{ display: "grid", gap: "0.8rem", minWidth: 0 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 800, color: "#0f172a", fontSize: "1.05rem" }}>เช็คชื่อ{className ? ` ${className}` : ""}</div>
+                    <div style={{ color: "#64748b", fontSize: "0.8rem" }}>{formatThaiDateKey(date)} · นักเรียน {namedStudents.length} คน</div>
+                  </div>
+                  {baseline.days[date]?.saved_at && <span style={{ background: "#dcfce7", color: "#166534", fontWeight: 800, fontSize: "0.75rem", borderRadius: 20, padding: "0.25rem 0.6rem" }}>บันทึกแล้ว {fmtTime(baseline.days[date].saved_at)}</span>}
+                </div>
+                <div style={{ color: "#64748b", fontSize: "0.84rem", lineHeight: 1.55 }}>รายชื่ออัปโดยฝ่ายวิชาการ ติ๊กได้ว่าวันนี้ใครมา ขาด ลากิจ หรือลาป่วย</div>
+                <RollDateBar date={date} onChange={changeDate} />
+                <RollCountChips counts={counts} />
+                <button type="button" onClick={markAllPresent} disabled={saving} style={{ ...btnSecondary, flex: "none", minHeight: 44, width: "100%", maxWidth: 280 }}>ติ๊กมาทั้งหมด</button>
+                <div style={{ minWidth: 0 }}>
+                  {namedStudents.map(student => (
+                    <RollMarkRow
+                      key={student.id}
+                      student={student}
+                      value={marks[student.id] || ""}
+                      disabled={saving}
+                      onChange={status => setMarks(current => ({ ...current, [student.id]: status }))}
+                    />
+                  ))}
+                </div>
+                <button type="button" onClick={saveMarks} disabled={saving} style={{ ...btnPrimary, flex: "none", width: "100%", minHeight: 48, background: "linear-gradient(135deg, #2563eb, #1d4ed8)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}>
+                  {saving ? <RefreshCw size={16} style={{ animation: "spin 1s linear infinite" }} /> : <Save size={16} />}
+                  {saving ? "กำลังบันทึก..." : "บันทึกการเช็คชื่อ"}
+                </button>
+              </div>
+            </Card>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function StudentRollAdmin({ employees }) {
+  const [date, setDate] = useState(todayISO);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [rows, setRows] = useState([]);
+  const [query, setQuery] = useState("");
+  const [selectedId, setSelectedId] = useState("");
+  const [mode, setMode] = useState("check");
+  const [month, setMonth] = useState(() => todayISO().slice(0, 7));
+  const [teacherId, setTeacherId] = useState("");
+  const [className, setClassName] = useState("");
+  const [classHint, setClassHint] = useState("");
+  const [incoming, setIncoming] = useState([]);
+
+  const reload = async () => {
+    const data = await fetchRollRows(null);
+    const next = dedupeRollRows(data);
+    setRows(next);
+    return next;
+  };
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        setLoading(true);
+        setError("");
+        const data = await fetchRollRows(null);
+        if (!active) return;
+        setRows(dedupeRollRows(data));
+      } catch (err) {
+        if (active) setError(err.message || "โหลดเช็คชื่อไม่สำเร็จ");
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, []);
+
+  const homeroomTeachers = employees
+    .filter(employee => employee.role !== "admin")
+    .slice()
+    .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "th"));
+
+  const onPickWorkbook = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      const result = await readRosterWorkbook(file);
+      setIncoming(result.students);
+      setClassName(current => (!current.trim() || current === classHint) ? (result.className || current) : current);
+      setClassHint(result.className || "");
+      setError("");
+      setMessage(`อ่านไฟล์ได้ ${result.students.length} คน ตรวจชื่อแล้วกดบันทึกรายชื่อ`);
+    } catch (err) {
+      setIncoming([]);
+      setError(err.message || "อ่านไฟล์ Excel ไม่สำเร็จ");
+    }
+  };
+
+  const saveRoster = async () => {
+    const teacher = homeroomTeachers.find(item => item.id === teacherId);
+    const room = className.trim();
+    if (!teacher) { setError("เลือกครูประจำชั้นก่อน"); return; }
+    if (!room) { setError("กรอกชื่อห้องก่อนบันทึก"); return; }
+    if (incoming.length === 0) { setError("เลือกไฟล์ Excel ก่อน"); return; }
+    const existing = rows.find(row => row.employee_id === teacher.id);
+    const existingBook = existing ? parseRollBook(existing.subject) : emptyRollBook();
+    const named = existingBook.students.filter(student => student.name.trim());
+    if (named.length > 0 && !window.confirm(`แทนที่รายชื่อเดิม ${named.length} คน ของ ${teacher.name} ด้วย ${incoming.length} คนหรือไม่`)) return;
+    const students = cleanRollStudents(mergeRoster(named, incoming));
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      await writeRollBook(teacher.id, { ...existingBook, class_name: room.slice(0, 40), students }, existing?.id || null);
+      await reload();
+      setIncoming([]);
+      setSelectedId(teacher.id);
+      setMode("check");
+      setMessage(`บันทึกรายชื่อห้อง ${room} ให้ ${teacher.name} แล้ว ${students.length} คน`);
+    } catch (err) {
+      setError(err.message || "บันทึกรายชื่อไม่สำเร็จ");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const classes = rows
+    .map(row => {
+      const book = parseRollBook(row.subject);
+      const teacher = employees.find(employee => employee.id === row.employee_id);
+      return { row, book, teacher, counts: rollCounts(book.students, book.days[date]?.marks || {}), savedAt: book.days[date]?.saved_at || null };
+    })
+    .filter(item => item.book.students.length > 0)
+    .sort((a, b) => String(a.book.class_name || "").localeCompare(String(b.book.class_name || ""), "th"));
+  const visible = classes.filter(item => {
+    const text = `${item.book.class_name} ${item.teacher?.name || ""} ${item.teacher?.department || ""}`.toLowerCase();
+    return text.includes(query.trim().toLowerCase());
+  });
+  const selected = classes.find(item => item.row.employee_id === selectedId) || null;
+
+  return (
+    <div style={{ display: "grid", gap: "1rem", minWidth: 0 }}>
+      {error && <ErrorBox>{error}</ErrorBox>}
+      {message && <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", borderRadius: "10px", padding: "0.75rem 1rem", color: "#166534", fontWeight: 700 }}>{message}</div>}
+      <RollModeSwitch mode={mode} onChange={next => { setMode(next); setSelectedId(""); }} />
+      {mode === "stats" ? (
+        selected ? (
+          <div style={{ display: "grid", gap: "0.8rem" }}>
+            <button type="button" onClick={() => setSelectedId("")} style={{ ...btnSecondary, flex: "none", minHeight: 44 }}><ChevronLeft size={16} /> กลับ</button>
+            <RollStatsPanel book={selected.book} month={month} onMonth={setMonth} title={`${selected.book.class_name || "ไม่ระบุห้อง"} · ${selected.teacher?.name || "ไม่พบชื่อครู"}`} />
+          </div>
+        ) : (
+          <Card>
+            <Field label="เดือน">
+              <input type="month" value={month} max={todayISO().slice(0, 7)} onChange={event => setMonth(event.target.value)} style={{ ...periodInput, width: "100%", maxWidth: 240 }} />
+            </Field>
+            {loading ? (
+              <div style={{ color: "#64748b", padding: "1rem 0" }}>กำลังโหลด...</div>
+            ) : classes.length === 0 ? (
+              <div style={{ color: "#94a3b8", padding: "1.25rem 0" }}>ยังไม่มีรายชื่อห้อง อัปไฟล์ Excel ที่หน้าเช็คชื่อวันนี้</div>
+            ) : (
+              <div style={{ display: "grid", gap: "0.5rem", marginTop: "0.9rem" }}>
+                {classes.map((item, index) => {
+                  const summary = rollMonthSummary(item.book, month);
+                  return (
+                    <button key={item.row.employee_id} type="button" onClick={() => setSelectedId(item.row.employee_id)} style={{ display: "grid", gap: "0.45rem", width: "100%", textAlign: "left", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "0.75rem 0.85rem", cursor: "pointer", fontFamily: "inherit" }}>
+                      <span style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
+                        <Avatar name={item.teacher?.name || item.book.class_name} index={index} />
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ display: "block", fontWeight: 800, color: "#0f172a" }}>{item.book.class_name || "ไม่ระบุห้อง"}</span>
+                          <span style={{ display: "block", fontSize: "0.75rem", color: "#64748b" }}>{item.teacher?.name || "ไม่พบชื่อครู"} · เช็คชื่อแล้ว {summary.totals.days} วัน</span>
+                        </span>
+                        <ChevronRight size={16} color="#94a3b8" />
+                      </span>
+                      <RollCountChips counts={summary.totals} />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+        )
+      ) : (
+      <>
+      <Card>
+        <div style={{ display: "grid", gap: "0.8rem", minWidth: 0 }}>
+          <div>
+            <div style={{ fontWeight: 800, color: "#0f172a", fontSize: "1.05rem" }}>อัปรายชื่อจาก Excel</div>
+          </div>
+          <Field label="ครูประจำชั้น">
+            <select value={teacherId} onChange={event => setTeacherId(event.target.value)} style={{ ...selectStyle, boxSizing: "border-box", fontSize: "16px", maxWidth: "100%" }}>
+              <option value="">เลือกครู</option>
+              {homeroomTeachers.map(teacher => (
+                <option key={teacher.id} value={teacher.id}>{teacher.name}{teacher.department ? ` · ${teacher.department}` : ""}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="ชื่อห้อง">
+            <input value={className} onChange={event => setClassName(event.target.value.slice(0, 40))} style={periodInput} />
+          </Field>
+          <label style={{ ...btnSecondary, flex: "none", minHeight: 44, cursor: "pointer", width: "fit-content" }}>
+            <Upload size={16} /> เลือกไฟล์ Excel
+            <input type="file" accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={onPickWorkbook} style={{ display: "none" }} />
+          </label>
+          {incoming.length > 0 && (
+            <div style={{ display: "grid", gap: "0.45rem", minWidth: 0 }}>
+              <div style={{ fontWeight: 800, color: "#0f172a" }}>พบ {incoming.length} คน{classHint ? ` · ไฟล์ระบุ ${classHint}` : ""}</div>
+              <div style={{ maxHeight: 200, overflow: "auto", border: "1px solid #e2e8f0", borderRadius: 10, minWidth: 0 }}>
+                {incoming.map(student => (
+                  <div key={student.id} style={{ display: "flex", gap: "0.45rem", padding: "0.35rem 0.65rem", borderTop: "1px solid #f1f5f9", minWidth: 0 }}>
+                    <span style={{ fontWeight: 800, color: "#64748b", flex: "0 0 auto" }}>{student.number}</span>
+                    <span style={{ fontWeight: 700, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{studentLabel(student)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <button type="button" onClick={saveRoster} disabled={saving} style={{ ...btnPrimary, flex: "none", width: "100%", maxWidth: 280, minHeight: 48, background: "linear-gradient(135deg, #2563eb, #1d4ed8)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}>
+            {saving ? <RefreshCw size={16} style={{ animation: "spin 1s linear infinite" }} /> : <Save size={16} />}
+            {saving ? "กำลังบันทึก..." : "บันทึกรายชื่อ"}
+          </button>
+        </div>
+      </Card>
+      <Card>
+        <div style={{ display: "grid", gap: "0.8rem" }}>
+          <RollDateBar date={date} onChange={setDate} />
+
+        </div>
+      </Card>
+      {selected ? (
+        <Card padding="0.85rem">
+          <button type="button" onClick={() => setSelectedId("")} style={{ ...btnSecondary, flex: "none", minHeight: 44, marginBottom: "0.9rem" }}><ChevronLeft size={16} /> กลับ</button>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 800, fontSize: "1.05rem", color: "#0f172a" }}>{selected.book.class_name || "ไม่ระบุห้อง"}</div>
+              <div style={{ color: "#64748b", fontSize: "0.82rem" }}>{selected.teacher?.name || "ไม่พบชื่อครู"} · {formatThaiDateKey(date)}</div>
+            </div>
+            {selected.savedAt ? <span style={{ background: "#dcfce7", color: "#166534", fontWeight: 800, fontSize: "0.75rem", borderRadius: 20, padding: "0.25rem 0.6rem", height: "fit-content" }}>บันทึกแล้ว {fmtTime(selected.savedAt)}</span> : <span style={{ background: "#fee2e2", color: "#b91c1c", fontWeight: 800, fontSize: "0.75rem", borderRadius: 20, padding: "0.25rem 0.6rem", height: "fit-content" }}>ยังไม่เช็คชื่อ</span>}
+          </div>
+          <RollCountChips counts={selected.counts} />
+          <div style={{ marginTop: "0.4rem", minWidth: 0 }}>
+            {selected.book.students.map(student => (
+              <RollMarkRow key={student.id} student={student} value={selected.book.days[date]?.marks?.[student.id] || ""} disabled />
+            ))}
+          </div>
+        </Card>
+      ) : (
+        <Card>
+          <Field label="ค้นหาห้องหรือครู">
+            <InputWithIcon icon={Search} value={query} onChange={setQuery} placeholder="ชื่อห้อง" />
+          </Field>
+          {loading ? (
+            <div style={{ color: "#64748b", padding: "1rem 0" }}>กำลังโหลด...</div>
+          ) : visible.length === 0 ? (
+            <div style={{ color: "#94a3b8", padding: "1.25rem 0" }}>{classes.length === 0 ? "ยังไม่มีรายชื่อห้อง อัปไฟล์ Excel ด้านบน" : "ไม่พบห้องที่ค้นหา"}</div>
+          ) : (
+            <div style={{ display: "grid", gap: "0.5rem", marginTop: "0.9rem" }}>
+              {visible.map((item, index) => (
+                <button key={item.row.employee_id} type="button" onClick={() => setSelectedId(item.row.employee_id)} style={{ display: "grid", gap: "0.45rem", width: "100%", textAlign: "left", background: "#fff", border: "1px solid #e2e8f0", borderLeft: `4px solid ${item.savedAt ? "#16a34a" : "#dc2626"}`, borderRadius: 12, padding: "0.75rem 0.85rem", cursor: "pointer", fontFamily: "inherit" }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
+                    <Avatar name={item.teacher?.name || item.book.class_name} index={index} />
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: "block", fontWeight: 800, color: "#0f172a" }}>{item.book.class_name || "ไม่ระบุห้อง"}</span>
+                      <span style={{ display: "block", fontSize: "0.75rem", color: "#64748b" }}>{item.teacher?.name || "ไม่พบชื่อครู"} · {item.book.students.length} คน</span>
+                    </span>
+                    <span style={{ background: item.savedAt ? "#dcfce7" : "#fee2e2", color: item.savedAt ? "#166534" : "#b91c1c", fontWeight: 800, fontSize: "0.72rem", borderRadius: 20, padding: "0.2rem 0.55rem", whiteSpace: "nowrap" }}>{item.savedAt ? "เช็คแล้ว" : "ยังไม่เช็ค"}</span>
+                  </span>
+                  <RollCountChips counts={item.counts} />
+                </button>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+      </>
       )}
     </div>
   );
@@ -5579,6 +6729,7 @@ function StatCard({ stat }) {
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function HRApp() {
   const [currentUser, setCurrentUser] = useState(null);
+  const [teacherPreview, setTeacherPreview] = useState(false);
   const getInitialPage = () => {
     if (typeof window === "undefined") return "dashboard";
     if (window.location.hash === "#finance") return "finance";
@@ -5682,14 +6833,16 @@ export default function HRApp() {
 
   if (!currentUser) return <LoginPage onLogin={setCurrentUser} />;
 
+  const previewTeacher = employees.find(emp => emp.username === "teacher.try" && emp.role !== "admin");
+  const actingUser = currentUser.role === "admin" && teacherPreview && previewTeacher ? previewTeacher : currentUser;
   const todayDateStr = todayISO();
   const isToday = (dt) => new Date(dt).toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }) === todayDateStr;
   const todayAttendance = activityLog.filter(a => isToday(a.check_in));
   const currentlyOut = outings.filter(o => o.status === "out").length;
   const pendingLeaves = leaves.filter(l => l.status === "pending").length;
-  const myAttToday = activityLog.find(a => a.employee_id === currentUser.id && isToday(a.check_in));
+  const myAttToday = activityLog.find(a => a.employee_id === actingUser.id && isToday(a.check_in));
 
-  const stats = currentUser.role === "admin" ? [
+  const stats = actingUser.role === "admin" ? [
     { label: "พนักงานทั้งหมด", value: employees.length, icon: Users, color: "#2563eb", bg: "#eff6ff", trend: "ข้อมูลจริง" },
     { label: "ลงเวลาวันนี้", value: todayAttendance.length, icon: CheckCircle, color: "#059669", bg: "#ecfdf5", trend: `${employees.length > 0 ? Math.round(todayAttendance.length / employees.length * 100) : 0}%` },
     { label: "มาสายวันนี้", value: todayAttendance.filter(a => checkLate(a.check_in, settings?.work_start, settings?.late_grace_minutes)?.late).length, icon: AlertCircle, color: "#dc2626", bg: "#fef2f2", trend: "นับเฉพาะวันนี้" },
@@ -5718,8 +6871,8 @@ export default function HRApp() {
         bg: myEarlyInfo?.early ? "#fef2f2" : (myAttToday?.check_out ? "#ecfdf5" : "#f8fafc"),
         trend: myAttToday?.check_out ? fmtTime(myAttToday.check_out) : "ยังไม่กลับ"
       },
-      { label: "การลาของฉัน", value: leaves.filter(l => l.employee_id === currentUser.id).length, icon: Umbrella, color: "#7c3aed", bg: "#f5f3ff", trend: "รวม" },
-      { label: "รออนุมัติ", value: leaves.filter(l => l.employee_id === currentUser.id && l.status === "pending").length, icon: AlertCircle, color: "#d97706", bg: "#fef3c7", trend: "รอ" },
+      { label: "การลาของฉัน", value: leaves.filter(l => l.employee_id === actingUser.id).length, icon: Umbrella, color: "#7c3aed", bg: "#f5f3ff", trend: "รวม" },
+      { label: "รออนุมัติ", value: leaves.filter(l => l.employee_id === actingUser.id && l.status === "pending").length, icon: AlertCircle, color: "#d97706", bg: "#fef3c7", trend: "รอ" },
     ];
   })();
 
@@ -5744,7 +6897,7 @@ export default function HRApp() {
     setSidebarOpen(false);
   };
 
-  const visibleNavItems = navItems.filter(item => item.roles.includes(currentUser.role));
+  const visibleNavItems = navItems.filter(item => item.roles.includes(actingUser.role === "admin" ? "admin" : "employee"));
 
   if (activePage === "payrollStandalone" && currentUser.role === "admin") {
     return loading ? (
@@ -5774,6 +6927,7 @@ export default function HRApp() {
   return (
     <div style={{ fontFamily: "'Sarabun', 'Noto Sans Thai', sans-serif", background: "#f8fafc", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap'); * { box-sizing: border-box; margin: 0; padding: 0; } @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <PreviewBanner />
 
       <header style={{ background: "#fff", borderBottom: "1px solid #e2e8f0", height: 60, display: "flex", alignItems: "center", padding: "0 1rem", gap: "0.75rem", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 1px 8px rgba(0,0,0,0.06)" }}>
         <button
@@ -5795,13 +6949,29 @@ export default function HRApp() {
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginLeft: "auto" }}>
           {!isMobile && (
             <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#0f172a" }}>{currentUser.name}</div>
+              <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#0f172a" }}>{actingUser.name}</div>
               <div style={{ fontSize: "0.7rem", color: "#64748b" }}>
-                {currentUser.role === "admin" ? "👑 Admin" : "พนักงาน"} • {currentUser.department}
+                {actingUser.role === "admin" ? "👑 Admin" : "พนักงาน"} • {actingUser.department}
               </div>
             </div>
           )}
-          <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #2563eb, #7c3aed)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "0.9rem", flexShrink: 0 }}>{currentUser.name?.[0]}</div>
+          {currentUser.role === "admin" && (
+            <button
+              type="button"
+              onClick={() => {
+                if (teacherPreview) {
+                  setTeacherPreview(false);
+                  return;
+                }
+                if (["employee", "finance", "report", "settings"].includes(activePage)) setActivePage("dashboard");
+                setTeacherPreview(true);
+              }}
+              style={{ background: teacherPreview ? "#dbeafe" : "#eff6ff", border: "1.5px solid #93c5fd", borderRadius: "10px", padding: "0.4rem 0.7rem", cursor: "pointer", color: "#1d4ed8", fontFamily: "inherit", fontSize: "0.78rem", fontWeight: 800, whiteSpace: "nowrap" }}
+            >
+              {teacherPreview ? "กลับหน้าแอดมิน" : "ดูหน้าครู"}
+            </button>
+          )}
+          <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #2563eb, #7c3aed)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "0.9rem", flexShrink: 0 }}>{actingUser.name?.[0]}</div>
           <button onClick={handleLogout} title="ออกจากระบบ" style={{ background: "#fef2f2", border: "1.5px solid #fca5a5", borderRadius: "10px", padding: "0.45rem 0.65rem", cursor: "pointer", color: "#dc2626", display: "flex", alignItems: "center", gap: "0.3rem", fontFamily: "inherit", fontSize: "0.78rem", fontWeight: 600 }}>
             <LogOut size={14} />
           </button>
@@ -5841,8 +7011,8 @@ export default function HRApp() {
             <div style={{ background: "#f8fafc", borderRadius: "10px", padding: "0.65rem", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
               <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg, #2563eb, #7c3aed)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "0.85rem" }}>{currentUser.name?.[0]}</div>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{currentUser.name}</div>
-                <div style={{ fontSize: "0.7rem", color: "#64748b" }}>{currentUser.role === "admin" ? "👑 Admin" : "พนักงาน"}</div>
+                <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{actingUser.name}</div>
+                <div style={{ fontSize: "0.7rem", color: "#64748b" }}>{actingUser.role === "admin" ? "👑 Admin" : "พนักงาน"}</div>
               </div>
             </div>
           )}
@@ -5899,12 +7069,12 @@ export default function HRApp() {
             <>
               {activePage === "dashboard" && (
                 <>
-                  <PageHeader title={`สวัสดี ${currentUser.name?.split(" ")[0]} 👋`} />
+                  <PageHeader title={`สวัสดี ${actingUser.name?.split(" ")[0]} 👋`} />
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
                     {stats.map(stat => <StatCard key={stat.label} stat={stat} />)}
                   </div>
 
-                  {currentUser.role === "admin" && (
+                  {actingUser.role === "admin" && (
                     <>
                       {/* Pending Approvals */}
                       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
@@ -6062,21 +7232,21 @@ export default function HRApp() {
                   </Card>
                 </>
               )}
-              {activePage === "employee" && <EmployeePage employees={employees} onRefresh={fetchData} />}
-              {activePage === "attendance" && <AttendancePage employees={employees} activityLog={activityLog} currentUser={currentUser} settings={settings} onRefresh={fetchData} />}
-              {activePage === "leave" && <LeavePage employees={employees} leaves={leaves} currentUser={currentUser} onRefresh={fetchData} />}
-              {activePage === "outing" && <OutingPage employees={employees} outings={outings} currentUser={currentUser} onRefresh={fetchData} />}
+              {activePage === "employee" && <EmployeePage employees={employees} currentUser={currentUser} onRefresh={fetchData} />}
+              {activePage === "attendance" && <AttendancePage employees={employees} activityLog={activityLog} currentUser={actingUser} settings={settings} onRefresh={fetchData} />}
+              {activePage === "leave" && <LeavePage employees={employees} leaves={leaves} currentUser={actingUser} onRefresh={fetchData} />}
+              {activePage === "outing" && <OutingPage employees={employees} outings={outings} currentUser={actingUser} onRefresh={fetchData} />}
               {activePage === "finance" && currentUser.role === "admin" && <FinancePortal employees={employees} attendance={activityLog} leaves={leaves} settings={settings} />}
               {activePage === "report" && <ReportPage employees={employees} attendance={activityLog} leaves={leaves} outings={outings} settings={settings} />}
-              {activePage === "schedule" && <SchedulePage employees={employees} currentUser={currentUser} onRefresh={fetchData} />}
-              {activePage === "supervision" && <TeachingSupervisionPage employees={employees} currentUser={currentUser} />}
+              {activePage === "schedule" && <SchedulePage employees={employees} currentUser={actingUser} onRefresh={fetchData} />}
+              {activePage === "academic" && <AcademicPage employees={employees} currentUser={actingUser} />}
               {activePage === "settings" && <SettingsPage settings={settings} onRefresh={fetchData} />}
             </>
           )}
         </main>
       </div>
 
-      {showAttendance && <AttendanceModal mode={attMode} onClose={() => { setShowAttendance(false); fetchData(); }} onCheckin={() => fetchData()} employees={employees} currentUser={currentUser} settings={settings} />}
+      {showAttendance && <AttendanceModal mode={attMode} onClose={() => { setShowAttendance(false); fetchData(); }} onCheckin={() => fetchData()} employees={employees} currentUser={actingUser} settings={settings} />}
     </div>
   );
 }

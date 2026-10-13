@@ -4532,11 +4532,72 @@ function SupervisionAdmin({ employees, currentUser }) {
 
 const ROLL_STATUSES = [
   { value: "present", label: "มา", color: "#166534", bg: "#dcfce7", border: "#86efac" },
-  { value: "absent", label: "ขาด", color: "#b91c1c", bg: "#fee2e2", border: "#fca5a5" },
   { value: "personal", label: "ลากิจ", color: "#b45309", bg: "#fef3c7", border: "#fcd34d" },
   { value: "sick", label: "ลาป่วย", color: "#1d4ed8", bg: "#dbeafe", border: "#93c5fd" },
 ];
-const ROLL_STATUS_VALUES = new Set(ROLL_STATUSES.map(item => item.value));
+// "absent" เก็บไว้อ่านข้อมูลเก่าเท่านั้น หน้าเช็คชื่อใช้แค่ มา / ลา (ลากิจ หรือ ป่วย)
+const ROLL_STATUS_VALUES = new Set([...ROLL_STATUSES.map(item => item.value), "absent"]);
+// อาการคัดกรองนักเรียนป่วย อ้างอิง: กรมอนามัย "แนวทางปฏิบัติคัดกรองสุขภาพนักเรียนในสถานศึกษา" และ
+// กรมควบคุมโรค นิยามผู้มีอาการ (15 เม.ย. 2564): ไข้ ≥37.5°C ไอ น้ำมูก เจ็บคอ ไม่ได้กลิ่น/ไม่รับรส ถ่ายเหลว ตาแดง ผื่น หายใจเร็ว/เหนื่อย/ลำบาก
+const SICK_SYMPTOMS = [
+  { key: "fever", label: "ไข้ ≥37.5°C" },
+  { key: "cough", label: "ไอ" },
+  { key: "runny", label: "น้ำมูก" },
+  { key: "throat", label: "เจ็บคอ" },
+  { key: "smell", label: "ไม่ได้กลิ่น/ไม่รับรส" },
+  { key: "diarrhea", label: "ถ่ายเหลว" },
+  { key: "redeye", label: "ตาแดง" },
+  { key: "rash", label: "ผื่นขึ้น" },
+  { key: "breath", label: "หายใจเร็ว/เหนื่อย/ลำบาก" },
+];
+const SICK_ACTIONS = [
+  { value: "", label: "การดูแล..." },
+  { value: "rest", label: "แยกพักห้องพยาบาล" },
+  { value: "home", label: "ผู้ปกครองรับกลับบ้าน" },
+  { value: "doctor", label: "ส่งพบแพทย์" },
+  { value: "stayhome", label: "หยุดเรียนอยู่บ้าน" },
+];
+
+function cleanSickHealth(raw) {
+  const symptoms = Array.isArray(raw?.symptoms) ? raw.symptoms.filter(key => SICK_SYMPTOMS.some(item => item.key === key)) : [];
+  const temp = String(raw?.temp ?? "").replace(/[^\d.]/g, "").slice(0, 5);
+  return {
+    symptoms,
+    temp,
+    other: String(raw?.other || "").slice(0, 200),
+    parent: !!raw?.parent,
+    action: SICK_ACTIONS.some(item => item.value === raw?.action) ? raw.action : "",
+  };
+}
+
+function SickScreening({ value, disabled, onChange }) {
+  const health = cleanSickHealth(value);
+  const set = patch => onChange(cleanSickHealth({ ...health, ...patch }));
+  const toggle = key => set({ symptoms: health.symptoms.includes(key) ? health.symptoms.filter(item => item !== key) : [...health.symptoms, key] });
+  const tiny = { ...periodInput, minHeight: 30, padding: "0.2rem 0.4rem", fontSize: "0.8rem" };
+  const highTemp = Number(health.temp) >= 37.5;
+  return (
+    <div style={{ gridColumn: "1 / -1", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, padding: "0.4rem", display: "grid", gap: "0.35rem", fontSize: "0.78rem" }}>
+      <div style={{ fontWeight: 800, color: "#1d4ed8" }}>คัดกรองอาการป่วย</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem" }}>
+        {SICK_SYMPTOMS.map(item => {
+          const on = health.symptoms.includes(item.key) || (item.key === "fever" && highTemp);
+          return <button key={item.key} type="button" disabled={disabled} aria-pressed={on} onClick={() => toggle(item.key)} style={{ border: `1px solid ${on ? "#1d4ed8" : "#cbd5e1"}`, background: on ? "#1d4ed8" : "#fff", color: on ? "#fff" : "#475569", borderRadius: 14, padding: "0.12rem 0.5rem", fontSize: "0.74rem", fontFamily: "inherit", cursor: "pointer" }}>{item.label}</button>;
+        })}
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", alignItems: "center" }}>
+        <input inputMode="decimal" value={health.temp} disabled={disabled} placeholder="อุณหภูมิ °C" onChange={event => set({ temp: event.target.value })} style={{ ...tiny, width: 84, flex: "none", borderColor: highTemp ? "#dc2626" : undefined }} />
+        <input value={health.other} disabled={disabled} placeholder="อาการอื่น" onChange={event => set({ other: event.target.value })} style={{ ...tiny, flex: "1 1 110px", width: "auto" }} />
+        <select value={health.action} disabled={disabled} onChange={event => set({ action: event.target.value })} style={{ ...tiny, flex: "1 1 130px", width: "auto" }}>
+          {SICK_ACTIONS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
+        </select>
+        <label style={{ display: "flex", alignItems: "center", gap: "0.2rem", color: "#334155", whiteSpace: "nowrap" }}>
+          <input type="checkbox" checked={health.parent} disabled={disabled} onChange={event => set({ parent: event.target.checked })} /> แจ้งผู้ปกครองแล้ว
+        </label>
+      </div>
+    </div>
+  );
+}
 const STUDENT_ROLL_MAX = 80;
 const ROSTER_HEADER_CELLS = new Set(["เลขที่", "ชื่อ", "นามสกุล", "ชื่อ-สกุล", "ชื่อสกุล", "ชื่อนักเรียน", "name", "student", "no", "no.", "ลำดับ", "ชั้น", "ห้อง"]);
 
@@ -4545,7 +4606,7 @@ function emptyRollBook() {
 }
 
 function rollCounts(students, marks) {
-  const counts = { present: 0, absent: 0, personal: 0, sick: 0, unset: 0, total: students.length };
+  const counts = { present: 0, absent: 0, late: 0, personal: 0, sick: 0, unset: 0, total: students.length };
   students.forEach(student => {
     const status = marks?.[student.id];
     if (ROLL_STATUS_VALUES.has(status)) counts[status] += 1;
@@ -4587,7 +4648,11 @@ function parseRollBook(subject) {
         Object.entries(source).forEach(([id, status]) => {
           if (ROLL_STATUS_VALUES.has(status)) marks[id] = status;
         });
-        days[date] = { saved_at: day?.saved_at || null, marks };
+        const health = {};
+        Object.entries(day?.health && typeof day.health === "object" ? day.health : {}).forEach(([id, item]) => {
+          if (marks[id] === "sick") health[id] = cleanSickHealth(item);
+        });
+        days[date] = { saved_at: day?.saved_at || null, marks, health };
       });
     }
     return {
@@ -4841,7 +4906,7 @@ function RollCountChips({ counts }) {
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
       {ROLL_STATUSES.map(status => (
-        <span key={status.value} style={{ background: status.bg, color: status.color, border: `1px solid ${status.border}`, fontWeight: 800, fontSize: "0.78rem", borderRadius: 20, padding: "0.28rem 0.65rem" }}>{status.label} {counts[status.value]}</span>
+        <span key={status.value} style={{ background: status.bg, color: status.color, border: `1px solid ${status.border}`, fontWeight: 800, fontSize: "0.72rem", borderRadius: 20, padding: "0.15rem 0.5rem" }}>{status.label} {counts[status.value]}</span>
       ))}
       {counts.unset > 0 && <span style={{ background: "#f1f5f9", color: "#64748b", fontWeight: 800, fontSize: "0.78rem", borderRadius: 20, padding: "0.28rem 0.65rem" }}>ยังไม่ติ๊ก {counts.unset}</span>}
     </div>
@@ -4869,9 +4934,9 @@ function rollMonthSummary(book, month) {
   const days = Object.entries(book?.days || {})
     .filter(([date, day]) => month && date.startsWith(month) && day?.saved_at)
     .sort((left, right) => left[0].localeCompare(right[0]));
-  const totals = { present: 0, absent: 0, personal: 0, sick: 0, unset: 0, days: days.length };
+  const totals = { present: 0, absent: 0, late: 0, personal: 0, sick: 0, unset: 0, days: days.length };
   const perStudent = students.map(student => {
-    const counts = { present: 0, absent: 0, personal: 0, sick: 0, unset: 0 };
+    const counts = { present: 0, absent: 0, late: 0, personal: 0, sick: 0, unset: 0 };
     days.forEach(([, day]) => {
       const status = day.marks?.[student.id];
       if (ROLL_STATUS_VALUES.has(status)) {
@@ -4906,30 +4971,27 @@ function RollModeSwitch({ mode, onChange }) {
   );
 }
 
-function RollMarkRow({ student, value, disabled, onChange }) {
+function RollMarkRow({ student, value, disabled, onChange, health, onHealth }) {
   const label = studentLabel(student);
+  const onLeave = value === "personal" || value === "sick" || value === "absent";
+  const btn = (active, color, bg) => ({ boxSizing: "border-box", minHeight: 30, minWidth: 0, borderRadius: 8, border: `1px solid ${active ? color : "#e2e8f0"}`, background: active ? bg : "#fff", color: active ? color : "#64748b", fontWeight: 800, fontFamily: "inherit", fontSize: "0.74rem", cursor: disabled ? "default" : "pointer", padding: "0 0.45rem", whiteSpace: "nowrap" });
   return (
-    <div style={{ display: "grid", width: "100%", boxSizing: "border-box", gridTemplateColumns: "minmax(0, 1fr) repeat(4, 3.15rem)", gap: "0.15rem", alignItems: "center", minHeight: 48, padding: "0.3rem 0", borderTop: "1px solid #f1f5f9", minWidth: 0 }}>
-      <div style={{ minWidth: 0, display: "flex", gap: "0.3rem", alignItems: "center" }}>
-        <span style={{ fontWeight: 800, color: "#64748b", flex: "0 0 auto" }}>{student.number}</span>
-        <span title={label} style={{ minWidth: 0, fontWeight: 800, fontSize: "0.86rem", lineHeight: 1.25, color: "#0f172a", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", wordBreak: "break-word" }}>{label}</span>
+    <div style={{ display: "grid", width: "100%", boxSizing: "border-box", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "0.25rem 0.4rem", alignItems: "center", padding: "0.2rem 0", borderTop: "1px solid #f1f5f9", minWidth: 0 }}>
+      <div style={{ minWidth: 0, display: "flex", gap: "0.3rem", alignItems: "center", fontSize: "0.82rem" }}>
+        <span style={{ fontWeight: 700, color: "#94a3b8", flex: "0 0 auto" }}>{student.number}</span>
+        <span title={label} style={{ minWidth: 0, fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
       </div>
-      {ROLL_STATUSES.map(status => {
-        const active = value === status.value;
-        return (
-          <button
-            key={status.value}
-            type="button"
-            aria-pressed={active}
-            aria-label={`${label} ${status.label}`}
-            disabled={disabled}
-            onClick={() => onChange?.(status.value)}
-            style={{ boxSizing: "border-box", width: "100%", minHeight: 44, minWidth: 0, borderRadius: 10, border: `2px solid ${active ? status.color : "#e2e8f0"}`, background: active ? status.bg : "#fff", color: active ? status.color : "#64748b", fontWeight: 800, fontFamily: "inherit", fontSize: "0.68rem", cursor: disabled ? "default" : "pointer", padding: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", opacity: 1 }}
-          >
-            {status.label}
-          </button>
-        );
-      })}
+      <div style={{ display: "flex", gap: "0.2rem", alignItems: "center" }}>
+        <button type="button" aria-pressed={value === "present"} aria-label={`${label} มา`} disabled={disabled} onClick={() => onChange?.("present")} style={btn(value === "present", "#166534", "#dcfce7")}>มา</button>
+        <button type="button" aria-pressed={onLeave} aria-label={`${label} ลา`} disabled={disabled} onClick={() => onChange?.(onLeave ? value : "personal")} style={btn(onLeave, "#b45309", "#fef3c7")}>ลา</button>
+        {onLeave && (
+          <select aria-label={`${label} ประเภทการลา`} value={value === "sick" ? "sick" : "personal"} disabled={disabled} onChange={event => onChange?.(event.target.value)} style={{ minHeight: 30, borderRadius: 8, border: "1px solid #e2e8f0", fontSize: "0.74rem", fontFamily: "inherit", padding: "0 0.2rem", background: "#fff" }}>
+            <option value="personal">ลากิจ</option>
+            <option value="sick">ป่วย</option>
+          </select>
+        )}
+      </div>
+      {value === "sick" && onHealth && <SickScreening value={health} disabled={disabled} onChange={onHealth} />}
     </div>
   );
 }
@@ -5146,6 +5208,9 @@ function StudentRollTeacher({ currentUser }) {
   const [marks, setMarks] = useState({});
   const [mode, setMode] = useState("check");
   const [month, setMonth] = useState(() => todayISO().slice(0, 7));
+  const [newName, setNewName] = useState("");
+  const [health, setHealth] = useState({});
+  const rollLocalKey = `hr_student_roll_${currentUser.id}`;
 
   useEffect(() => {
     let active = true;
@@ -5153,7 +5218,20 @@ function StudentRollTeacher({ currentUser }) {
       try {
         setLoading(true);
         setError("");
-        const rows = await fetchRollRows(currentUser.id);
+        let rows;
+        try {
+          rows = await fetchRollRows(currentUser.id);
+        } catch (loadErr) {
+          const raw = localStorage.getItem(`hr_student_roll_${currentUser.id}`);
+          if (!raw) throw loadErr;
+          const local = parseRollBook(raw);
+          if (!active) return;
+          setBook(local);
+          setBaseline(local);
+          setMarks({ ...(local.days[todayISO()]?.marks || {}) });
+          setError(`โหลดจากฐานข้อมูลไม่ได้ (${loadErr.message || "เชื่อมต่อไม่สำเร็จ"}) แสดงรายชื่อที่เก็บไว้ในเครื่องนี้แทน`);
+          return;
+        }
         if (!active) return;
         const row = rows[0];
         const loaded = row ? parseRollBook(row.subject) : emptyRollBook();
@@ -5163,6 +5241,7 @@ function StudentRollTeacher({ currentUser }) {
         setRowId(row?.id || null);
         setDate(today);
         setMarks({ ...(loaded.days[today]?.marks || {}) });
+        setHealth({ ...(loaded.days[today]?.health || {}) });
         const extras = rows.slice(1).map(item => item.id);
         if (extras.length) await supabase.from("teaching_schedule").delete().in("id", extras);
       } catch (err) {
@@ -5179,7 +5258,7 @@ function StudentRollTeacher({ currentUser }) {
   const savedMarks = baseline.days[date]?.marks || {};
   const className = book.class_name.trim();
 
-  const persist = async (nextBook, success) => {
+  const persist = async (nextBook, success, keepMarks = false) => {
     setSaving(true);
     setError("");
     setMessage("");
@@ -5188,18 +5267,64 @@ function StudentRollTeacher({ currentUser }) {
       setRowId(id);
       setBook(nextBook);
       setBaseline(nextBook);
-      setMarks({ ...(nextBook.days[date]?.marks || {}) });
+      setMarks(current => ({ ...(nextBook.days[date]?.marks || {}), ...(keepMarks ? current : {}) }));
       setMessage(success);
+      try { localStorage.setItem(rollLocalKey, JSON.stringify(nextBook)); } catch { /* ignore */ }
     } catch (err) {
-      setError(err.message || "บันทึกไม่สำเร็จ");
+      let kept = false;
+      try { localStorage.setItem(rollLocalKey, JSON.stringify(nextBook)); kept = true; } catch { /* ignore */ }
+      if (kept) { setBook(nextBook); setBaseline(nextBook); }
+      setError(`${err.message || "บันทึกไม่สำเร็จ"}${kept ? " · เก็บสำรองไว้ในเครื่องนี้แล้ว (localStorage)" : ""}`);
     } finally {
       setSaving(false);
     }
   };
 
+  const addStudent = () => {
+    const name = newName.replace(/\s+/g, " ").trim().slice(0, 80);
+    if (!name || saving) return;
+    const current = cleanRollStudents(book.students);
+    if (current.length >= STUDENT_ROLL_MAX) { setError(`เพิ่มได้ไม่เกิน ${STUDENT_ROLL_MAX} คน`); return; }
+    if (current.some(student => `${student.name} ${student.surname}`.trim() === name)) { setError(`มี "${name}" ในรายชื่อแล้ว`); return; }
+    const [first, ...rest] = name.split(" ");
+    const maxNo = current.reduce((max, student) => Math.max(max, Number(student.number) || 0), 0);
+    const student = { id: newSupervisionId(), number: String(maxNo + 1), name: first, surname: rest.join(" ") };
+    setNewName("");
+    persist({ ...book, students: [...current, student] }, `เพิ่ม ${name} แล้ว`, true);
+  };
+
+  const removeStudent = (student) => {
+    if (saving) return;
+    const label = `${student.name} ${student.surname}`.trim();
+    if (!window.confirm(`ลบ ${label} ออกจากรายชื่อ? (ประวัติเช็คชื่อเดิมของคนนี้จะไม่แสดงในสถิติ)`)) return;
+    setMarks(current => { const next = { ...current }; delete next[student.id]; return next; });
+    persist({ ...book, students: cleanRollStudents(book.students).filter(item => item.id !== student.id) }, `ลบ ${label} แล้ว`, true);
+  };
+
+  const rosterEditor = (
+    <Card padding="0.85rem">
+      <div style={{ fontWeight: 800, color: "#0f172a", fontSize: "1.05rem" }}>รายชื่อนักเรียน{className ? ` ${className}` : ""} ({namedStudents.length} คน)</div>
+      <div style={{ color: "#64748b", fontSize: "0.8rem", marginTop: "0.25rem" }}>พิมพ์ชื่อ-นามสกุล แล้วกด + หรือ Enter เพื่อเพิ่มทีละคน</div>
+      <form onSubmit={event => { event.preventDefault(); addStudent(); }} style={{ display: "flex", gap: "0.4rem", marginTop: "0.6rem" }}>
+        <input value={newName} onChange={event => setNewName(event.target.value)} placeholder="ชื่อ นามสกุล" disabled={saving} style={{ ...inputStyle, flex: 1, minWidth: 0, fontSize: "16px" }} />
+        <button type="submit" aria-label="เพิ่มนักเรียน" disabled={saving || !newName.trim()} style={{ ...btnPrimary, flex: "none", minWidth: 48, minHeight: 44, justifyContent: "center", background: "linear-gradient(135deg, #2563eb, #1d4ed8)", color: "#fff", cursor: saving || !newName.trim() ? "not-allowed" : "pointer" }}><Plus size={18} /></button>
+      </form>
+      {namedStudents.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", marginTop: "0.7rem" }}>
+          {namedStudents.map(student => (
+            <span key={student.id} style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", background: "#f1f5f9", border: "1px solid #e2e8f0", borderRadius: 20, padding: "0.2rem 0.3rem 0.2rem 0.7rem", fontSize: "0.85rem", color: "#0f172a" }}>
+              {student.number}. {student.name} {student.surname}
+              <button type="button" aria-label={`ลบ ${student.name}`} onClick={() => removeStudent(student)} disabled={saving} style={{ width: 26, height: 26, border: "none", borderRadius: "50%", background: "#fee2e2", color: "#b91c1c", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}><X size={14} /></button>
+            </span>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+
   const saveMarks = () => {
     const students = cleanRollStudents(book.students);
-    if (students.length === 0) { setError("ฝ่ายวิชาการยังไม่ได้อัปรายชื่อห้องนี้"); return; }
+    if (students.length === 0) { setError("ยังไม่มีรายชื่อ เพิ่มชื่อนักเรียนด้านบนก่อน"); return; }
     const clean = {};
     students.forEach(student => {
       if (ROLL_STATUS_VALUES.has(marks[student.id])) clean[student.id] = marks[student.id];
@@ -5210,6 +5335,9 @@ function StudentRollTeacher({ currentUser }) {
       students,
       days: { ...book.days, [date]: { saved_at: new Date().toISOString(), marks: clean } },
     };
+    const cleanHealth = {};
+    Object.keys(clean).forEach(id => { if (clean[id] === "sick") cleanHealth[id] = cleanSickHealth(health[id]); });
+    nextBook.days[date].health = cleanHealth;
     const unset = students.length - Object.keys(clean).length;
     persist(nextBook, unset > 0 ? `บันทึกการเช็คชื่อแล้ว ยังไม่ติ๊ก ${unset} คน` : "บันทึกการเช็คชื่อวันนี้แล้ว");
   };
@@ -5219,6 +5347,7 @@ function StudentRollTeacher({ currentUser }) {
     if (!sameMarks(marks, savedMarks) && !window.confirm("การเช็คชื่อที่ยังไม่บันทึกจะไม่ถูกเก็บ เปลี่ยนวันเลยหรือไม่")) return;
     setDate(next);
     setMarks({ ...(baseline.days[next]?.marks || {}) });
+    setHealth({ ...(baseline.days[next]?.health || {}) });
     setMessage("");
     setError("");
   };
@@ -5242,11 +5371,10 @@ function StudentRollTeacher({ currentUser }) {
           {mode === "stats" ? (
             <RollStatsPanel book={book} month={month} onMonth={setMonth} title={className ? `สถิติห้อง ${className}` : "สถิติห้องของฉัน"} />
           ) : namedStudents.length === 0 ? (
-            <Card>
-              <div style={{ fontWeight: 800, color: "#0f172a", fontSize: "1.05rem" }}>เช็คชื่อนักเรียน</div>
-              <div style={{ color: "#64748b", fontSize: "0.84rem", lineHeight: 1.55, marginTop: "0.45rem" }}>ยังไม่มีรายชื่อห้องนี้ ฝ่ายวิชาการอัปไฟล์ Excel ให้ หน้านี้แยกจากลงเวลาเข้างานของครู</div>
-            </Card>
+            rosterEditor
           ) : (
+            <>
+            {rosterEditor}
             <Card padding="0.85rem">
               <div style={{ display: "grid", gap: "0.8rem", minWidth: 0 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
@@ -5256,10 +5384,10 @@ function StudentRollTeacher({ currentUser }) {
                   </div>
                   {baseline.days[date]?.saved_at && <span style={{ background: "#dcfce7", color: "#166534", fontWeight: 800, fontSize: "0.75rem", borderRadius: 20, padding: "0.25rem 0.6rem" }}>บันทึกแล้ว {fmtTime(baseline.days[date].saved_at)}</span>}
                 </div>
-                <div style={{ color: "#64748b", fontSize: "0.84rem", lineHeight: 1.55 }}>รายชื่ออัปโดยฝ่ายวิชาการ ติ๊กได้ว่าวันนี้ใครมา ขาด ลากิจ หรือลาป่วย</div>
+                <div style={{ color: "#64748b", fontSize: "0.84rem", lineHeight: 1.55 }}>กด มา หรือ ลา (เลือก ลากิจ/ป่วย) ถ้าป่วยกรอกคัดกรองอาการ</div>
                 <RollDateBar date={date} onChange={changeDate} />
                 <RollCountChips counts={counts} />
-                <button type="button" onClick={markAllPresent} disabled={saving} style={{ ...btnSecondary, flex: "none", minHeight: 44, width: "100%", maxWidth: 280 }}>ติ๊กมาทั้งหมด</button>
+                <button type="button" onClick={markAllPresent} disabled={saving} style={{ ...btnSecondary, flex: "none", minHeight: 32, padding: "0.25rem 0.7rem", fontSize: "0.8rem", width: "fit-content" }}>ติ๊กมาทั้งหมด</button>
                 <div style={{ minWidth: 0 }}>
                   {namedStudents.map(student => (
                     <RollMarkRow
@@ -5268,6 +5396,8 @@ function StudentRollTeacher({ currentUser }) {
                       value={marks[student.id] || ""}
                       disabled={saving}
                       onChange={status => setMarks(current => ({ ...current, [student.id]: status }))}
+                      health={health[student.id]}
+                      onHealth={item => setHealth(current => ({ ...current, [student.id]: item }))}
                     />
                   ))}
                 </div>
@@ -5277,6 +5407,7 @@ function StudentRollTeacher({ currentUser }) {
                 </button>
               </div>
             </Card>
+            </>
           )}
         </>
       )}

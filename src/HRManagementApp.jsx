@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import { THAI_P2_PLAN_PACK } from "./lessonPlanCatalog.js";
 import { AcademicExtra, ACADEMIC_EXTRA_TABS, ACADEMIC_RECORD_ROOM, TEACHING_GRADE_GROUPS, loadAssignedPlanLevels, loadTeachingGrades, saveTeachingGrade } from "./academicRecords.jsx";
-import { read as readWorkbook, utils as xlsxUtils } from "xlsx";
+import { read as readWorkbook, utils as xlsxUtils, writeFile as writeWorkbookFile } from "xlsx";
 import { supabase } from "./supabase.js";
 import {
   Users, Building2, Clock, CheckCircle, XCircle, MapPin,
@@ -650,6 +650,36 @@ const SUPERVISION_JSON_LIMIT = 3200000;
 const SUPERVISION_FILE_EXTENSIONS = [".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png", ".webp", ".gif"];
 const SUPERVISION_FILE_ACCEPT = ".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.gif,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*";
 
+// ผู้ดูหน้าประเมินครูได้: role admin หรือ ผู้บริหารตามตำแหน่ง (ผู้อำนวยการ/ผอ./รองผอ./ผู้บริหาร)
+const EXECUTIVE_POSITION_PATTERN = /(ผู้อำนวยการ|รองผู้อำนวยการ|ผอ\.?|รอง\s*ผอ|ผู้บริหาร|ผู้จัดการโรงเรียน|director|principal)/i;
+// รายชื่อผู้บริหารที่กำหนดเอง (ตรวจด้วย id และชื่อ-สกุลแบบตัดคำนำหน้า/ช่องว่าง)
+const EXECUTIVE_ALLOWLIST_IDS = new Set([
+  "b76e8f05-984c-4c2d-83d8-5ea886836824", // ศศิธร มีสมสืบ
+  "c5306809-307e-47ae-bce1-42c2a9b38f1d", // เรณู เล็กดี
+  "1c21605d-3404-4424-a640-d2eb25361c19", // ศักดิ์ศิริ มีสมสืบ
+]);
+function normalizePersonName(name) {
+  return String(name || "").normalize("NFC").trim().replace(/^(นางสาว|นาง|นาย|น\.ส\.|ครู|ดร\.)\s*/, "").replace(/\s+/g, "");
+}
+const EXECUTIVE_ALLOWLIST_NAMES = new Set(["ศศิธร มีสมสืบ", "เรณู เล็กดี", "ศักดิ์ศิริ มีสมสืบ"].map(normalizePersonName));
+function isExecutiveUser(user) {
+  if (!user) return false;
+  if (user.role === "admin") return true;
+  if (EXECUTIVE_ALLOWLIST_IDS.has(String(user.id || ""))) return true;
+  if (EXECUTIVE_ALLOWLIST_NAMES.has(normalizePersonName(user.name))) return true;
+  return EXECUTIVE_POSITION_PATTERN.test(String(user.position || ""));
+}
+
+function canAccessNavItem(item, user) {
+  if (!item || !user) return false;
+  if (item.key === "teacherEval") return isExecutiveUser(user);
+  return item.roles.includes(user.role === "admin" ? "admin" : "employee");
+}
+
+function NoAccessCard() {
+  return <Card><div style={{ textAlign: "center", color: "#b91c1c", fontWeight: 800, padding: "1.5rem" }}>ไม่มีสิทธิ์เข้าถึงหน้านี้ (เฉพาะผู้บริหาร/แอดมิน)</div></Card>;
+}
+
 const navItems = [
   { icon: Home, label: "หน้าหลัก", key: "dashboard", roles: ["admin", "employee"] },
   { icon: Users, label: "ข้อมูลพนักงาน", key: "employee", roles: ["admin"] },
@@ -657,6 +687,7 @@ const navItems = [
   { icon: Calendar, label: "ตารางสอน", key: "schedule", roles: ["admin", "employee"] },
   { icon: BookOpen, label: "งานวิชาการ", key: "academic", roles: ["admin", "employee"] },
   { icon: FileText, label: "แผนการจัดกิจกรรม", key: "activityPlan", roles: ["admin", "employee"] },
+  { icon: TrendingUp, label: "ประเมินครู", key: "teacherEval", roles: ["admin"], executiveOnly: true },
   { icon: Umbrella, label: "การลา", key: "leave", roles: ["admin", "employee"] },
   { icon: ArrowRightLeft, label: "ขอออกนอกสถานที่", key: "outing", roles: ["admin", "employee"] },
   { icon: DollarSign, label: "เงินเดือน", key: "finance", roles: ["admin"] },
@@ -2760,10 +2791,10 @@ function SchedulePage({ employees, currentUser, onRefresh }) {
     const { data } = await supabase
       .from("teaching_schedule")
       .select("*, employees(name, department)")
-      .or(`class_room.is.null,and(class_room.neq.${SUPERVISION_SCHEDULE_ROOM},class_room.neq.${STUDENT_ROLL_ROOM},class_room.neq.${ACADEMIC_RECORD_ROOM},class_room.neq.${ACTIVITY_PLAN_ROOM})`)
+      .or(`class_room.is.null,and(class_room.neq.${SUPERVISION_SCHEDULE_ROOM},class_room.neq.${STUDENT_ROLL_ROOM},class_room.neq.${ACADEMIC_RECORD_ROOM},class_room.neq.${ACTIVITY_PLAN_ROOM},class_room.neq.__TEACHER_EVAL__)`)
       .order("day_of_week")
       .order("period");
-    setSchedules((data || []).filter(row => row.class_room !== SUPERVISION_SCHEDULE_ROOM && row.class_room !== STUDENT_ROLL_ROOM && row.class_room !== ACADEMIC_RECORD_ROOM && row.class_room !== ACTIVITY_PLAN_ROOM));
+    setSchedules((data || []).filter(row => row.class_room !== SUPERVISION_SCHEDULE_ROOM && row.class_room !== STUDENT_ROLL_ROOM && row.class_room !== ACADEMIC_RECORD_ROOM && row.class_room !== ACTIVITY_PLAN_ROOM && row.class_room !== "__TEACHER_EVAL__"));
   };
 
   useEffect(() => {
@@ -5027,6 +5058,92 @@ function RollMarkRow({ student, value, disabled, onChange, health, onHealth }) {
   );
 }
 
+function rollSickCases(book, month) {
+  const students = book?.students || [];
+  const cases = [];
+  Object.entries(book?.days || {})
+    .filter(([date, day]) => month && date.startsWith(month) && day?.saved_at)
+    .sort((left, right) => left[0].localeCompare(right[0]))
+    .forEach(([date, day]) => {
+      Object.entries(day.marks || {}).forEach(([id, status]) => {
+        if (status !== "sick") return;
+        const student = students.find(item => item.id === id);
+        const health = cleanSickHealth(day.health?.[id]);
+        const symptoms = SICK_SYMPTOMS.filter(item => health.symptoms.includes(item.key) || (item.key === "fever" && Number(health.temp) >= 37.5)).map(item => item.label);
+        cases.push({
+          date,
+          number: student?.number || "",
+          name: student ? studentLabel(student) : "(นักเรียนที่ถูกลบ)",
+          symptoms,
+          other: health.other,
+          temp: health.temp,
+          action: SICK_ACTIONS.find(item => item.value === health.action && item.value)?.label || "",
+          parent: health.parent,
+        });
+      });
+    });
+  const symptomCounts = SICK_SYMPTOMS.map(item => ({ label: item.label, count: cases.filter(row => row.symptoms.includes(item.label)).length })).filter(item => item.count > 0);
+  const otherCount = cases.filter(row => row.other.trim()).length;
+  if (otherCount) symptomCounts.push({ label: "อาการอื่น", count: otherCount });
+  return { cases, symptomCounts };
+}
+
+function exportSickCases(cases, month, title) {
+  const rows = cases.map(row => ({
+    "วันที่": formatThaiDateKey(row.date),
+    "เลขที่": row.number,
+    "ชื่อ": row.name,
+    "อาการ": row.symptoms.join(", "),
+    "อาการอื่น": row.other,
+    "อุณหภูมิ (°C)": row.temp,
+    "การดูแล": row.action,
+    "แจ้งผู้ปกครอง": row.parent ? "แจ้งแล้ว" : "ยังไม่แจ้ง",
+  }));
+  const sheet = xlsxUtils.json_to_sheet(rows.length ? rows : [{ "วันที่": "ไม่มีนักเรียนลาป่วย" }]);
+  const workbook = xlsxUtils.book_new();
+  xlsxUtils.book_append_sheet(workbook, sheet, "ลาป่วย");
+  const safe = String(title || "ห้อง").replace(/[\\/:*?"<>|]+/g, "_").slice(0, 40);
+  writeWorkbookFile(workbook, `ลาป่วย_${safe}_${month}.xlsx`);
+}
+
+function SickCasesPanel({ book, month, title }) {
+  const { cases, symptomCounts } = rollSickCases(book, month);
+  const th = { padding: "0.25rem 0.4rem", fontWeight: 800, fontSize: "0.74rem", textAlign: "left", whiteSpace: "nowrap", borderBottom: "1px solid #e2e8f0", color: "#475569" };
+  const td = { padding: "0.2rem 0.4rem", fontSize: "0.78rem", verticalAlign: "top", borderTop: "1px solid #f1f5f9" };
+  return (
+    <div style={{ display: "grid", gap: "0.45rem", minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+        <span style={{ fontWeight: 800, color: "#1d4ed8", flex: 1 }}>นักเรียนลาป่วย {cases.length} ครั้ง</span>
+        {cases.length > 0 && <button type="button" onClick={() => exportSickCases(cases, month, title)} style={{ ...btnSecondary, flex: "none", padding: "0.25rem 0.6rem", fontSize: "0.78rem" }}><FileText size={14} /> Excel</button>}
+      </div>
+      {symptomCounts.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem" }}>
+          {symptomCounts.map(item => <span key={item.label} style={{ background: "#dbeafe", color: "#1d4ed8", borderRadius: 14, padding: "0.1rem 0.5rem", fontSize: "0.74rem", fontWeight: 700 }}>{item.label} {item.count}</span>)}
+        </div>
+      )}
+      {cases.length > 0 && (
+        <div style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 8 }}>
+          <table style={{ width: "100%", minWidth: 520, borderCollapse: "collapse" }}>
+            <thead><tr style={{ background: "#f8fafc" }}>{["วันที่", "ชื่อ", "อาการ", "อุณหภูมิ", "การดูแล", "แจ้งผู้ปกครอง"].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
+            <tbody>
+              {cases.map((row, index) => (
+                <tr key={`${row.date}-${index}`}>
+                  <td style={{ ...td, whiteSpace: "nowrap" }}>{formatThaiDateKey(row.date)}</td>
+                  <td style={{ ...td, whiteSpace: "nowrap" }}>{row.number ? `${row.number}. ` : ""}{row.name}</td>
+                  <td style={td}>{[...row.symptoms, row.other].filter(Boolean).join(", ") || <span style={{ color: "#94a3b8" }}>ไม่ได้กรอก</span>}</td>
+                  <td style={{ ...td, whiteSpace: "nowrap", color: Number(row.temp) >= 37.5 ? "#dc2626" : undefined, fontWeight: Number(row.temp) >= 37.5 ? 800 : 400 }}>{row.temp ? `${row.temp}°C` : "-"}</td>
+                  <td style={{ ...td, whiteSpace: "nowrap" }}>{row.action || "-"}</td>
+                  <td style={{ ...td, whiteSpace: "nowrap", color: row.parent ? "#166534" : "#b45309" }}>{row.parent ? "✓ แจ้งแล้ว" : "ยังไม่แจ้ง"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RollStatsPanel({ book, month, onMonth, title }) {
   const summary = rollMonthSummary(book, month);
   return (
@@ -5041,6 +5158,7 @@ function RollStatsPanel({ book, month, onMonth, title }) {
         </Field>
         <div style={{ fontWeight: 800, color: "#0f172a" }}>เช็คชื่อแล้ว {summary.totals.days} วัน</div>
         <RollCountChips counts={summary.totals} />
+        {summary.totals.sick > 0 && <SickCasesPanel book={book} month={month} title={title} />}
         {book.students.length === 0 ? (
           <div style={{ color: "#94a3b8" }}>ฝ่ายวิชาการยังไม่ได้อัปรายชื่อ สถิติจะขึ้นที่นี่</div>
         ) : summary.totals.days === 0 ? (
@@ -5360,6 +5478,608 @@ function ActivityPlanPage({ employees, currentUser }) {
           </Card>
         );
       })}
+    </div>
+  );
+}
+
+// ─── ประเมินครู ───────────────────────────────────────────────────────────────
+// คะแนนผู้บริหารเก็บใน teaching_schedule (class_room = TEACHER_EVAL_ROOM, period = ปีการศึกษา*10+ภาค)
+// สำรองใน localStorage "hr_teacher_eval" และรวมด้วย updated_at แบบเดียวกับรายชื่อนักเรียน
+const TEACHER_EVAL_ROOM = "__TEACHER_EVAL__";
+const EVAL_LOCAL_KEY = "hr_teacher_eval";
+const EVAL_SETTINGS_PERIOD = 1;
+const EVAL_AUTO_ITEMS = [
+  { key: "plan", label: "ส่งแผนตรงเวลา", max: 15 },
+  { key: "post", label: "บันทึกหลังสอนครบ", max: 10 },
+  { key: "roll", label: "เช็คชื่อนักเรียนครบ", max: 10 },
+  { key: "kpa", label: "ผล K/P/A ผ่าน", max: 10 },
+  { key: "training", label: "อบรม/พัฒนาตนเอง", max: 10 },
+  { key: "activity", label: "จัด/ร่วมกิจกรรม", max: 5 },
+];
+const EVAL_ADMIN_ITEMS = [
+  { key: "supervision", label: "ผลนิเทศ", max: 15 },
+  { key: "media", label: "คุณภาพสื่อ/ใบงาน", max: 5 },
+  { key: "discipline", label: "วินัย/ตรงเวลา", max: 5 },
+  { key: "teamwork", label: "ทำงานร่วมกัน/งานที่ได้รับมอบหมาย", max: 10 },
+  { key: "ethics", label: "จรรยาบรรณ", max: 5 },
+];
+const EVAL_LEVELS = [
+  { min: 90, label: "ดีเยี่ยม", color: "#166534", bg: "#dcfce7" },
+  { min: 80, label: "ดีมาก", color: "#1d4ed8", bg: "#dbeafe" },
+  { min: 70, label: "ดี", color: "#0f766e", bg: "#ccfbf1" },
+  { min: 60, label: "พอใช้", color: "#b45309", bg: "#fef3c7" },
+  { min: -1, label: "ต้องปรับปรุง", color: "#b91c1c", bg: "#fee2e2" },
+];
+const EVAL_DEFAULT_SETTINGS = { training_target_days: 5, activity_target: 2, ranges: {} };
+
+function evalLevel(score) {
+  return EVAL_LEVELS.find(level => score >= level.min) || EVAL_LEVELS[EVAL_LEVELS.length - 1];
+}
+
+function EvalLevelBadge({ score }) {
+  const level = evalLevel(score);
+  return <span style={{ background: level.bg, color: level.color, fontWeight: 800, fontSize: "0.72rem", borderRadius: 20, padding: "0.12rem 0.5rem", whiteSpace: "nowrap" }}>{level.label}</span>;
+}
+
+function currentSemester() {
+  const today = todayISO();
+  const year = Number(today.slice(0, 4));
+  const month = Number(today.slice(5, 7));
+  if (month >= 5 && month <= 10) return { term: 1, year: year + 543 };
+  if (month >= 11) return { term: 2, year: year + 543 };
+  return { term: 2, year: year + 542 };
+}
+
+function semesterKey(sem) {
+  return sem.year * 10 + sem.term;
+}
+
+function defaultSemesterRange(sem) {
+  const ce = sem.year - 543;
+  return sem.term === 1 ? { start: `${ce}-05-16`, end: `${ce}-10-10` } : { start: `${ce}-11-01`, end: `${ce + 1}-03-31` };
+}
+
+function semesterRange(sem, settings) {
+  const saved = settings?.ranges?.[semesterKey(sem)];
+  const base = defaultSemesterRange(sem);
+  return {
+    start: /^\d{4}-\d{2}-\d{2}$/.test(saved?.start || "") ? saved.start : base.start,
+    end: /^\d{4}-\d{2}-\d{2}$/.test(saved?.end || "") ? saved.end : base.end,
+  };
+}
+
+function schoolDaysBetween(start, end) {
+  const days = [];
+  let cursor = start;
+  let guard = 0;
+  while (cursor <= end && guard < 400) {
+    const dow = new Date(`${cursor}T00:00:00`).getDay();
+    if (dow >= 1 && dow <= 5) days.push(cursor);
+    cursor = shiftDateKey(cursor, 1);
+    guard += 1;
+  }
+  return days;
+}
+
+function cleanEvalRecord(raw) {
+  const ratings = {};
+  EVAL_ADMIN_ITEMS.forEach(item => {
+    const value = Number(raw?.ratings?.[item.key]);
+    if (value >= 1 && value <= 5) ratings[item.key] = Math.round(value);
+  });
+  return {
+    kind: "eval",
+    teacher_id: String(raw?.teacher_id || ""),
+    sem: Number(raw?.sem) || 0,
+    ratings,
+    comment: String(raw?.comment || "").slice(0, 3000),
+    published: !!raw?.published,
+    rated_by: String(raw?.rated_by || "").slice(0, 120),
+    updated_at: String(raw?.updated_at || ""),
+    row_id: raw?.row_id ?? null,
+    pending: !!raw?.pending,
+  };
+}
+
+function cleanEvalSettings(raw) {
+  return {
+    kind: "settings",
+    training_target_days: Math.max(1, Number(raw?.training_target_days) || EVAL_DEFAULT_SETTINGS.training_target_days),
+    activity_target: Math.max(1, Number(raw?.activity_target) || EVAL_DEFAULT_SETTINGS.activity_target),
+    ranges: raw?.ranges && typeof raw.ranges === "object" ? raw.ranges : {},
+    updated_at: String(raw?.updated_at || ""),
+    row_id: raw?.row_id ?? null,
+    pending: !!raw?.pending,
+  };
+}
+
+function readEvalLocal() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(EVAL_LOCAL_KEY) || "{}");
+    const records = {};
+    Object.entries(parsed.records || {}).forEach(([key, value]) => { records[key] = cleanEvalRecord(value); });
+    return { records, settings: parsed.settings ? cleanEvalSettings(parsed.settings) : null };
+  } catch { return { records: {}, settings: null }; }
+}
+
+function writeEvalLocal(records, settings) {
+  try { localStorage.setItem(EVAL_LOCAL_KEY, JSON.stringify({ records, settings, saved_local_at: new Date().toISOString() })); } catch { /* ignore */ }
+}
+
+async function writeEvalRow(employeeId, period, body, rowId) {
+  const clean = { ...body };
+  delete clean.row_id;
+  delete clean.pending;
+  const payload = { employee_id: employeeId, day_of_week: 0, period, class_room: TEACHER_EVAL_ROOM, start_time: "00:00:00", end_time: null, subject: JSON.stringify(clean) };
+  const result = rowId
+    ? await supabase.from("teaching_schedule").update(payload).eq("id", rowId).select("id").single()
+    : await supabase.from("teaching_schedule").insert(payload).select("id").single();
+  if (result.error) throw new Error(result.error.message);
+  return result.data.id;
+}
+
+async function loadEvalStore(currentUser) {
+  const local = readEvalLocal();
+  let remoteRecords = {};
+  let remoteSettings = null;
+  let loadError = "";
+  try {
+    const { data, error } = await supabase.from("teaching_schedule").select("id, employee_id, period, subject").eq("class_room", TEACHER_EVAL_ROOM);
+    if (error) throw new Error(error.message);
+    (data || []).forEach(row => {
+      let parsed = {};
+      try { parsed = JSON.parse(row.subject || "{}"); } catch { return; }
+      if (parsed.kind === "settings") {
+        const settings = cleanEvalSettings({ ...parsed, row_id: row.id });
+        if (!remoteSettings || settings.updated_at > remoteSettings.updated_at) remoteSettings = settings;
+      } else {
+        const record = cleanEvalRecord({ ...parsed, teacher_id: parsed.teacher_id || row.employee_id, sem: parsed.sem || row.period, row_id: row.id });
+        const key = `${record.sem}:${record.teacher_id}`;
+        if (!remoteRecords[key] || record.updated_at > remoteRecords[key].updated_at) remoteRecords[key] = record;
+      }
+    });
+  } catch (err) {
+    loadError = err.message || "เชื่อมต่อไม่สำเร็จ";
+  }
+  const records = { ...remoteRecords };
+  const isAdmin = isExecutiveUser(currentUser);
+  for (const [key, record] of Object.entries(local.records)) {
+    const remote = remoteRecords[key];
+    if (!remote || record.updated_at > remote.updated_at) {
+      records[key] = { ...record, row_id: remote?.row_id || record.row_id };
+      if (record.pending && isAdmin && !loadError) {
+        try {
+          records[key].row_id = await writeEvalRow(record.teacher_id, record.sem, record, records[key].row_id);
+          records[key].pending = false;
+        } catch { /* ยังเก็บในเครื่อง */ }
+      }
+    }
+  }
+  let settings = remoteSettings || cleanEvalSettings(EVAL_DEFAULT_SETTINGS);
+  if (local.settings && (!remoteSettings || local.settings.updated_at > remoteSettings.updated_at)) {
+    settings = { ...local.settings, row_id: remoteSettings?.row_id || local.settings.row_id };
+    if (local.settings.pending && isAdmin && !loadError) {
+      try { settings.row_id = await writeEvalRow(currentUser.id, EVAL_SETTINGS_PERIOD, settings, settings.row_id); settings.pending = false; } catch { /* ignore */ }
+    }
+  }
+  writeEvalLocal(records, settings);
+  return { records, settings, loadError };
+}
+
+async function loadEvalSources(range, teacherId) {
+  const errors = [];
+  const safe = async (label, fn) => { try { return await fn(); } catch (err) { errors.push(`${label}: ${err.message || "โหลดไม่สำเร็จ"}`); return []; } };
+  const firstWeek = weekPeriodKey(mondayOf(range.start));
+  const lastWeek = weekPeriodKey(mondayOf(range.end));
+  const [plans, rolls, training, activities] = await Promise.all([
+    safe("แผนรายสัปดาห์", async () => {
+      let query = supabase.from("teaching_schedule").select("id, employee_id, period, start_time, subject, created_at").eq("class_room", SUPERVISION_SCHEDULE_ROOM).eq("day_of_week", 0).gte("period", firstWeek).lte("period", lastWeek);
+      if (teacherId) query = query.eq("employee_id", teacherId);
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      return data || [];
+    }),
+    safe("เช็คชื่อนักเรียน", async () => dedupeRollRows(await fetchRollRows(teacherId || null))),
+    safe("อบรม", async () => {
+      let query = supabase.from("attendance").select("employee_id, check_in, work_activity, training_start_date, training_end_date").eq("work_activity", "training").gte("check_in", `${shiftDateKey(range.start, -60)}T00:00:00`).lte("check_in", `${range.end}T23:59:59`);
+      if (teacherId) query = query.eq("employee_id", teacherId);
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      return data || [];
+    }),
+    safe("แผนกิจกรรม", async () => fetchActivityRows()),
+  ]);
+  return { plans, rolls, training, activities, errors };
+}
+
+function computeAutoScores(teacherId, sources, range, settings) {
+  const today = todayISO();
+  const end = range.end < today ? range.end : today;
+  const id = String(teacherId);
+  const result = {};
+  const hints = {};
+  const details = {};
+  // แผนรายสัปดาห์: ตรงเวลา = 1, สาย = 0.5
+  const weeks = [];
+  for (let monday = mondayOf(range.start); monday <= end; monday = shiftDateKey(monday, 7)) weeks.push(monday);
+  const latest = new Map();
+  sources.plans.filter(row => String(row.employee_id) === id).forEach(row => {
+    const current = latest.get(row.period);
+    if (!current || String(row.created_at || "") > String(current.created_at || "")) latest.set(row.period, row);
+  });
+  let planPoints = 0;
+  let onTime = 0;
+  let lateCount = 0;
+  const taught = [];
+  const supervision = [];
+  weeks.forEach(monday => {
+    const row = latest.get(weekPeriodKey(monday));
+    if (!row) return;
+    const plan = parseSupervisionPlan(row.subject, monday);
+    const status = supervisionStatusFromStartTime(row.start_time);
+    if (status === "submitted" || (status === "missing" && plan.status === "submitted" && !plan.late)) { planPoints += 1; onTime += 1; }
+    else if (status === "late" || (plan.status === "submitted" && plan.late)) { planPoints += 0.5; lateCount += 1; }
+    (plan.periods || []).forEach(period => {
+      if (!period.free && periodHasDetail(period) && period.teach_date >= range.start && period.teach_date <= end) taught.push(period);
+    });
+    (plan.observations || []).forEach(item => supervision.push({ date: item.date, match: labelOf(OBSERVATION_MATCH, item.match), note: item.note, kind: "นิเทศในห้อง" }));
+    if (plan.signoff?.at) supervision.push({ date: bangkokDateKey(plan.signoff.at), match: "", note: plan.signoff.comment, kind: `รับทราบแผนสัปดาห์ ${formatThaiDateKey(monday)}` });
+  });
+  result.plan = weeks.length ? (planPoints / weeks.length) * 15 : 0;
+  details.plan = `ตรงเวลา ${onTime} · สาย ${lateCount} · จาก ${weeks.length} สัปดาห์`;
+  if (!weeks.length) hints.plan = "ภาคเรียนนี้ยังไม่เริ่ม";
+  else if (!latest.size) hints.plan = "ยังไม่มีแผนรายสัปดาห์ในระบบ";
+  // บันทึกหลังสอน
+  const withNote = taught.filter(period => postNoteHasData(period.post_note));
+  result.post = taught.length ? (withNote.length / taught.length) * 10 : 0;
+  details.post = `บันทึกแล้ว ${withNote.length}/${taught.length} คาบ`;
+  if (!taught.length) hints.post = "ยังไม่มีคาบสอนในแผน";
+  // K/P/A
+  const rates = [];
+  taught.forEach(period => {
+    const note = cleanPostNote(period.post_note);
+    const total = Number(note.total);
+    if (!total) return;
+    POST_NOTE_DOMAINS.forEach(({ key }) => { if (String(note[key].pass).trim()) rates.push(Math.min(1, Number(note[key].pass) / total)); });
+  });
+  const kpaAvg = rates.length ? rates.reduce((sum, value) => sum + value, 0) / rates.length : 0;
+  result.kpa = kpaAvg * 10;
+  details.kpa = rates.length ? `ผ่านเฉลี่ย ${(kpaAvg * 100).toFixed(1)}%` : "-";
+  if (!rates.length) hints.kpa = "ยังไม่มีผล K/P/A ในบันทึกหลังสอน";
+  // เช็คชื่อ
+  const schoolDays = schoolDaysBetween(range.start, end);
+  const rollRow = sources.rolls.find(row => String(row.employee_id) === id);
+  const book = rollRow ? parseRollBook(rollRow.subject) : null;
+  const savedDays = book ? Object.entries(book.days).filter(([date, day]) => day?.saved_at && date >= range.start && date <= end).length : 0;
+  result.roll = schoolDays.length ? Math.min(1, savedDays / schoolDays.length) * 10 : 0;
+  details.roll = `เช็คชื่อ ${savedDays}/${schoolDays.length} วันเรียน`;
+  if (!book || !book.students.length) hints.roll = "ยังไม่มีรายชื่อนักเรียน/การเช็คชื่อ";
+  // อบรม
+  const trainingDays = new Set();
+  sources.training.filter(row => String(row.employee_id) === id).forEach(row => {
+    getAttendanceWorkDateKeys(row).forEach(key => { if (key >= range.start && key <= range.end) trainingDays.add(key); });
+  });
+  const trainingTarget = settings.training_target_days;
+  result.training = Math.min(1, trainingDays.size / trainingTarget) * 10;
+  details.training = `อบรม ${trainingDays.size}/${trainingTarget} วัน (เป้า)`;
+  if (!trainingDays.size) hints.training = "ยังไม่มีการลงเวลา \"ไปอบรม\" ในภาคเรียนนี้";
+  // กิจกรรม
+  const activityCount = sources.activities.filter(plan => plan.organizers.map(String).includes(id) && plan.date >= range.start && plan.date <= range.end).length;
+  result.activity = Math.min(1, activityCount / settings.activity_target) * 5;
+  details.activity = `${activityCount}/${settings.activity_target} กิจกรรม (เป้า)`;
+  if (!activityCount) hints.activity = "ยังไม่มีแผนกิจกรรมที่เป็นผู้จัด";
+  Object.keys(result).forEach(key => { result[key] = Math.round(result[key] * 10) / 10; });
+  const total = Math.round(Object.values(result).reduce((sum, value) => sum + value, 0) * 10) / 10;
+  supervision.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  return { items: result, hints, details, total, supervision };
+}
+
+function adminScores(record) {
+  const items = {};
+  EVAL_ADMIN_ITEMS.forEach(item => {
+    const rating = record?.ratings?.[item.key];
+    items[item.key] = rating ? Math.round((rating / 5) * item.max * 10) / 10 : 0;
+  });
+  const total = Math.round(Object.values(items).reduce((sum, value) => sum + value, 0) * 10) / 10;
+  const rated = EVAL_ADMIN_ITEMS.filter(item => record?.ratings?.[item.key]).length;
+  return { items, total, rated };
+}
+
+function EvalBar({ label, value, max, hint, detail }) {
+  const pct = max ? Math.min(100, (value / max) * 100) : 0;
+  const color = pct >= 80 ? "#16a34a" : pct >= 60 ? "#2563eb" : pct >= 40 ? "#d97706" : "#dc2626";
+  return (
+    <div style={{ display: "grid", gap: "0.15rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", fontSize: "0.82rem" }}>
+        <span style={{ fontWeight: 700, color: "#0f172a" }}>{label}</span>
+        <span style={{ fontWeight: 800, color: "#0f172a", whiteSpace: "nowrap" }}>{value.toFixed(1)}/{max}</span>
+      </div>
+      <div style={{ height: 6, background: "#f1f5f9", borderRadius: 4, overflow: "hidden" }}><div style={{ width: `${pct}%`, height: "100%", background: color }} /></div>
+      {(detail || hint) && <div style={{ fontSize: "0.72rem", color: hint ? "#b45309" : "#64748b" }}>{detail}{hint ? ` · ${hint}` : ""}</div>}
+    </div>
+  );
+}
+
+function SemesterPicker({ sem, onChange, range }) {
+  const now = currentSemester();
+  const years = [now.year + 1, now.year, now.year - 1, now.year - 2];
+  const small = { ...inputStyle, padding: "0.35rem 0.5rem", fontSize: "0.85rem", width: "auto" };
+  return (
+    <div style={{ display: "flex", gap: "0.35rem", alignItems: "center", flexWrap: "wrap" }}>
+      <select aria-label="ภาคเรียน" value={sem.term} onChange={event => onChange({ ...sem, term: Number(event.target.value) })} style={small}>
+        <option value={1}>ภาคเรียน 1</option>
+        <option value={2}>ภาคเรียน 2</option>
+      </select>
+      <select aria-label="ปีการศึกษา" value={sem.year} onChange={event => onChange({ ...sem, year: Number(event.target.value) })} style={small}>
+        {years.map(year => <option key={year} value={year}>ปีการศึกษา {year}</option>)}
+      </select>
+      <span style={{ fontSize: "0.78rem", color: "#64748b" }}>{formatThaiDateKey(range.start)} – {formatThaiDateKey(range.end)}</span>
+    </div>
+  );
+}
+
+function EvalBreakdown({ auto, admin, record, showAdmin }) {
+  const total = auto.total + (showAdmin ? admin.total : 0);
+  return (
+    <div style={{ display: "grid", gap: "0.75rem" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+        <span style={{ fontSize: "1.8rem", fontWeight: 900, color: "#0f172a" }}>{total.toFixed(1)}</span>
+        <span style={{ color: "#64748b", fontSize: "0.85rem" }}>/ 100</span>
+        {showAdmin ? <EvalLevelBadge score={total} /> : <span style={{ fontSize: "0.75rem", color: "#b45309" }}>คะแนนผู้บริหารยังไม่เผยแพร่ (แสดงเฉพาะส่วนอัตโนมัติ)</span>}
+      </div>
+      <Card padding="0.75rem">
+        <div style={{ fontWeight: 800, color: "#1d4ed8", marginBottom: "0.5rem", fontSize: "0.9rem" }}>ส่วนที่ 1 คะแนนอัตโนมัติ {auto.total.toFixed(1)}/60</div>
+        <div style={{ display: "grid", gap: "0.55rem" }}>
+          {EVAL_AUTO_ITEMS.map(item => <EvalBar key={item.key} label={item.label} value={auto.items[item.key] || 0} max={item.max} hint={auto.hints[item.key]} detail={auto.details[item.key]} />)}
+        </div>
+      </Card>
+      {showAdmin && (
+        <Card padding="0.75rem">
+          <div style={{ fontWeight: 800, color: "#7c3aed", marginBottom: "0.5rem", fontSize: "0.9rem" }}>ส่วนที่ 2 ผู้บริหารประเมิน {admin.total.toFixed(1)}/40</div>
+          <div style={{ display: "grid", gap: "0.55rem" }}>
+            {EVAL_ADMIN_ITEMS.map(item => <EvalBar key={item.key} label={item.label} value={admin.items[item.key] || 0} max={item.max} detail={record?.ratings?.[item.key] ? `ระดับ ${record.ratings[item.key]}/5` : "ยังไม่ประเมิน"} />)}
+          </div>
+          {record?.comment && <div style={{ marginTop: "0.6rem" }}><div style={{ fontWeight: 800, fontSize: "0.85rem" }}>ข้อเสนอแนะ</div><FullText value={record.comment} /></div>}
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function TeacherEvalPage({ employees, currentUser }) {
+  if (!isExecutiveUser(currentUser)) return <NoAccessCard />;
+  return <TeacherEvalAdmin employees={employees} currentUser={currentUser} />;
+}
+
+function TeacherEvalAdmin({ employees, currentUser }) {
+  const isAdmin = true;
+  const [sem, setSem] = useState(currentSemester);
+  const [store, setStore] = useState(null);
+  const [sources, setSources] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [selected, setSelected] = useState("");
+  const [sort, setSort] = useState({ key: "total", dir: -1 });
+  const [draft, setDraft] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const settings = store?.settings || cleanEvalSettings(EVAL_DEFAULT_SETTINGS);
+  const range = semesterRange(sem, settings);
+  const semKey = semesterKey(sem);
+
+  useEffect(() => {
+    let active = true;
+    loadEvalStore(currentUser).then(result => {
+      if (!active) return;
+      setStore(result);
+      if (result.loadError) setError(`โหลดคะแนนจากฐานข้อมูลไม่ได้ (${result.loadError}) ใช้ข้อมูลในเครื่องนี้`);
+    });
+    return () => { active = false; };
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!store) return undefined;
+    let active = true;
+    setLoading(true);
+    loadEvalSources(range, isAdmin ? null : currentUser.id).then(result => {
+      if (!active) return;
+      setSources(result);
+      if (result.errors.length) setError(`โหลดบางส่วนไม่ได้: ${result.errors.join(" · ")}`);
+      setLoading(false);
+    });
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store === null, range.start, range.end, isAdmin, currentUser.id]);
+
+  const persistStore = (records, nextSettings) => {
+    const next = { ...store, records, settings: nextSettings };
+    setStore(next);
+    writeEvalLocal(records, nextSettings);
+  };
+
+  const teachers = (employees || []).filter(emp => !isExecutiveUser(emp));
+  const rows = (sources ? teachers : []).map(emp => {
+    const auto = computeAutoScores(emp.id, sources, range, settings);
+    const record = store?.records?.[`${semKey}:${emp.id}`] || null;
+    const admin = adminScores(record);
+    const total = Math.round((auto.total + admin.total) * 10) / 10;
+    return { emp, auto, admin, record, total, name: emp.name || "", status: record?.published ? 2 : admin.rated ? 1 : 0 };
+  });
+
+  const saveRecord = async (publish) => {
+    if (!draft) return;
+    const record = cleanEvalRecord({ ...draft, published: publish ?? draft.published, rated_by: currentUser.name, updated_at: new Date().toISOString(), teacher_id: selected, sem: semKey });
+    setSaving(true);
+    setError("");
+    try {
+      record.row_id = await writeEvalRow(selected, semKey, record, record.row_id);
+      record.pending = false;
+      setMessage(record.published ? "บันทึกและเผยแพร่คะแนนแล้ว" : "บันทึกคะแนนแล้ว (ยังไม่เผยแพร่)");
+    } catch (err) {
+      record.pending = true;
+      setError(`${err.message || "บันทึกไม่สำเร็จ"} · เก็บไว้ในเครื่องนี้แล้ว จะซิงก์เมื่อเปิดหน้านี้ครั้งถัดไป`);
+    }
+    persistStore({ ...store.records, [`${semKey}:${selected}`]: record }, settings);
+    setDraft(record);
+    setSaving(false);
+  };
+
+  const saveSettings = async (patch) => {
+    const next = cleanEvalSettings({ ...settings, ...patch, updated_at: new Date().toISOString() });
+    try {
+      next.row_id = await writeEvalRow(currentUser.id, EVAL_SETTINGS_PERIOD, next, next.row_id);
+      next.pending = false;
+      setMessage("บันทึกการตั้งค่าแล้ว");
+    } catch (err) {
+      next.pending = true;
+      setError(`${err.message || "บันทึกไม่สำเร็จ"} · เก็บไว้ในเครื่องนี้แล้ว`);
+    }
+    persistStore(store.records, next);
+  };
+
+  const exportExcel = () => {
+    const data = sorted.map((row, index) => {
+      const out = { "ลำดับ": index + 1, "ชื่อ": row.name };
+      EVAL_AUTO_ITEMS.forEach(item => { out[`${item.label} (${item.max})`] = row.auto.items[item.key]; });
+      out["อัตโนมัติ (60)"] = row.auto.total;
+      EVAL_ADMIN_ITEMS.forEach(item => { out[`${item.label} (${item.max})`] = row.admin.items[item.key]; });
+      out["ผู้บริหาร (40)"] = row.admin.total;
+      out["รวม (100)"] = row.total;
+      out["ระดับ"] = evalLevel(row.total).label;
+      out["สถานะ"] = ["ยังไม่ประเมิน", "ร่าง", "เผยแพร่แล้ว"][row.status];
+      out["ข้อเสนอแนะ"] = row.record?.comment || "";
+      return out;
+    });
+    const workbook = xlsxUtils.book_new();
+    xlsxUtils.book_append_sheet(workbook, xlsxUtils.json_to_sheet(data), "ประเมินครู");
+    writeWorkbookFile(workbook, `ประเมินครู_ภาค${sem.term}_${sem.year}.xlsx`);
+  };
+
+  const sorted = [...rows].sort((a, b) => {
+    const pick = row => (sort.key === "name" ? row.name : sort.key === "auto" ? row.auto.total : sort.key === "admin" ? row.admin.total : sort.key === "status" ? row.status : row.total);
+    const left = pick(a);
+    const right = pick(b);
+    return (typeof left === "string" ? left.localeCompare(right, "th") : left - right) * sort.dir;
+  });
+  const head = (key, label) => (
+    <th onClick={() => setSort(current => ({ key, dir: current.key === key ? -current.dir : (key === "name" ? 1 : -1) }))} style={{ padding: "0.3rem 0.45rem", fontSize: "0.75rem", fontWeight: 800, color: "#475569", textAlign: key === "name" ? "left" : "center", whiteSpace: "nowrap", cursor: "pointer", borderBottom: "1px solid #e2e8f0" }}>
+      {label}{sort.key === key ? (sort.dir > 0 ? " ▲" : " ▼") : ""}
+    </th>
+  );
+  const banner = (
+    <>
+      {error && <ErrorBox>{error}</ErrorBox>}
+      {message && <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", borderRadius: 10, padding: "0.5rem 0.8rem", color: "#166534", fontWeight: 700, fontSize: "0.85rem" }}>{message}</div>}
+    </>
+  );
+  const header = (
+    <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+      <div style={{ fontWeight: 800, fontSize: "1.15rem", color: "#0f172a", flex: "1 1 160px" }}>ประเมินครู</div>
+      <SemesterPicker sem={sem} onChange={next => { setSem(next); setSelected(""); setDraft(null); }} range={range} />
+    </div>
+  );
+
+  if (!store || loading || !sources) return <div style={{ display: "grid", gap: "0.75rem", maxWidth: 960 }}>{header}<Card><div style={{ color: "#64748b" }}>กำลังคำนวณคะแนน...</div></Card></div>;
+
+  if (selected) {
+    const row = rows.find(item => String(item.emp.id) === String(selected));
+    if (!row) return null;
+    const current = draft || cleanEvalRecord({ ...(row.record || {}), teacher_id: selected, sem: semKey });
+    const setRating = (key, value) => setDraft({ ...current, ratings: { ...current.ratings, [key]: value } });
+    const admin = adminScores(current);
+    return (
+      <div style={{ display: "grid", gap: "0.75rem", maxWidth: 820 }}>
+        {header}
+        {banner}
+        <button type="button" onClick={() => { setSelected(""); setDraft(null); setMessage(""); }} style={{ ...btnSecondary, flex: "none", width: "fit-content", padding: "0.35rem 0.7rem", fontSize: "0.82rem" }}><ChevronLeft size={14} /> กลับไปตาราง</button>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+          <span style={{ fontWeight: 800, fontSize: "1.05rem" }}>{row.name}</span>
+          <span style={{ fontSize: "0.85rem", color: "#64748b" }}>รวม {(row.auto.total + admin.total).toFixed(1)}/100</span>
+          <EvalLevelBadge score={row.auto.total + admin.total} />
+          {current.published && <span style={{ fontSize: "0.72rem", color: "#166534", fontWeight: 800 }}>เผยแพร่แล้ว</span>}
+        </div>
+        <EvalBreakdown auto={row.auto} admin={admin} record={current} showAdmin={false} />
+        <Card padding="0.75rem">
+          <div style={{ fontWeight: 800, color: "#7c3aed", marginBottom: "0.5rem", fontSize: "0.9rem" }}>ส่วนที่ 2 ผู้บริหารประเมิน {admin.total.toFixed(1)}/40 <span style={{ color: "#64748b", fontWeight: 400, fontSize: "0.75rem" }}>(1 = ต้องปรับปรุง … 5 = ดีเยี่ยม)</span></div>
+          <div style={{ display: "grid", gap: "0.5rem" }}>
+            {EVAL_ADMIN_ITEMS.map(item => (
+              <div key={item.key} style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" }}>
+                <span style={{ flex: "1 1 180px", fontSize: "0.85rem", fontWeight: 700 }}>{item.label} <span style={{ color: "#64748b", fontWeight: 400 }}>({admin.items[item.key].toFixed(1)}/{item.max})</span></span>
+                <div style={{ display: "flex", gap: "0.2rem" }}>
+                  {[1, 2, 3, 4, 5].map(value => {
+                    const on = current.ratings[item.key] === value;
+                    return <button key={value} type="button" aria-pressed={on} aria-label={`${item.label} ${value}`} onClick={() => setRating(item.key, value)} style={{ width: 32, height: 30, borderRadius: 8, border: `1px solid ${on ? "#7c3aed" : "#e2e8f0"}`, background: on ? "#7c3aed" : "#fff", color: on ? "#fff" : "#475569", fontWeight: 800, fontFamily: "inherit", cursor: "pointer" }}>{value}</button>;
+                  })}
+                </div>
+              </div>
+            ))}
+            <Field label="ข้อเสนอแนะ">
+              <textarea value={current.comment} onChange={event => setDraft({ ...current, comment: event.target.value })} style={{ ...inputStyle, minHeight: 80, resize: "vertical", fontSize: "0.9rem" }} />
+            </Field>
+            <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+              <button type="button" disabled={saving} onClick={() => saveRecord(false)} style={{ ...btnSecondary, flex: "1 1 140px", padding: "0.5rem" }}><Save size={15} /> บันทึก (ยังไม่เผยแพร่)</button>
+              <button type="button" disabled={saving} onClick={() => saveRecord(true)} style={{ ...btnPrimary, flex: "1 1 140px", padding: "0.5rem", background: "linear-gradient(135deg, #16a34a, #15803d)", color: "#fff", cursor: "pointer" }}><CheckCircle size={15} /> บันทึกและเผยแพร่</button>
+            </div>
+          </div>
+        </Card>
+        <Card padding="0.75rem">
+          <div style={{ fontWeight: 800, fontSize: "0.9rem", marginBottom: "0.4rem" }}>ข้อมูลนิเทศอ้างอิง ({row.auto.supervision.length})</div>
+          {row.auto.supervision.length === 0 ? <div style={{ color: "#94a3b8", fontSize: "0.85rem" }}>ยังไม่มีบันทึกการนิเทศในภาคเรียนนี้</div> : (
+            <div style={{ display: "grid", gap: "0.35rem" }}>
+              {row.auto.supervision.map((item, index) => (
+                <div key={index} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "0.4rem 0.55rem", fontSize: "0.82rem" }}>
+                  <div style={{ fontWeight: 800 }}>{item.date ? formatThaiDateKey(item.date) : "-"} · {item.kind}{item.match ? ` · ${item.match}` : ""}</div>
+                  <FullText value={item.note} />
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+    );
+  }
+
+  const distribution = EVAL_LEVELS.map(level => ({ ...level, count: rows.filter(row => evalLevel(row.total).label === level.label).length }));
+  return (
+    <div style={{ display: "grid", gap: "0.75rem", maxWidth: 960 }}>
+      {header}
+      {banner}
+      <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", alignItems: "center" }}>
+        {distribution.map(level => <span key={level.label} style={{ background: level.bg, color: level.color, fontWeight: 800, fontSize: "0.75rem", borderRadius: 20, padding: "0.15rem 0.6rem" }}>{level.label} {level.count}</span>)}
+        <span style={{ flex: 1 }} />
+        <button type="button" onClick={() => setShowSettings(value => !value)} style={{ ...btnSecondary, flex: "none", padding: "0.3rem 0.6rem", fontSize: "0.8rem" }}><Settings size={14} /> ตั้งค่า</button>
+        <button type="button" onClick={exportExcel} style={{ ...btnSecondary, flex: "none", padding: "0.3rem 0.6rem", fontSize: "0.8rem" }}><FileText size={14} /> Excel</button>
+      </div>
+      {showSettings && (
+        <Card padding="0.75rem">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 170px), 1fr))", gap: "0.5rem", alignItems: "end" }}>
+            <Field label="เป้าอบรม (วัน/ภาคเรียน)"><input type="number" min={1} defaultValue={settings.training_target_days} onBlur={event => saveSettings({ training_target_days: Number(event.target.value) })} style={{ ...inputStyle, padding: "0.4rem" }} /></Field>
+            <Field label="เป้ากิจกรรม (ครั้ง/ภาคเรียน)"><input type="number" min={1} defaultValue={settings.activity_target} onBlur={event => saveSettings({ activity_target: Number(event.target.value) })} style={{ ...inputStyle, padding: "0.4rem" }} /></Field>
+            <Field label="เริ่มภาคเรียน"><input type="date" key={`s${semKey}`} defaultValue={range.start} onBlur={event => saveSettings({ ranges: { ...settings.ranges, [semKey]: { ...range, start: event.target.value } } })} style={{ ...inputStyle, padding: "0.4rem" }} /></Field>
+            <Field label="สิ้นสุดภาคเรียน"><input type="date" key={`e${semKey}`} defaultValue={range.end} onBlur={event => saveSettings({ ranges: { ...settings.ranges, [semKey]: { ...range, end: event.target.value } } })} style={{ ...inputStyle, padding: "0.4rem" }} /></Field>
+          </div>
+          <div style={{ fontSize: "0.72rem", color: "#64748b", marginTop: "0.35rem" }}>อบรมนับจากการลงเวลาแบบ "ไปอบรม" (1 วัน ≈ 6 ชม. เป้า 5 วัน ≈ 30 ชม.) · กิจกรรมนับจากแผนการจัดกิจกรรมที่ครูเป็นผู้จัด</div>
+        </Card>
+      )}
+      <div style={{ overflowX: "auto", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10 }}>
+        <table style={{ width: "100%", minWidth: 560, borderCollapse: "collapse", fontSize: "0.82rem" }}>
+          <thead><tr style={{ background: "#f8fafc" }}>{head("name", "ชื่อ")}{head("auto", "อัตโนมัติ/60")}{head("admin", "ผู้บริหาร/40")}{head("total", "รวม")}{head("total", "ระดับ")}{head("status", "สถานะ")}</tr></thead>
+          <tbody>
+            {sorted.length === 0 && <tr><td colSpan={6} style={{ padding: "1rem", textAlign: "center", color: "#94a3b8" }}>ยังไม่มีครูในระบบ</td></tr>}
+            {sorted.map(row => (
+              <tr key={row.emp.id} onClick={() => { setSelected(String(row.emp.id)); setDraft(null); setMessage(""); }} style={{ borderTop: "1px solid #f1f5f9", cursor: "pointer" }}>
+                <td style={{ padding: "0.3rem 0.45rem", fontWeight: 700, color: "#1d4ed8", whiteSpace: "nowrap" }}>{row.name}</td>
+                <td style={{ padding: "0.3rem 0.45rem", textAlign: "center" }}>{row.auto.total.toFixed(1)}</td>
+                <td style={{ padding: "0.3rem 0.45rem", textAlign: "center" }}>{row.admin.rated ? row.admin.total.toFixed(1) : "-"}</td>
+                <td style={{ padding: "0.3rem 0.45rem", textAlign: "center", fontWeight: 800 }}>{row.total.toFixed(1)}</td>
+                <td style={{ padding: "0.3rem 0.45rem", textAlign: "center" }}><EvalLevelBadge score={row.total} /></td>
+                <td style={{ padding: "0.3rem 0.45rem", textAlign: "center", whiteSpace: "nowrap", fontSize: "0.75rem", color: ["#94a3b8", "#b45309", "#166534"][row.status] }}>{["ยังไม่ประเมิน", "ร่าง", "เผยแพร่แล้ว"][row.status]}{row.record?.pending ? " · รอซิงก์" : ""}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -7748,7 +8468,11 @@ export default function HRApp() {
       setActivePage("dashboard");
       return;
     }
-    if (currentPage && !currentPage.roles.includes(currentUser.role)) {
+    if (activePage === "teacherEval" && !isExecutiveUser(currentUser)) {
+      setActivePage("dashboard");
+      return;
+    }
+    if (currentPage && !currentPage.executiveOnly && !currentPage.roles.includes(currentUser.role)) {
       if (window.location.hash === "#finance" || window.location.hash === "#payroll") {
         window.history.replaceState(null, "", window.location.pathname);
       }
@@ -7847,11 +8571,16 @@ export default function HRApp() {
     if (window.location.hash === "#finance" || window.location.hash === "#payroll") {
       window.history.replaceState(null, "", window.location.pathname);
     }
+    if (key === "teacherEval" && !isExecutiveUser(actingUser)) {
+      setActivePage("dashboard");
+      setSidebarOpen(false);
+      return;
+    }
     setActivePage(key);
     setSidebarOpen(false);
   };
 
-  const visibleNavItems = navItems.filter(item => item.roles.includes(actingUser.role === "admin" ? "admin" : "employee"));
+  const visibleNavItems = navItems.filter(item => canAccessNavItem(item, actingUser));
 
   if (activePage === "payrollStandalone" && currentUser.role === "admin") {
     return loading ? (
@@ -8195,6 +8924,7 @@ export default function HRApp() {
               {activePage === "schedule" && <SchedulePage employees={employees} currentUser={actingUser} onRefresh={fetchData} />}
               {activePage === "academic" && <AcademicPage employees={employees} currentUser={actingUser} />}
               {activePage === "activityPlan" && <ActivityPlanPage employees={employees} currentUser={actingUser} />}
+              {activePage === "teacherEval" && (isExecutiveUser(actingUser) ? <TeacherEvalPage employees={employees} currentUser={actingUser} /> : <NoAccessCard />)}
               {activePage === "settings" && <SettingsPage settings={settings} onRefresh={fetchData} />}
             </>
           )}

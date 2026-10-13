@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useRef } from "react";
+﻿import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import { THAI_P2_PLAN_PACK } from "./lessonPlanCatalog.js";
 import { AcademicExtra, ACADEMIC_EXTRA_TABS, ACADEMIC_RECORD_ROOM, TEACHING_GRADE_GROUPS, loadAssignedPlanLevels, loadTeachingGrades, saveTeachingGrade } from "./academicRecords.jsx";
 import { read as readWorkbook, utils as xlsxUtils } from "xlsx";
@@ -644,6 +644,7 @@ const DAY_NAMES = ["", "จันทร์", "อังคาร", "พุธ", 
 // เพราะคีย์ของโปรเจกต์สร้างตารางใหม่ใน Supabase ไม่ได้
 const SUPERVISION_SCHEDULE_ROOM = "__TEACHING_SUPERVISION__";
 const STUDENT_ROLL_ROOM = "__STUDENT_ROLL__";
+const ACTIVITY_PLAN_ROOM = "__ACTIVITY_PLAN__";
 const SUPERVISION_FILE_LIMIT = 2.5 * 1024 * 1024;
 const SUPERVISION_JSON_LIMIT = 3200000;
 const SUPERVISION_FILE_EXTENSIONS = [".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png", ".webp", ".gif"];
@@ -655,6 +656,7 @@ const navItems = [
   { icon: Clock, label: "ลงเวลาเข้า-ออก", key: "attendance", roles: ["admin", "employee"] },
   { icon: Calendar, label: "ตารางสอน", key: "schedule", roles: ["admin", "employee"] },
   { icon: BookOpen, label: "งานวิชาการ", key: "academic", roles: ["admin", "employee"] },
+  { icon: FileText, label: "แผนการจัดกิจกรรม", key: "activityPlan", roles: ["admin", "employee"] },
   { icon: Umbrella, label: "การลา", key: "leave", roles: ["admin", "employee"] },
   { icon: ArrowRightLeft, label: "ขอออกนอกสถานที่", key: "outing", roles: ["admin", "employee"] },
   { icon: DollarSign, label: "เงินเดือน", key: "finance", roles: ["admin"] },
@@ -2758,10 +2760,10 @@ function SchedulePage({ employees, currentUser, onRefresh }) {
     const { data } = await supabase
       .from("teaching_schedule")
       .select("*, employees(name, department)")
-      .or(`class_room.is.null,and(class_room.neq.${SUPERVISION_SCHEDULE_ROOM},class_room.neq.${STUDENT_ROLL_ROOM},class_room.neq.${ACADEMIC_RECORD_ROOM})`)
+      .or(`class_room.is.null,and(class_room.neq.${SUPERVISION_SCHEDULE_ROOM},class_room.neq.${STUDENT_ROLL_ROOM},class_room.neq.${ACADEMIC_RECORD_ROOM},class_room.neq.${ACTIVITY_PLAN_ROOM})`)
       .order("day_of_week")
       .order("period");
-    setSchedules((data || []).filter(row => row.class_room !== SUPERVISION_SCHEDULE_ROOM && row.class_room !== STUDENT_ROLL_ROOM && row.class_room !== ACADEMIC_RECORD_ROOM));
+    setSchedules((data || []).filter(row => row.class_room !== SUPERVISION_SCHEDULE_ROOM && row.class_room !== STUDENT_ROLL_ROOM && row.class_room !== ACADEMIC_RECORD_ROOM && row.class_room !== ACTIVITY_PLAN_ROOM));
   };
 
   useEffect(() => {
@@ -4635,6 +4637,26 @@ function cleanRollStudents(students) {
     .slice(0, STUDENT_ROLL_MAX);
 }
 
+function rollStudentKey(student) {
+  return `${student?.name || ""} ${student?.surname || ""}`.replace(/\s+/g, " ").trim();
+}
+
+// รวมรายชื่อจากหลายแหล่งโดยไม่ให้ชื่อหาย (ตรงกันด้วย id หรือชื่อ-นามสกุล)
+function mergeRollStudents(...lists) {
+  const out = [];
+  lists.forEach(list => {
+    cleanRollStudents(list).forEach(student => {
+      if (out.some(item => item.id === student.id || rollStudentKey(item) === rollStudentKey(student))) return;
+      out.push(student);
+    });
+  });
+  return out.slice(0, STUDENT_ROLL_MAX);
+}
+
+function rollStamp(raw) {
+  try { const parsed = JSON.parse(raw || "{}"); return String(parsed.saved_local_at || parsed.updated_at || ""); } catch { return ""; }
+}
+
 function parseRollBook(subject) {
   try {
     const parsed = JSON.parse(subject || "{}");
@@ -4655,10 +4677,19 @@ function parseRollBook(subject) {
         days[date] = { saved_at: day?.saved_at || null, marks, health };
       });
     }
+    // ย้ายรายชื่อที่เคยติดอยู่ในข้อมูลรายวัน (days[date].students / roster) ขึ้นเป็นรายชื่อถาวร
+    const lifted = [];
+    if (parsed.days && typeof parsed.days === "object" && !Array.isArray(parsed.days)) {
+      Object.keys(parsed.days).sort().forEach(date => {
+        const day = parsed.days[date];
+        [day?.students, day?.roster].forEach(list => { if (Array.isArray(list)) lifted.push(...list); });
+      });
+    }
     return {
       version: 1,
       class_name: String(parsed.class_name || "").trim().slice(0, 40),
-      students: cleanRollStudents(parsed.students),
+      students: mergeRollStudents(parsed.students, lifted),
+      removed_ids: Array.isArray(parsed.removed_ids) ? parsed.removed_ids.map(String).slice(-200) : [],
       days,
     };
   } catch {
@@ -5033,6 +5064,306 @@ function RollStatsPanel({ book, month, onMonth, title }) {
 }
 
 
+// ─── แผนการจัดกิจกรรม ─────────────────────────────────────────────────────────
+// เก็บ 1 แผน = 1 แถวใน teaching_schedule (class_room = ACTIVITY_PLAN_ROOM, subject = JSON)
+// สำรองใน localStorage "hr_activity_plans" แล้วรวมกับ Supabase ตอนโหลด (แบบเดียวกับรายชื่อนักเรียน)
+const ACTIVITY_LOCAL_KEY = "hr_activity_plans";
+
+function emptyActivityPlan(currentUser) {
+  return { id: newSupervisionId(), row_id: null, title: "", description: "", date: todayISO(), materials: [], requisitions: [], organizers: currentUser?.id ? [String(currentUser.id)] : [], created_by: currentUser?.id || "", created_by_name: currentUser?.name || "", updated_at: "" };
+}
+
+function cleanActivityPlan(raw) {
+  const text = (value, max) => String(value || "").slice(0, max);
+  const rows = (list, withUnit) => (Array.isArray(list) ? list : []).map(item => ({
+    id: String(item?.id || newSupervisionId()),
+    name: text(item?.name, 120),
+    qty: text(item?.qty, 12),
+    ...(withUnit ? { unit: text(item?.unit, 30) } : {}),
+  })).slice(0, 100);
+  return {
+    id: String(raw?.id || newSupervisionId()),
+    row_id: raw?.row_id ?? null,
+    title: text(raw?.title, 200),
+    description: text(raw?.description, 3000),
+    date: /^\d{4}-\d{2}-\d{2}$/.test(raw?.date || "") ? raw.date : "",
+    materials: rows(raw?.materials, false),
+    requisitions: rows(raw?.requisitions, true),
+    organizers: Array.isArray(raw?.organizers) ? [...new Set(raw.organizers.map(String))].slice(0, 50) : [],
+    created_by: String(raw?.created_by || ""),
+    created_by_name: text(raw?.created_by_name, 120),
+    updated_at: String(raw?.updated_at || ""),
+    pending: !!raw?.pending,
+  };
+}
+
+function readActivityLocal() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(ACTIVITY_LOCAL_KEY) || "{}");
+    return { plans: Array.isArray(parsed.plans) ? parsed.plans.map(cleanActivityPlan) : [], deleted: Array.isArray(parsed.deleted) ? parsed.deleted.map(String) : [] };
+  } catch { return { plans: [], deleted: [] }; }
+}
+
+function writeActivityLocal(plans, deleted) {
+  try { localStorage.setItem(ACTIVITY_LOCAL_KEY, JSON.stringify({ plans, deleted: deleted.slice(-300), saved_local_at: new Date().toISOString() })); } catch { /* ignore */ }
+}
+
+async function fetchActivityRows() {
+  const { data, error } = await supabase
+    .from("teaching_schedule")
+    .select("id, employee_id, subject, created_at")
+    .eq("class_room", ACTIVITY_PLAN_ROOM)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []).map(row => {
+    try { return cleanActivityPlan({ ...JSON.parse(row.subject || "{}"), row_id: row.id, pending: false }); } catch { return null; }
+  }).filter(Boolean);
+}
+
+async function writeActivityRow(plan) {
+  const body = { ...plan };
+  delete body.row_id;
+  delete body.pending;
+  const payload = { employee_id: plan.created_by || null, day_of_week: 0, period: 0, class_room: ACTIVITY_PLAN_ROOM, start_time: "00:00:00", end_time: null, subject: JSON.stringify(body) };
+  const result = plan.row_id
+    ? await supabase.from("teaching_schedule").update(payload).eq("id", plan.row_id).select("id").single()
+    : await supabase.from("teaching_schedule").insert(payload).select("id").single();
+  if (result.error) throw new Error(result.error.message);
+  return result.data.id;
+}
+
+function ActivityRowsEditor({ title, rows, withUnit, onChange }) {
+  const set = (id, patch) => onChange(rows.map(row => (row.id === id ? { ...row, ...patch } : row)));
+  const small = { ...inputStyle, padding: "0.35rem 0.5rem", fontSize: "0.85rem", minWidth: 0 };
+  return (
+    <div style={{ display: "grid", gap: "0.3rem" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ fontWeight: 800, fontSize: "0.85rem", color: "#334155" }}>{title}</span>
+        <button type="button" aria-label={`เพิ่ม${title}`} onClick={() => onChange([...rows, { id: newSupervisionId(), name: "", qty: "", ...(withUnit ? { unit: "" } : {}) }])} style={{ ...btnSecondary, flex: "none", padding: "0.25rem 0.55rem", fontSize: "0.8rem" }}><Plus size={14} /> เพิ่ม</button>
+      </div>
+      {rows.length === 0 && <div style={{ color: "#94a3b8", fontSize: "0.8rem" }}>ยังไม่มีรายการ กด + เพิ่ม</div>}
+      {rows.map((row, index) => (
+        <div key={row.id} style={{ display: "grid", gridTemplateColumns: withUnit ? "1.4rem minmax(0,1fr) 4.2rem 4.5rem 1.8rem" : "1.4rem minmax(0,1fr) 4.2rem 1.8rem", gap: "0.25rem", alignItems: "center" }}>
+          <span style={{ color: "#94a3b8", fontSize: "0.8rem", textAlign: "right" }}>{index + 1}.</span>
+          <input value={row.name} placeholder="ชื่อสิ่งของ" onChange={event => set(row.id, { name: event.target.value })} style={small} />
+          <input value={row.qty} inputMode="decimal" placeholder="จำนวน" onChange={event => set(row.id, { qty: event.target.value })} style={small} />
+          {withUnit && <input value={row.unit} placeholder="หน่วย" onChange={event => set(row.id, { unit: event.target.value })} style={small} />}
+          <button type="button" aria-label="ลบรายการ" onClick={() => onChange(rows.filter(item => item.id !== row.id))} style={{ width: 26, height: 26, border: "none", borderRadius: "50%", background: "#fee2e2", color: "#b91c1c", display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}><X size={13} /></button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ActivityPlanPage({ employees, currentUser }) {
+  const isAdmin = currentUser?.role === "admin";
+  const [plans, setPlans] = useState([]);
+  const [deleted, setDeleted] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [openId, setOpenId] = useState("");
+  const [query, setQuery] = useState("");
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const nameOf = id => (employees || []).find(emp => String(emp.id) === String(id))?.name || "ไม่ทราบชื่อ";
+  const canEdit = plan => isAdmin || String(plan.created_by) === String(currentUser?.id);
+
+  const commit = (nextPlans, nextDeleted = deleted) => {
+    const sorted = [...nextPlans].sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.updated_at).localeCompare(String(a.updated_at)));
+    setPlans(sorted);
+    setDeleted(nextDeleted);
+    writeActivityLocal(sorted, nextDeleted);
+  };
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const local = readActivityLocal();
+      try {
+        const remote = await fetchActivityRows();
+        if (!active) return;
+        const deletedSet = new Set(local.deleted);
+        const byId = new Map();
+        remote.forEach(plan => { if (!deletedSet.has(plan.id)) byId.set(plan.id, plan); });
+        const toSync = [];
+        local.plans.forEach(plan => {
+          if (deletedSet.has(plan.id)) return;
+          const current = byId.get(plan.id);
+          if (!current || (plan.pending && String(plan.updated_at) > String(current.updated_at))) {
+            byId.set(plan.id, { ...plan, row_id: current?.row_id || plan.row_id || null });
+            if (plan.pending || !current) toSync.push(plan.id);
+          }
+        });
+        const merged = [...byId.values()];
+        // ลบแถวที่ถูกลบในเครื่องตอนออฟไลน์
+        const toDelete = remote.filter(plan => deletedSet.has(plan.id) && plan.row_id).map(plan => plan.row_id);
+        if (toDelete.length) await supabase.from("teaching_schedule").delete().in("id", toDelete).then(() => {}, () => {});
+        for (const id of toSync) {
+          const plan = merged.find(item => item.id === id);
+          try { plan.row_id = await writeActivityRow(plan); plan.pending = false; } catch { /* คงไว้ในเครื่อง */ }
+        }
+        if (active) commit(merged, toDelete.length ? [] : local.deleted);
+      } catch (err) {
+        if (active) {
+          commit(local.plans, local.deleted);
+          setError(`โหลดจากฐานข้อมูลไม่ได้ (${err.message || "เชื่อมต่อไม่สำเร็จ"}) แสดงแผนที่เก็บไว้ในเครื่องนี้`);
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const save = async () => {
+    const plan = cleanActivityPlan({ ...editing, updated_at: new Date().toISOString() });
+    if (!plan.title.trim()) { setError("กรอกชื่อกิจกรรมก่อน"); return; }
+    if (!plan.date) { setError("เลือกวันที่จัดกิจกรรม"); return; }
+    plan.materials = plan.materials.filter(row => row.name.trim());
+    plan.requisitions = plan.requisitions.filter(row => row.name.trim());
+    if (plan.organizers.length === 0 && currentUser?.id) plan.organizers = [String(currentUser.id)];
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      plan.row_id = await writeActivityRow(plan);
+      plan.pending = false;
+      setMessage("บันทึกแผนกิจกรรมแล้ว");
+    } catch (err) {
+      plan.pending = true;
+      setError(`${err.message || "บันทึกไม่สำเร็จ"} · เก็บไว้ในเครื่องนี้แล้ว จะซิงก์ขึ้นระบบเมื่อเปิดหน้านี้ครั้งถัดไป`);
+    }
+    commit([plan, ...plans.filter(item => item.id !== plan.id)]);
+    setEditing(null);
+    setOpenId(plan.id);
+    setSaving(false);
+  };
+
+  const remove = async plan => {
+    if (!canEdit(plan) || !window.confirm(`ลบแผน "${plan.title}"?`)) return;
+    setSaving(true);
+    let nextDeleted = deleted;
+    try {
+      if (plan.row_id) {
+        const { error: delError } = await supabase.from("teaching_schedule").delete().eq("id", plan.row_id);
+        if (delError) throw new Error(delError.message);
+      }
+      setMessage("ลบแผนแล้ว");
+    } catch {
+      nextDeleted = [...deleted, plan.id];
+      setMessage("ลบในเครื่องแล้ว จะลบในระบบเมื่อเชื่อมต่อได้");
+    }
+    commit(plans.filter(item => item.id !== plan.id), nextDeleted);
+    setSaving(false);
+  };
+
+  const q = query.trim().toLowerCase();
+  const shown = plans.filter(plan => !q || [plan.title, plan.description, ...plan.organizers.map(nameOf)].join(" ").toLowerCase().includes(q));
+  const small = { ...inputStyle, padding: "0.45rem 0.6rem", fontSize: "0.9rem" };
+
+  if (editing) {
+    const set = patch => setEditing(current => ({ ...current, ...patch }));
+    const toggleOrganizer = id => set({ organizers: editing.organizers.includes(id) ? editing.organizers.filter(item => item !== id) : [...editing.organizers, id] });
+    return (
+      <div style={{ display: "grid", gap: "0.75rem", maxWidth: 760 }}>
+        {error && <ErrorBox>{error}</ErrorBox>}
+        <Card padding="0.85rem">
+          <div style={{ display: "grid", gap: "0.7rem" }}>
+            <div style={{ fontWeight: 800, fontSize: "1.05rem", color: "#0f172a" }}>{editing.row_id || plans.some(item => item.id === editing.id) ? "แก้ไขแผนกิจกรรม" : "เพิ่มแผนกิจกรรม"}</div>
+            <div style={{ fontWeight: 800, fontSize: "0.85rem", color: "#334155" }}>1. กิจกรรมที่จัด</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))", gap: "0.5rem" }}>
+              <input value={editing.title} placeholder="ชื่อกิจกรรม" onChange={event => set({ title: event.target.value })} style={small} />
+              <input type="date" value={editing.date} onChange={event => set({ date: event.target.value })} style={small} />
+            </div>
+            <textarea value={editing.description} placeholder="รายละเอียดกิจกรรม" onChange={event => set({ description: event.target.value })} style={{ ...small, minHeight: 80, resize: "vertical" }} />
+            <ActivityRowsEditor title="2. สิ่งของที่ใช้" rows={editing.materials} onChange={materials => set({ materials })} />
+            <ActivityRowsEditor title="3. ของที่ใช้เบิก" rows={editing.requisitions} withUnit onChange={requisitions => set({ requisitions })} />
+            <div style={{ display: "grid", gap: "0.3rem" }}>
+              <span style={{ fontWeight: 800, fontSize: "0.85rem", color: "#334155" }}>4. ครูผู้จัดกิจกรรม ({editing.organizers.length} คน)</span>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.3rem", maxHeight: 180, overflowY: "auto" }}>
+                {(employees || []).map(emp => {
+                  const on = editing.organizers.includes(String(emp.id));
+                  return <button key={emp.id} type="button" aria-pressed={on} onClick={() => toggleOrganizer(String(emp.id))} style={{ border: `1px solid ${on ? "#1d4ed8" : "#cbd5e1"}`, background: on ? "#1d4ed8" : "#fff", color: on ? "#fff" : "#475569", borderRadius: 14, padding: "0.15rem 0.6rem", fontSize: "0.8rem", fontFamily: "inherit", cursor: "pointer" }}>{emp.name}</button>;
+                })}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <button type="button" onClick={() => { setEditing(null); setError(""); }} disabled={saving} style={{ ...btnSecondary, padding: "0.55rem" }}>ยกเลิก</button>
+              <button type="button" onClick={save} disabled={saving} style={{ ...btnPrimary, padding: "0.55rem", background: "linear-gradient(135deg, #2563eb, #1d4ed8)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}><Save size={16} /> {saving ? "กำลังบันทึก..." : "บันทึก"}</button>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "grid", gap: "0.75rem", maxWidth: 900 }}>
+      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ fontWeight: 800, fontSize: "1.15rem", color: "#0f172a", flex: 1 }}>แผนการจัดกิจกรรม <span style={{ color: "#64748b", fontSize: "0.85rem" }}>({plans.length})</span></div>
+        <input value={query} placeholder="ค้นหากิจกรรม/ครู" onChange={event => setQuery(event.target.value)} style={{ ...small, width: "auto", flex: "1 1 160px", maxWidth: 260 }} />
+        <button type="button" onClick={() => { setEditing(emptyActivityPlan(currentUser)); setMessage(""); setError(""); }} style={{ ...btnPrimary, flex: "none", padding: "0.5rem 0.8rem", background: "linear-gradient(135deg, #2563eb, #1d4ed8)", color: "#fff", cursor: "pointer" }}><Plus size={16} /> เพิ่มแผน</button>
+      </div>
+      {error && <ErrorBox>{error}</ErrorBox>}
+      {message && <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", borderRadius: 10, padding: "0.5rem 0.8rem", color: "#166534", fontWeight: 700, fontSize: "0.88rem" }}>{message}</div>}
+      {loading ? (
+        <Card><div style={{ color: "#64748b" }}>กำลังโหลดแผนกิจกรรม...</div></Card>
+      ) : shown.length === 0 ? (
+        <Card><div style={{ color: "#94a3b8", textAlign: "center" }}>{plans.length ? "ไม่พบแผนที่ค้นหา" : "ยังไม่มีแผนกิจกรรม กด + เพิ่มแผน"}</div></Card>
+      ) : shown.map(plan => {
+        const open = openId === plan.id;
+        return (
+          <Card key={plan.id} padding="0.6rem 0.8rem">
+            <button type="button" onClick={() => setOpenId(open ? "" : plan.id)} aria-expanded={open} style={{ width: "100%", display: "flex", gap: "0.5rem", alignItems: "center", border: "none", background: "transparent", padding: 0, fontFamily: "inherit", textAlign: "left", cursor: "pointer" }}>
+              <span style={{ fontSize: "0.78rem", color: "#1d4ed8", fontWeight: 800, flex: "none" }}>{plan.date ? formatThaiDateKey(plan.date) : "-"}</span>
+              <span style={{ fontWeight: 800, color: "#0f172a", flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{plan.title}</span>
+              {plan.pending && <span style={{ fontSize: "0.7rem", color: "#b45309", flex: "none" }}>รอซิงก์</span>}
+              {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+            {!open && <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: "0.15rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>ครู: {plan.organizers.map(nameOf).join(", ") || "-"}</div>}
+            {open && (
+              <div style={{ display: "grid", gap: "0.5rem", marginTop: "0.5rem", fontSize: "0.88rem" }}>
+                {plan.description && <FullText value={plan.description} />}
+                {[["สิ่งของที่ใช้", plan.materials, false], ["ของที่ใช้เบิก", plan.requisitions, true]].map(([label, rows, withUnit]) => (
+                  <div key={label}>
+                    <div style={{ fontWeight: 800, color: "#334155" }}>{label} ({rows.length})</div>
+                    {rows.length === 0 ? <div style={{ color: "#94a3b8" }}>-</div> : (
+                      <div style={{ overflowX: "auto" }}>
+                        <table style={{ borderCollapse: "collapse", fontSize: "0.82rem", minWidth: 260 }}>
+                          <tbody>
+                            {rows.map((row, index) => (
+                              <tr key={row.id} style={{ borderTop: "1px solid #f1f5f9" }}>
+                                <td style={{ padding: "0.15rem 0.4rem", color: "#94a3b8" }}>{index + 1}.</td>
+                                <td style={{ padding: "0.15rem 0.4rem" }}>{row.name}</td>
+                                <td style={{ padding: "0.15rem 0.4rem", textAlign: "right" }}>{row.qty || "-"}</td>
+                                {withUnit && <td style={{ padding: "0.15rem 0.4rem" }}>{row.unit}</td>}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <div><span style={{ fontWeight: 800, color: "#334155" }}>ครูผู้จัดกิจกรรม: </span>{plan.organizers.map(nameOf).join(", ") || "-"}</div>
+                <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>สร้างโดย {plan.created_by_name || nameOf(plan.created_by)}{plan.updated_at ? ` · แก้ล่าสุด ${fmtDate(plan.updated_at)} ${fmtTime(plan.updated_at)}` : ""}</div>
+                {canEdit(plan) && (
+                  <div style={{ display: "flex", gap: "0.4rem" }}>
+                    <button type="button" onClick={() => { setEditing({ ...plan }); setMessage(""); setError(""); }} disabled={saving} style={{ ...btnSecondary, flex: "none", padding: "0.35rem 0.7rem", fontSize: "0.82rem" }}><Edit size={14} /> แก้ไข</button>
+                    <button type="button" onClick={() => remove(plan)} disabled={saving} style={{ ...btnSecondary, flex: "none", padding: "0.35rem 0.7rem", fontSize: "0.82rem", color: "#dc2626" }}><Trash2 size={14} /> ลบ</button>
+                  </div>
+                )}
+              </div>
+            )}
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── ดูแผนสำหรับสอนแทน (อ่านอย่างเดียว ยกเว้นความเห็นผู้บริหาร) ──────────────
 function SubstitutePlanView({ employees, currentUser }) {
   const isAdmin = currentUser?.role === "admin";
@@ -5196,6 +5527,9 @@ function StudentRollPage({ employees, currentUser }) {
   return <StudentRollTeacher currentUser={currentUser} />;
 }
 
+const rollTh = { padding: "0.3rem 0.35rem", fontWeight: 800, fontSize: "0.75rem", textAlign: "center", whiteSpace: "nowrap", borderBottom: "1px solid #e2e8f0" };
+const rollTd = { padding: "0.2rem 0.35rem", textAlign: "center", verticalAlign: "middle" };
+
 function StudentRollTeacher({ currentUser }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -5234,7 +5568,28 @@ function StudentRollTeacher({ currentUser }) {
         }
         if (!active) return;
         const row = rows[0];
-        const loaded = row ? parseRollBook(row.subject) : emptyRollBook();
+        let loaded = row ? parseRollBook(row.subject) : emptyRollBook();
+        let localRaw = null;
+        try { localRaw = localStorage.getItem(`hr_student_roll_${currentUser.id}`); } catch { /* ignore */ }
+        let localRemoved = [];
+        try { const parsedLocal = JSON.parse(localRaw || "{}"); if (Array.isArray(parsedLocal.removed_ids)) localRemoved = parsedLocal.removed_ids; } catch { /* ignore */ }
+        const removed = new Set([...localRemoved, ...(loaded.removed_ids || [])]);
+        if (localRaw) {
+          const local = parseRollBook(localRaw);
+          const localNewer = rollStamp(localRaw) > rollStamp(row?.subject);
+          const merged = {
+            ...(localNewer ? local : loaded),
+            students: mergeRollStudents(localNewer ? local.students : loaded.students, localNewer ? loaded.students : local.students).filter(student => !removed.has(student.id)),
+            days: localNewer ? { ...loaded.days, ...local.days } : { ...local.days, ...loaded.days },
+            removed_ids: [...removed].slice(-200),
+          };
+          const changed = JSON.stringify(merged.students) !== JSON.stringify(loaded.students) || Object.keys(merged.days).length !== Object.keys(loaded.days).length;
+          loaded = merged;
+          if (changed) {
+            // ซิงก์รายชื่อ/การเช็คชื่อที่ค้างอยู่ในเครื่องขึ้น Supabase
+            writeRollBook(currentUser.id, merged, row?.id || null).then(id => { if (active) setRowId(id); }).catch(() => {});
+          }
+        }
         const today = todayISO();
         setBook(loaded);
         setBaseline(loaded);
@@ -5269,10 +5624,10 @@ function StudentRollTeacher({ currentUser }) {
       setBaseline(nextBook);
       setMarks(current => ({ ...(nextBook.days[date]?.marks || {}), ...(keepMarks ? current : {}) }));
       setMessage(success);
-      try { localStorage.setItem(rollLocalKey, JSON.stringify(nextBook)); } catch { /* ignore */ }
+      try { localStorage.setItem(rollLocalKey, JSON.stringify({ ...nextBook, saved_local_at: new Date().toISOString() })); } catch { /* ignore */ }
     } catch (err) {
       let kept = false;
-      try { localStorage.setItem(rollLocalKey, JSON.stringify(nextBook)); kept = true; } catch { /* ignore */ }
+      try { localStorage.setItem(rollLocalKey, JSON.stringify({ ...nextBook, saved_local_at: new Date().toISOString() })); kept = true; } catch { /* ignore */ }
       if (kept) { setBook(nextBook); setBaseline(nextBook); }
       setError(`${err.message || "บันทึกไม่สำเร็จ"}${kept ? " · เก็บสำรองไว้ในเครื่องนี้แล้ว (localStorage)" : ""}`);
     } finally {
@@ -5298,7 +5653,7 @@ function StudentRollTeacher({ currentUser }) {
     const label = `${student.name} ${student.surname}`.trim();
     if (!window.confirm(`ลบ ${label} ออกจากรายชื่อ? (ประวัติเช็คชื่อเดิมของคนนี้จะไม่แสดงในสถิติ)`)) return;
     setMarks(current => { const next = { ...current }; delete next[student.id]; return next; });
-    persist({ ...book, students: cleanRollStudents(book.students).filter(item => item.id !== student.id) }, `ลบ ${label} แล้ว`, true);
+    persist({ ...book, removed_ids: [...new Set([...(book.removed_ids || []), student.id])].slice(-200), students: cleanRollStudents(book.students).filter(item => item.id !== student.id) }, `ลบ ${label} แล้ว`, true);
   };
 
   const rosterEditor = (
@@ -5309,16 +5664,6 @@ function StudentRollTeacher({ currentUser }) {
         <input value={newName} onChange={event => setNewName(event.target.value)} placeholder="ชื่อ นามสกุล" disabled={saving} style={{ ...inputStyle, flex: 1, minWidth: 0, fontSize: "16px" }} />
         <button type="submit" aria-label="เพิ่มนักเรียน" disabled={saving || !newName.trim()} style={{ ...btnPrimary, flex: "none", minWidth: 48, minHeight: 44, justifyContent: "center", background: "linear-gradient(135deg, #2563eb, #1d4ed8)", color: "#fff", cursor: saving || !newName.trim() ? "not-allowed" : "pointer" }}><Plus size={18} /></button>
       </form>
-      {namedStudents.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", marginTop: "0.7rem" }}>
-          {namedStudents.map(student => (
-            <span key={student.id} style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", background: "#f1f5f9", border: "1px solid #e2e8f0", borderRadius: 20, padding: "0.2rem 0.3rem 0.2rem 0.7rem", fontSize: "0.85rem", color: "#0f172a" }}>
-              {student.number}. {student.name} {student.surname}
-              <button type="button" aria-label={`ลบ ${student.name}`} onClick={() => removeStudent(student)} disabled={saving} style={{ width: 26, height: 26, border: "none", borderRadius: "50%", background: "#fee2e2", color: "#b91c1c", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}><X size={14} /></button>
-            </span>
-          ))}
-        </div>
-      )}
     </Card>
   );
 
@@ -5384,22 +5729,55 @@ function StudentRollTeacher({ currentUser }) {
                   </div>
                   {baseline.days[date]?.saved_at && <span style={{ background: "#dcfce7", color: "#166534", fontWeight: 800, fontSize: "0.75rem", borderRadius: 20, padding: "0.25rem 0.6rem" }}>บันทึกแล้ว {fmtTime(baseline.days[date].saved_at)}</span>}
                 </div>
-                <div style={{ color: "#64748b", fontSize: "0.84rem", lineHeight: 1.55 }}>กด มา หรือ ลา (เลือก ลากิจ/ป่วย) ถ้าป่วยกรอกคัดกรองอาการ</div>
+                <div style={{ color: "#64748b", fontSize: "0.84rem", lineHeight: 1.55 }}>ติ๊กช่องละ 1 อย่างต่อคน ถ้าลาป่วยจะมีช่องคัดกรองอาการให้กรอก</div>
                 <RollDateBar date={date} onChange={changeDate} />
                 <RollCountChips counts={counts} />
-                <button type="button" onClick={markAllPresent} disabled={saving} style={{ ...btnSecondary, flex: "none", minHeight: 32, padding: "0.25rem 0.7rem", fontSize: "0.8rem", width: "fit-content" }}>ติ๊กมาทั้งหมด</button>
-                <div style={{ minWidth: 0 }}>
-                  {namedStudents.map(student => (
-                    <RollMarkRow
-                      key={student.id}
-                      student={student}
-                      value={marks[student.id] || ""}
-                      disabled={saving}
-                      onChange={status => setMarks(current => ({ ...current, [student.id]: status }))}
-                      health={health[student.id]}
-                      onHealth={item => setHealth(current => ({ ...current, [student.id]: item }))}
-                    />
-                  ))}
+                <div style={{ overflowX: "auto", minWidth: 0, border: "1px solid #e2e8f0", borderRadius: 8 }}>
+                  <table style={{ width: "100%", minWidth: 380, borderCollapse: "collapse", fontSize: "0.8rem" }}>
+                    <thead>
+                      <tr style={{ background: "#f8fafc", color: "#475569" }}>
+                        <th style={rollTh}>เลขที่</th>
+                        <th style={{ ...rollTh, textAlign: "left" }}>ชื่อ-นามสกุล</th>
+                        <th style={rollTh}>
+                          <label style={{ display: "inline-flex", alignItems: "center", gap: "0.2rem", cursor: "pointer" }} title="มาทั้งหมด">
+                            <input type="checkbox" aria-label="มาทั้งหมด" disabled={saving} checked={namedStudents.length > 0 && namedStudents.every(student => marks[student.id] === "present")} onChange={event => (event.target.checked ? markAllPresent() : setMarks({}))} />มา
+                          </label>
+                        </th>
+                        <th style={rollTh}>ลากิจ</th>
+                        <th style={rollTh}>ลาป่วย</th>
+                        <th style={rollTh}>ลบ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {namedStudents.map(student => {
+                        const value = marks[student.id] || "";
+                        const tick = status => event => setMarks(current => ({ ...current, [student.id]: event.target.checked ? status : "" }));
+                        return (
+                          <Fragment key={student.id}>
+                            <tr style={{ borderTop: "1px solid #f1f5f9", background: value === "sick" ? "#eff6ff" : undefined }}>
+                              <td style={{ ...rollTd, color: "#94a3b8", fontWeight: 700 }}>{student.number}</td>
+                              <td style={{ ...rollTd, textAlign: "left", fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis" }} title={studentLabel(student)}>{studentLabel(student)}</td>
+                              {["present", "personal", "sick"].map(status => (
+                                <td key={status} style={rollTd}>
+                                  <input type="checkbox" aria-label={`${studentLabel(student)} ${labelOf(ROLL_STATUSES, status)}`} disabled={saving} checked={value === status} onChange={tick(status)} style={{ width: 16, height: 16, cursor: "pointer" }} />
+                                </td>
+                              ))}
+                              <td style={rollTd}>
+                                <button type="button" aria-label={`ลบ ${student.name}`} onClick={() => removeStudent(student)} disabled={saving} style={{ width: 22, height: 22, border: "none", borderRadius: "50%", background: "#fee2e2", color: "#b91c1c", display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}><X size={12} /></button>
+                              </td>
+                            </tr>
+                            {value === "sick" && (
+                              <tr>
+                                <td colSpan={6} style={{ padding: "0 0.3rem 0.35rem" }}>
+                                  <SickScreening value={health[student.id]} disabled={saving} onChange={item => setHealth(current => ({ ...current, [student.id]: item }))} />
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
                 <button type="button" onClick={saveMarks} disabled={saving} style={{ ...btnPrimary, flex: "none", width: "100%", minHeight: 48, background: "linear-gradient(135deg, #2563eb, #1d4ed8)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}>
                   {saving ? <RefreshCw size={16} style={{ animation: "spin 1s linear infinite" }} /> : <Save size={16} />}
@@ -7816,6 +8194,7 @@ export default function HRApp() {
               {activePage === "report" && <ReportPage employees={employees} attendance={activityLog} leaves={leaves} outings={outings} settings={settings} />}
               {activePage === "schedule" && <SchedulePage employees={employees} currentUser={actingUser} onRefresh={fetchData} />}
               {activePage === "academic" && <AcademicPage employees={employees} currentUser={actingUser} />}
+              {activePage === "activityPlan" && <ActivityPlanPage employees={employees} currentUser={actingUser} />}
               {activePage === "settings" && <SettingsPage settings={settings} onRefresh={fetchData} />}
             </>
           )}

@@ -10509,6 +10509,7 @@ export default function HRApp() {
     );
   }
 
+  const rail = !isMobile && desktopSidebarCollapsed;
   return (
     <div style={{ fontFamily: "'Anuphan', 'Sarabun', 'Noto Sans Thai', sans-serif", background: "#F3F8FD", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600;700&family=Sarabun:wght@400;600;700&display=swap'); * { box-sizing: border-box; margin: 0; padding: 0; } @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
@@ -10565,19 +10566,21 @@ export default function HRApp() {
 
       <div style={{ display: "flex", flex: 1, position: "relative" }}>
         {/* Mobile Overlay */}
+        {/* rail = desktop collapsed icon-only sidebar */}
         {isMobile && sidebarOpen && (
           <div onClick={() => setSidebarOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 90, top: 60 }} />
         )}
 
-        <aside style={{
-          width: !isMobile && desktopSidebarCollapsed ? 0 : 260,
+        <aside data-sidebar={rail ? "rail" : "full"} style={{
+          width: rail ? 72 : 260,
+          flexShrink: 0,
           background: "#fff",
-          borderRight: !isMobile && desktopSidebarCollapsed ? "none" : "1px solid #e2e8f0",
-          padding: !isMobile && desktopSidebarCollapsed ? "1rem 0" : "1rem 0.75rem",
+          borderRight: "1px solid #e2e8f0",
+          padding: rail ? "1rem 0.5rem" : "1rem 0.75rem",
           display: "flex",
           flexDirection: "column",
           gap: "0.35rem",
-          overflowY: !isMobile && desktopSidebarCollapsed ? "hidden" : "auto",
+          overflowY: "auto",
           overflowX: "hidden",
           position: isMobile ? "fixed" : "sticky",
           top: 60,
@@ -10587,10 +10590,10 @@ export default function HRApp() {
           transition: "left 0.3s ease, width 0.25s ease, padding 0.25s ease",
           boxShadow: isMobile && sidebarOpen ? "4px 0 20px rgba(0,0,0,0.15)" : "none"
         }}>
-          <div style={{ background: "linear-gradient(135deg, #008CFF, #3EBFFB)", borderRadius: "18px", padding: "0.95rem", marginBottom: "0.75rem", textAlign: "center", boxShadow: "0 8px 22px rgba(0,140,255,0.25)" }}>
+          {!rail && <div style={{ background: "linear-gradient(135deg, #008CFF, #3EBFFB)", borderRadius: "18px", padding: "0.95rem", marginBottom: "0.75rem", textAlign: "center", boxShadow: "0 8px 22px rgba(0,140,255,0.25)" }}>
             <div style={{ fontSize: "1.6rem", fontWeight: 700, color: "#fff" }}>{currentTime.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Bangkok" })}</div>
             <div style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.88)" }}>{currentTime.toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Bangkok" })}</div>
-          </div>
+          </div>}
 
           {isMobile && (
             <div style={{ background: "#f8fafc", borderRadius: "10px", padding: "0.65rem", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -10602,12 +10605,12 @@ export default function HRApp() {
             </div>
           )}
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", marginBottom: "1rem" }}>
-            <button onClick={() => { openCheckIn(); setSidebarOpen(false); }} style={{ background: "linear-gradient(135deg, #008CFF, #0072D9)", border: "none", borderRadius: "12px", padding: "0.85rem 0.5rem", color: "#fff", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.35rem", boxShadow: "0 4px 14px rgba(0,140,255,0.3)", fontFamily: "inherit" }}>
-              <LogIn size={20} /> เข้างาน
+          <div style={{ display: "grid", gridTemplateColumns: rail ? "1fr" : "1fr 1fr", gap: "0.5rem", marginBottom: "1rem" }}>
+            <button title="เข้างาน" aria-label="เข้างาน" onClick={() => { openCheckIn(); setSidebarOpen(false); }} style={{ background: "linear-gradient(135deg, #008CFF, #0072D9)", border: "none", borderRadius: "12px", padding: "0.85rem 0.5rem", color: "#fff", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.35rem", boxShadow: "0 4px 14px rgba(0,140,255,0.3)", fontFamily: "inherit" }}>
+              <LogIn size={20} /> {!rail && "เข้างาน"}
             </button>
-            <button onClick={() => { openCheckOut(); setSidebarOpen(false); }} style={{ background: "linear-gradient(90deg, #FF7106, #FF9A3C)", border: "none", borderRadius: "14px", padding: "0.85rem 0.5rem", color: "#fff", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.35rem", boxShadow: "0 4px 14px rgba(255,113,6,0.3)", fontFamily: "inherit" }}>
-              <LogOut size={20} /> กลับบ้าน
+            <button title="กลับบ้าน" aria-label="กลับบ้าน" onClick={() => { openCheckOut(); setSidebarOpen(false); }} style={{ background: "linear-gradient(90deg, #FF7106, #FF9A3C)", border: "none", borderRadius: "14px", padding: "0.85rem 0.5rem", color: "#fff", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.35rem", boxShadow: "0 4px 14px rgba(255,113,6,0.3)", fontFamily: "inherit" }}>
+              <LogOut size={20} /> {!rail && "กลับบ้าน"}
             </button>
           </div>
 
@@ -10615,12 +10618,13 @@ export default function HRApp() {
             const Icon = item.icon;
             const isActive = activePage === item.key;
             return (
-              <button key={item.key} onClick={() => openNavItem(item.key)} style={{
+              <button key={item.key} title={rail ? item.label : undefined} aria-label={item.label} onClick={() => openNavItem(item.key)} style={{
                 width: "100%",
                 display: "flex",
                 alignItems: "center",
+                justifyContent: rail ? "center" : "flex-start",
                 gap: "0.75rem",
-                padding: "0.85rem 0.85rem",
+                padding: rail ? "0.85rem 0" : "0.85rem 0.85rem",
                 borderRadius: "12px",
                 border: "none",
                 background: isActive ? "linear-gradient(90deg, #008CFF, #3EBFFB)" : "transparent",
@@ -10638,8 +10642,8 @@ export default function HRApp() {
                 onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = "transparent"; }}
               >
                 <Icon size={20} />
-                <span style={{ flex: 1 }}>{item.label}</span>
-                {isActive && <ChevronRight size={16} />}
+                {!rail && <span style={{ flex: 1 }}>{item.label}</span>}
+                {!rail && isActive && <ChevronRight size={16} />}
               </button>
             );
           })}

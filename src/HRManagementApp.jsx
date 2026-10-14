@@ -2658,8 +2658,18 @@ function bangkokDateTimeKey(iso) {
   return `${pick("year")}-${pick("month")}-${pick("day")}T${pick("hour")}:${pick("minute")}:${pick("second")}`;
 }
 
+// กำหนดส่งแผนรายสัปดาห์: วันศุกร์ก่อนสัปดาห์สอน เวลา 17:00 (เวลาไทย)
+const SUPERVISION_DEADLINE_TIME = "17:00";
+function supervisionDeadlineDate(weekStart) {
+  return shiftDateKey(weekStart, -3);
+}
+
 function supervisionDeadlineStamp(weekStart) {
-  return `${shiftDateKey(weekStart, -1)}T15:00:00`;
+  return `${supervisionDeadlineDate(weekStart)}T${SUPERVISION_DEADLINE_TIME}:00`;
+}
+
+function supervisionDeadlineText(weekStart) {
+  return `ส่งไม่เกิน ${formatThaiDateKey(supervisionDeadlineDate(weekStart))} เวลา ${SUPERVISION_DEADLINE_TIME} น.`;
 }
 
 function resolveSubmission(nextStatus, previousStatus, previousSubmittedAt, previousLate, weekStart) {
@@ -3128,10 +3138,7 @@ const POST_NOTE_TEXTS = [
 
 function emptyPostNote() {
   return {
-    total: "",
-    k: { pass: "", fail: "" },
-    p: { pass: "", fail: "" },
-    a: { pass: "", fail: "" },
+    kpa_text: "",
     problems: "",
     solutions: "",
     suggestions: "",
@@ -3152,19 +3159,33 @@ function cleanPostNote(raw) {
   const base = emptyPostNote();
   if (!raw || typeof raw !== "object") return base;
   const text = (value, max = 2000) => String(value || "").slice(0, max);
-  const out = { ...base, total: countText(raw.total) };
-  POST_NOTE_DOMAINS.forEach(({ key }) => {
-    out[key] = { pass: countText(raw[key]?.pass), fail: countText(raw[key]?.fail) };
-  });
+  const out = { ...base, kpa_text: typeof raw.kpa_text === "string" ? text(raw.kpa_text, 4000) : legacyKpaText(raw) };
   ["problems", "solutions", "suggestions", "admin_comment"].forEach(key => { out[key] = text(raw[key]); });
   ["teacher_sign", "admin_sign"].forEach(key => { out[key] = text(raw[key], 120); });
   ["teacher_date", "admin_date"].forEach(key => { out[key] = /^\d{4}-\d{2}-\d{2}$/.test(raw[key] || "") ? raw[key] : ""; });
   return out;
 }
 
+// บันทึกเก่าที่เคยกรอกเป็นตัวเลข ผ่าน/ไม่ผ่าน → แปลงเป็นข้อความเพื่อให้ยังอ่านได้
+function legacyKpaText(raw) {
+  if (!raw || typeof raw !== "object") return "";
+  const total = countText(raw.total);
+  const lines = [];
+  if (total) lines.push(`นักเรียนทั้งหมด ${total} คน`);
+  POST_NOTE_DOMAINS.forEach(({ key, label }) => {
+    const pass = countText(raw[key]?.pass);
+    const fail = countText(raw[key]?.fail);
+    if (!pass && !fail) return;
+    const pct = count => postNotePercent(count, total) ? ` (${postNotePercent(count, total)})` : "";
+    lines.push(`${label}: ผ่าน ${pass || "-"} คน${pct(pass)} · ไม่ผ่าน ${fail || "-"} คน${pct(fail)}`);
+  });
+  return lines.join("\n");
+}
+
 function postNoteHasData(note) {
   if (!note) return false;
-  return !!(note.total || POST_NOTE_DOMAINS.some(({ key }) => note[key]?.pass || note[key]?.fail)
+  const kpa = typeof note.kpa_text === "string" ? note.kpa_text : legacyKpaText(note);
+  return !!(String(kpa || "").trim()
     || ["problems", "solutions", "suggestions", "teacher_sign", "admin_comment"].some(key => String(note[key] || "").trim()));
 }
 
@@ -3287,26 +3308,11 @@ function YoutubeLinksEditor({ links, disabled, onChange }) {
 function PostNoteEditor({ note, disabled, teacherName, onChange }) {
   const value = cleanPostNote(note);
   const set = patch => onChange({ ...value, ...patch });
-  const setDomain = (key, field, raw) => set({ [key]: { ...value[key], [field]: countText(raw) } });
   return (
     <div style={{ display: "grid", gap: "0.75rem" }}>
-      <div style={{ fontWeight: 800, color: "#233862" }}>1. ผลการจัดการเรียนรู้</div>
-      <Field label="จำนวนนักเรียนทั้งหมด (คน)">
-        <input inputMode="numeric" value={value.total} disabled={disabled} onChange={event => set({ total: countText(event.target.value) })} style={{ ...periodInput, maxWidth: 160 }} />
+      <Field label="1. ผลการจัดกิจกรรมการเรียนรู้ (K/P/A)">
+        <textarea value={value.kpa_text} disabled={disabled} placeholder={"K (ความรู้): เช่น นักเรียน 26 จาก 30 คน อธิบายหลักการ... ได้ถูกต้อง\nP (ทักษะกระบวนการ): เช่น ทำการทดลอง บันทึกผลได้...\nA (คุณลักษณะ): เช่น ตั้งใจ ทำงานร่วมกับผู้อื่น..."} onChange={event => set({ kpa_text: event.target.value })} style={{ ...periodArea, minHeight: 120 }} />
       </Field>
-      {POST_NOTE_DOMAINS.map(({ key, label }) => (
-        <div key={key} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.6rem 0.75rem", display: "grid", gap: "0.5rem" }}>
-          <div style={{ fontWeight: 700, color: "#334155" }}>{label}</div>
-          <div style={periodGrid}>
-            <Field label={`ผ่านเกณฑ์ (คน) ${postNotePercent(value[key].pass, value.total) && `· ${postNotePercent(value[key].pass, value.total)}`}`}>
-              <input inputMode="numeric" value={value[key].pass} disabled={disabled} onChange={event => setDomain(key, "pass", event.target.value)} style={periodInput} />
-            </Field>
-            <Field label={`ไม่ผ่านเกณฑ์ (คน) ${postNotePercent(value[key].fail, value.total) && `· ${postNotePercent(value[key].fail, value.total)}`}`}>
-              <input inputMode="numeric" value={value[key].fail} disabled={disabled} onChange={event => setDomain(key, "fail", event.target.value)} style={periodInput} />
-            </Field>
-          </div>
-        </div>
-      ))}
       {POST_NOTE_TEXTS.map(({ key, label }) => (
         <Field key={key} label={label}>
           <textarea value={value[key]} disabled={disabled} onChange={event => set({ [key]: event.target.value })} style={periodArea} />
@@ -3340,12 +3346,7 @@ function PostNoteRead({ note }) {
   if (!postNoteHasData(value)) return <div style={{ color: "#94a3b8" }}>ยังไม่ได้บันทึกหลังสอน</div>;
   return (
     <div style={{ display: "grid", gap: "0.45rem" }}>
-      <div style={{ fontWeight: 800, color: "#233862" }}>1. ผลการจัดการเรียนรู้ {value.total ? `(นักเรียน ${value.total} คน)` : ""}</div>
-      {POST_NOTE_DOMAINS.map(({ key, label }) => (
-        <div key={key} style={{ color: "#233862", fontSize: "0.92rem" }}>
-          {label}: ผ่าน {value[key].pass || "-"} คน {postNotePercent(value[key].pass, value.total) && `(${postNotePercent(value[key].pass, value.total)})`} · ไม่ผ่าน {value[key].fail || "-"} คน {postNotePercent(value[key].fail, value.total) && `(${postNotePercent(value[key].fail, value.total)})`}
-        </div>
-      ))}
+      <div><div style={{ fontWeight: 800, color: "#233862" }}>1. ผลการจัดกิจกรรมการเรียนรู้ (K/P/A)</div><FullText value={value.kpa_text} /></div>
       {POST_NOTE_TEXTS.map(({ key, label }) => (
         <div key={key}><div style={{ fontWeight: 800, color: "#233862" }}>{label}</div><FullText value={value[key]} /></div>
       ))}
@@ -3859,7 +3860,8 @@ function KindergartenSupervisionTeacher({ currentUser }) {
   const savePlan = async (nextStatus) => {
     const alreadySent = status === "submitted" || status === "late";
     const effective = alreadySent ? "submitted" : nextStatus;
-    if (effective === "submitted") {
+    // ส่งแล้วแก้ไขได้ตลอด: ไม่บังคับตรวจความครบซ้ำ และคงเวลาส่งครั้งแรก/สถานะสายเดิม
+    if (effective === "submitted" && !alreadySent) {
       if (!unit.trim() || !room.trim()) {
         setError("ส่งได้เมื่อกรอกหน่วยประจำสัปดาห์และห้อง");
         return;
@@ -3962,7 +3964,7 @@ function KindergartenSupervisionTeacher({ currentUser }) {
             <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center", flexWrap: "wrap", marginBottom: "0.9rem" }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#233862" }}>แผนอนุบาลของ {currentUser.name}</div>
-                <div style={{ fontSize: "0.8rem", color: "#b45309", fontWeight: 700, marginTop: "0.25rem" }}>ส่งไม่เกิน {formatThaiDateKey(shiftDateKey(weekStart, -1))} เวลา 15:00</div>
+                <div style={{ fontSize: "0.8rem", color: "#b45309", fontWeight: 700, marginTop: "0.25rem" }}>{supervisionDeadlineText(weekStart)} · แก้ไขได้ตลอด สถานะยึดเวลาส่งครั้งแรก</div>
               </div>
               <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
                 <SupervisionStatusBadge status={status === "submitted" && late ? "late" : (status || "missing")} />
@@ -4138,7 +4140,8 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
     const effective = alreadySent ? "submitted" : nextStatus;
     const filled = periods.filter(period => !periodIsBlank(period));
     const taught = filled.filter(period => !period.free);
-    if (effective === "submitted") {
+    // ส่งแล้วแก้ไขได้ตลอด: ไม่บังคับตรวจความครบซ้ำ และคงเวลาส่งครั้งแรก/สถานะสายเดิม
+    if (effective === "submitted" && !alreadySent) {
       const missingDays = weekDates(weekStart).flatMap((date, index) => (
         periods.some(period => period.teach_date === date && periodIsBlank(period)) ? [`วัน${DAY_NAMES[index + 1]}`] : []
       ));
@@ -4299,7 +4302,7 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
             <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center", flexWrap: "wrap", marginBottom: "0.9rem" }}>
               <div>
                 <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#233862" }}>แผนสัปดาห์ของ {currentUser.name}</div>
-                <div style={{ fontSize: "0.8rem", color: "#b45309", fontWeight: 700, marginTop: "0.25rem" }}>ส่งไม่เกิน {formatThaiDateKey(shiftDateKey(weekStart, -1))} เวลา 15:00</div>
+                <div style={{ fontSize: "0.8rem", color: "#b45309", fontWeight: 700, marginTop: "0.25rem" }}>{supervisionDeadlineText(weekStart)} · แก้ไขได้ตลอด สถานะยึดเวลาส่งครั้งแรก</div>
               </div>
               <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
                 <SupervisionStatusBadge status={status === "submitted" && late ? "late" : (status || "missing")} />
@@ -4526,10 +4529,10 @@ function SupervisionAdmin({ employees, currentUser }) {
       <WeekSwitcher weekStart={weekStart} onChange={setWeekStart} />
       {error && <ErrorBox>{error}</ErrorBox>}
       {reviewMessage && <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", borderRadius: "10px", padding: "0.75rem 1rem", color: "#166534", fontWeight: 700 }}>{reviewMessage}</div>}
-      <div style={{ fontSize: "0.8rem", color: "#64748b" }}>เขียว = ส่งตรงเวลา · เหลือง = สาย · แดง = ยังไม่ส่งหรือฉบับร่าง · ส่งไม่เกินวันอาทิตย์ก่อนสัปดาห์ เวลา 15:00</div>
+      <div style={{ fontSize: "0.8rem", color: "#64748b" }}>เขียว = ส่งตรงเวลา · เหลือง = สาย · แดง = ยังไม่ส่งหรือฉบับร่าง · ส่งไม่เกินวันศุกร์ก่อนสัปดาห์สอน เวลา 17:00 (ยึดเวลาส่งครั้งแรก)</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.75rem" }}>
         <StatCard stat={{ label: "ส่งแล้ว", value: loading ? "..." : counts.submitted, icon: CheckCircle, color: "#16a34a", bg: "#ecfdf5", trend: "สัปดาห์นี้" }} />
-        <StatCard stat={{ label: "สาย", value: loading ? "..." : counts.late, icon: Clock, color: "#d97706", bg: "#fffbeb", trend: "หลังวันอาทิตย์ 15:00" }} />
+        <StatCard stat={{ label: "สาย", value: loading ? "..." : counts.late, icon: Clock, color: "#d97706", bg: "#fffbeb", trend: "หลังวันศุกร์ 17:00" }} />
         <StatCard stat={{ label: "ยังไม่ส่ง", value: loading ? "..." : counts.missing, icon: AlertCircle, color: "#dc2626", bg: "#fef2f2", trend: "รวมฉบับร่าง" }} />
       </div>
 
@@ -5889,14 +5892,15 @@ function computeAutoEntries(teacherId, sources, range, settings) {
       add("no_checkin", date, "ไม่ลงเวลาเข้า (ไม่มีวันลาที่อนุมัติ)");
     }
   });
-  // แผนรายสัปดาห์ (ครบกำหนดวันอาทิตย์ก่อนสัปดาห์)
+  // แผนรายสัปดาห์ (ครบกำหนดวันศุกร์ก่อนสัปดาห์สอน 17:00; นับเฉพาะสัปดาห์ที่เลยกำหนดแล้ว)
+  const nowStamp = bangkokDateTimeKey(new Date().toISOString());
   const latest = new Map();
   sources.plans.filter(row => String(row.employee_id) === id).forEach(row => {
     const current = latest.get(row.period);
     if (!current || String(row.created_at || "") > String(current.created_at || "")) latest.set(row.period, row);
   });
   const taught = [];
-  for (let monday = mondayOf(range.start); monday <= range.end && shiftDateKey(monday, -1) < today; monday = shiftDateKey(monday, 7)) {
+  for (let monday = mondayOf(range.start); monday <= range.end && supervisionDeadlineStamp(monday) < nowStamp; monday = shiftDateKey(monday, 7)) {
     const row = latest.get(weekPeriodKey(monday));
     const plan = row ? parseSupervisionPlan(row.subject, monday) : null;
     const status = row ? supervisionStatusFromStartTime(row.start_time) : "missing";

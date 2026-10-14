@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useCallback, useRef, Fragment } from "react";
-import { THAI_P2_PLAN_PACK } from "./lessonPlanCatalog.js";
+// lessonPlanCatalog.js (หน่วย/แผนสำเร็จรูป ภาษาไทย ป.2) ไม่ได้ใช้แล้ว ครูกรอกหน่วยการเรียนรู้เอง
 import { AcademicExtra, ACADEMIC_EXTRA_TABS, ACADEMIC_RECORD_ROOM, TEACHING_GRADE_GROUPS, loadAssignedPlanLevels, loadTeachingGrades, saveTeachingGrade } from "./academicRecords.jsx";
 import { read as readWorkbook, utils as xlsxUtils, writeFile as writeWorkbookFile } from "xlsx";
 import { supabase } from "./supabase.js";
@@ -2541,6 +2541,7 @@ function emptyWeekPeriod(teachDate, periodNo) {
     period_no: periodNo,
     free: false,
     plan_unit: "",
+    plan_title: "",
     plan_id: "",
     plan_hour: "",
     lesson_page: "",
@@ -2576,6 +2577,7 @@ function normalizeSupervisionPeriod(period, weekStart) {
     period_no: periodNo,
     free: !!source.free,
     plan_unit: source.plan_unit || "",
+    plan_title: source.plan_title || "",
     plan_id: source.plan_id || "",
     plan_hour: source.plan_hour ? String(source.plan_hour) : "",
     lesson_page: source.lesson_page || "",
@@ -3279,6 +3281,7 @@ function periodHasDetail(period) {
     || (period?.youtube_links || []).some(link => String(link || "").trim())
     || postNoteHasData(period?.post_note)
     || String(period?.plan_unit || "").trim()
+    || String(period?.plan_title || "").trim()
     || String(period?.plan_id || "").trim()
     || String(period?.plan_hour || "").trim()
     || String(period?.lesson_page || "").trim());
@@ -3288,36 +3291,15 @@ function periodIsBlank(period) {
   return !period?.free && !periodHasDetail(period);
 }
 
+// หน่วย/แผน เป็นข้อความที่ครูกรอกเอง (ไม่มีรายการสำเร็จรูปแล้ว)
 function selectedPlanParts(period) {
-  const pack = THAI_P2_PLAN_PACK;
-  const unit = pack.units.find(item => item.name === period?.plan_unit);
-  const plan = unit?.plans.find(item => item.id === period?.plan_id);
-  const hour = plan?.periods.find(item => String(item.hour) === String(period?.plan_hour || ""));
-  return { pack, unit, plan, hour };
-}
-
-function planChoicePatch(period, patch) {
-  if (patch.plan_unit !== undefined && patch.plan_unit !== period.plan_unit) {
-    return { plan_unit: patch.plan_unit, plan_id: "", plan_hour: "", lesson_page: "" };
-  }
-  if (patch.plan_id !== undefined && patch.plan_id !== period.plan_id) {
-    const pack = THAI_P2_PLAN_PACK;
-    return {
-      plan_id: patch.plan_id,
-      plan_hour: "",
-      lesson_page: "",
-      subject: patch.plan_id && !String(period.subject || "").trim() ? pack.subject : period.subject,
-    };
-  }
-  if (patch.plan_hour !== undefined && patch.plan_hour !== String(period.plan_hour || "")) {
-    const hour = selectedPlanParts({ ...period, plan_hour: patch.plan_hour }).hour;
-    return { plan_hour: patch.plan_hour, lesson_page: hour ? (hour.pages || []).join(", ") : "" };
-  }
-  return patch;
+  const unitText = String(period?.plan_unit || "").trim();
+  const planText = String(period?.plan_title || "").trim();
+  return { unit: unitText ? { name: unitText } : null, plan: planText ? { title: planText } : null, hour: null };
 }
 
 function periodFoldSummary(period, plan) {
-  const planLabel = plan ? `แผน ${plan.plan_no} ${plan.title}` : "";
+  const planLabel = plan ? plan.title : "";
   const detail = String(period?.subject || "").trim() || planLabel;
   if (period?.free && detail) return `คาบว่าง · ${detail}`;
   if (period?.free) return "คาบว่าง";
@@ -3358,8 +3340,7 @@ function DayCard({ title, summary, children }) {
 
 function WeekPeriodEditor({ period, disabled, onChange, onPickFile, onPickWorksheet, worksheetBusy, teacherName }) {
   const [open, setOpen] = useState(false);
-  const { pack, unit, plan } = selectedPlanParts(period);
-  const choose = patch => onChange(planChoicePatch(period, patch));
+  const { plan } = selectedPlanParts(period);
   const summary = periodFoldSummary(period, plan);
   return (
     <div style={{ border: "1px solid #e2e8f0", borderRadius: "12px", padding: open ? "0.75rem" : "0.35rem 0.5rem", display: "grid", gap: "0.75rem", minWidth: 0 }}>
@@ -3379,29 +3360,16 @@ function WeekPeriodEditor({ period, disabled, onChange, onPickFile, onPickWorksh
       {open && (
       <>
       <div style={periodGrid}>
-        <Field label="หน่วย">
-          <select value={period.plan_unit || ""} disabled={disabled} onChange={event => choose({ plan_unit: event.target.value })} style={periodSelect}>
-            <option value="">ไม่ใช้แผนในระบบ</option>
-            {pack.units.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}
-          </select>
+        <Field label="หน่วยการเรียนรู้">
+          <input value={period.plan_unit || ""} disabled={disabled} placeholder="เช่น หน่วยที่ 1 ..." onChange={event => onChange({ plan_unit: event.target.value })} style={periodInput} />
         </Field>
-        <Field label="แผน">
-          <select value={plan?.id || ""} disabled={disabled || !unit} onChange={event => choose({ plan_id: event.target.value })} style={periodSelect}>
-            <option value="">ไม่เลือกแผน</option>
-            {(unit?.plans || []).map(item => <option key={item.id} value={item.id}>แผน {item.plan_no} {item.title}</option>)}
-          </select>
-        </Field>
-        <Field label="เรื่อง">
-          <select value={period.plan_hour || ""} disabled={disabled || !plan} onChange={event => choose({ plan_hour: event.target.value })} style={periodSelect}>
-            <option value="">ไม่เลือกเรื่อง</option>
-            {(plan?.periods || []).map(item => <option key={item.hour} value={String(item.hour)}>ชั่วโมงที่ {item.hour}</option>)}
-          </select>
+        <Field label="แผน/เรื่อง">
+          <input value={period.plan_title || ""} disabled={disabled} placeholder="ชื่อแผนหรือเรื่องที่สอน" onChange={event => onChange({ plan_title: event.target.value })} style={periodInput} />
         </Field>
         <Field label="หน้า">
           <input value={period.lesson_page || ""} disabled={disabled} onChange={event => onChange({ lesson_page: event.target.value })} style={periodInput} />
         </Field>
       </div>
-      {plan?.objectives?.length > 0 && <div style={{ fontSize: "0.8rem", color: "#64748b", lineHeight: 1.5 }}>จุดประสงค์: {plan.objectives.join(" · ")}</div>}
       <div style={periodGrid}>
         <Field label="เวลาเริ่ม">
           <input type="time" value={period.start_time || ""} onChange={event => onChange({ start_time: event.target.value })} style={periodInput} />
@@ -3489,7 +3457,7 @@ function WeekPeriodEditor({ period, disabled, onChange, onPickFile, onPickWorksh
 function SupervisionPeriodRead({ period, defaultOpen = false, adminSlot = null }) {
   const [open, setOpen] = useState(defaultOpen);
   const choice = selectedPlanParts(period);
-  const planLabel = choice.plan ? `แผน ${choice.plan.plan_no} ${choice.plan.title}` : "";
+  const planLabel = choice.plan ? choice.plan.title : "";
   const topicLabel = choice.hour ? `ชั่วโมงที่ ${choice.hour.hour}` : "";
   const summary = periodFoldSummary(period, choice.plan);
   if (!period.free && !periodHasDetail(period)) {

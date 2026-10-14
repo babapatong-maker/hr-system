@@ -662,6 +662,20 @@ function normalizePersonName(name) {
   return String(name || "").normalize("NFC").trim().replace(/^(นางสาว|นาง|นาย|น\.ส\.|ครู|ดร\.)\s*/, "").replace(/\s+/g, "");
 }
 const EXECUTIVE_ALLOWLIST_NAMES = new Set(["ศศิธร มีสมสืบ", "เรณู เล็กดี", "ศักดิ์ศิริ มีสมสืบ"].map(normalizePersonName));
+// บัญชีทดสอบ "ครูทดลองระบบ" (username teacher.try) ใช้/เห็นได้เฉพาะ นายศักดิ์ศิริ มีสมสืบ และผู้ใช้ role admin
+const TEST_TEACHER_OWNER_IDS = new Set(["1c21605d-3404-4424-a640-d2eb25361c19"]);
+const TEST_TEACHER_OWNER_NAMES = new Set([normalizePersonName("ศักดิ์ศิริ มีสมสืบ")]);
+function isTestTeacherOwner(user) {
+  if (!user) return false;
+  if (user.role === "admin") return true;
+  return TEST_TEACHER_OWNER_IDS.has(String(user.id || "")) || TEST_TEACHER_OWNER_NAMES.has(normalizePersonName(user.name));
+}
+function isTestTeacher(emp) {
+  if (!emp) return false;
+  const raw = String(emp.name || "").normalize("NFC").replace(/\s+/g, "");
+  return String(emp.username || "").toLowerCase() === "teacher.try" || raw.includes("ครูทดลองระบบ") || normalizePersonName(emp.name) === "ทดลองระบบ";
+}
+
 function isExecutiveUser(user) {
   if (!user) return false;
   if (user.role === "admin") return true;
@@ -672,7 +686,7 @@ function isExecutiveUser(user) {
 
 function canAccessNavItem(item, user) {
   if (!item || !user) return false;
-  if (item.key === "teacherEval" || item.key === "execDash") return isExecutiveUser(user);
+  if (item.key === "teacherEval" || item.key === "execDash" || item.key === "cleaningDuty") return isExecutiveUser(user);
   return item.roles.includes(user.role === "admin" ? "admin" : "employee");
 }
 
@@ -689,6 +703,7 @@ const navItems = [
   { icon: BookOpen, label: "งานวิชาการ", key: "academic", roles: ["admin", "employee"] },
   { icon: FileText, label: "แผนการจัดกิจกรรม", key: "activityPlan", roles: ["admin", "employee"] },
   { icon: TrendingUp, label: "ประเมินครู", key: "teacherEval", roles: ["admin"], executiveOnly: true },
+  { icon: CheckCircle, label: "เวรความสะอาด / เวรพื้นที่", key: "cleaningDuty", roles: ["admin"], executiveOnly: true },
   { icon: Umbrella, label: "การลา", key: "leave", roles: ["admin", "employee"] },
   { icon: ArrowRightLeft, label: "ขอออกนอกสถานที่", key: "outing", roles: ["admin", "employee"] },
   { icon: DollarSign, label: "เงินเดือน", key: "finance", roles: ["admin"] },
@@ -900,7 +915,6 @@ function LoginPage({ onLogin }) {
 
         <div style={{ marginTop: "1.5rem", padding: "0.75rem", background: "#EAF5FF", borderRadius: "10px", fontSize: "0.78rem", color: "#0072D9", textAlign: "center" }}>
           💡 ทดสอบ: username <strong>admin1</strong> / password <strong>admin123</strong>
-          {isLocalPreview() && <div style={{ marginTop: "0.35rem" }}>ครูทดลอง: <strong>teacher.try</strong> / <strong>try1234</strong></div>}
         </div>
       </div>
       </div>
@@ -2542,6 +2556,7 @@ function emptyWeekPeriod(teachDate, periodNo) {
     free: false,
     plan_unit: "",
     plan_title: "",
+    plan_class: "",
     plan_id: "",
     plan_hour: "",
     lesson_page: "",
@@ -2578,6 +2593,7 @@ function normalizeSupervisionPeriod(period, weekStart) {
     free: !!source.free,
     plan_unit: source.plan_unit || "",
     plan_title: source.plan_title || "",
+    plan_class: source.plan_class || "",
     plan_id: source.plan_id || "",
     plan_hour: source.plan_hour ? String(source.plan_hour) : "",
     lesson_page: source.lesson_page || "",
@@ -2785,93 +2801,175 @@ async function writeSupervisionPlan(employeeId, dateKey, plan, existingId, dayOf
 }
 
 // ─── SCHEDULE PAGE ────────────────────────────────────────────────────────────
-function SchedulePage({ employees, currentUser, onRefresh }) {
-  const [schedules, setSchedules] = useState([]);
-  const [showAdd, setShowAdd] = useState(false);
-  const [empView, setEmpView] = useState(currentUser?.role === "admin" ? "" : currentUser?.id);
+// ─── ตารางสอนรายสัปดาห์ (ครูกรอกเอง · ผู้บริหาร/แอดมินดูได้ทั้งหมด) ───────────────
+const TIMETABLE_SPECIAL_ROOMS = [SUPERVISION_SCHEDULE_ROOM, STUDENT_ROLL_ROOM, ACADEMIC_RECORD_ROOM, ACTIVITY_PLAN_ROOM, "__TEACHER_EVAL__", "__CLEANING_DUTY__"];
+const TIMETABLE_PERIODS = [1, 2, 3, 4, 5, 6, 7, 8];
+const TIMETABLE_DEFAULT_TIMES = [["08:30", "09:20"], ["09:20", "10:10"], ["10:20", "11:10"], ["11:10", "12:00"], ["13:00", "13:50"], ["13:50", "14:40"], ["14:40", "15:30"], ["15:30", "16:20"]];
+const isTimetableRow = row => row && row.day_of_week >= 1 && row.day_of_week <= 5 && !String(row.class_room || "").startsWith("__") && !TIMETABLE_SPECIAL_ROOMS.includes(row.class_room);
 
-  const loadSchedules = async () => {
-    const { data } = await supabase
-      .from("teaching_schedule")
-      .select("*, employees(name, department)")
-      .or(`class_room.is.null,and(class_room.neq.${SUPERVISION_SCHEDULE_ROOM},class_room.neq.${STUDENT_ROLL_ROOM},class_room.neq.${ACADEMIC_RECORD_ROOM},class_room.neq.${ACTIVITY_PLAN_ROOM},class_room.neq.__TEACHER_EVAL__)`)
-      .order("day_of_week")
-      .order("period");
-    setSchedules((data || []).filter(row => row.class_room !== SUPERVISION_SCHEDULE_ROOM && row.class_room !== STUDENT_ROLL_ROOM && row.class_room !== ACADEMIC_RECORD_ROOM && row.class_room !== ACTIVITY_PLAN_ROOM && row.class_room !== "__TEACHER_EVAL__"));
+async function fetchTimetableRows(employeeId = null) {
+  let query = supabase.from("teaching_schedule").select("id, employee_id, day_of_week, period, subject, class_room, start_time, end_time").gte("day_of_week", 1).lte("day_of_week", 5).order("day_of_week").order("period");
+  if (employeeId) query = query.eq("employee_id", employeeId);
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return (data || []).filter(isTimetableRow);
+}
+
+function timetableSlotLabel(row) {
+  return [row?.subject, row?.class_room].filter(text => String(text || "").trim()).join(" · ");
+}
+
+function SchedulePage({ employees, currentUser, onOpenPlan }) {
+  const canViewAll = currentUser?.role === "admin" || isExecutiveUser(currentUser);
+  const [viewId, setViewId] = useState(String(currentUser?.id || ""));
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [viewPlan, setViewPlan] = useState(null);
+  const isMine = String(viewId) === String(currentUser?.id);
+  const todayDow = new Date(`${todayISO()}T00:00:00`).getDay();
+  const weekStart = mondayOf(todayISO());
+
+  const load = async () => {
+    try {
+      setRows(await fetchTimetableRows(canViewAll ? null : currentUser.id));
+      setError("");
+    } catch (err) {
+      setRows([]);
+      setError(`โหลดตารางสอนไม่สำเร็จ: ${err.message}`);
+    }
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [currentUser?.id]);
+
+  const mine = (rows || []).filter(row => String(row.employee_id) === String(viewId));
+  const cellRows = (day, period) => mine.filter(row => row.day_of_week === day && Number(row.period) === period);
+  const maxPeriod = Math.max(6, ...mine.map(row => Number(row.period) || 0));
+  const periods = TIMETABLE_PERIODS.filter(no => no <= Math.max(maxPeriod, 6));
+  const nameOf = id => (employees || []).find(emp => String(emp.id) === String(id))?.name || "-";
+  const viewer = (employees || []).find(emp => String(emp.id) === String(viewId)) || (isMine ? currentUser : null);
+
+  const startEdit = (day, period) => {
+    if (!isMine) return;
+    const row = cellRows(day, period)[0];
+    const [start, end] = TIMETABLE_DEFAULT_TIMES[period - 1] || ["", ""];
+    setEditing({ id: row?.id || null, day, period, subject: row?.subject || "", class_room: row?.class_room || "", start_time: String(row?.start_time || start).slice(0, 5), end_time: String(row?.end_time || end).slice(0, 5) });
+    setMessage("");
   };
 
-  useEffect(() => {
-    loadSchedules();
-  }, []);
-
-  const refresh = loadSchedules;
-
-  const filtered = empView ? schedules.filter(s => s.employee_id === empView) : schedules;
-  const today = new Date().getDay(); // 0=อาทิตย์, 1=จันทร์,...
-
-  const handleDelete = async (id) => {
-    if (!window.confirm("ลบรายการนี้?")) return;
-    await supabase.from("teaching_schedule").delete().eq("id", id);
-    refresh();
+  const saveEdit = async () => {
+    if (!editing.subject.trim()) { setError("กรุณากรอกวิชา"); return; }
+    if (editing.class_room.trim().startsWith("__")) { setError("ชื่อห้องห้ามขึ้นต้นด้วย __"); return; }
+    setSaving(true);
+    const payload = { employee_id: currentUser.id, day_of_week: editing.day, period: editing.period, subject: editing.subject.trim(), class_room: editing.class_room.trim() || null, start_time: editing.start_time ? `${editing.start_time}:00` : "00:00:00", end_time: editing.end_time ? `${editing.end_time}:00` : null };
+    const result = editing.id
+      ? await supabase.from("teaching_schedule").update(payload).eq("id", editing.id).select("id").single()
+      : await supabase.from("teaching_schedule").insert(payload).select("id").single();
+    setSaving(false);
+    if (result.error) { setError(`บันทึกไม่สำเร็จ: ${result.error.message}`); return; }
+    const saved = { ...payload, id: result.data.id };
+    setRows(current => [...(current || []).filter(row => row.id !== editing.id), saved]);
+    setMessage(`บันทึกวัน${DAY_NAMES[editing.day]} คาบ ${editing.period} แล้ว`);
+    setError("");
+    setEditing(null);
   };
+
+  const removeEdit = async () => {
+    if (!editing?.id || !window.confirm(`ลบวัน${DAY_NAMES[editing.day]} คาบ ${editing.period} ออกจากตารางสอน?`)) return;
+    setSaving(true);
+    const { error: delError } = await supabase.from("teaching_schedule").delete().eq("id", editing.id).eq("employee_id", currentUser.id);
+    setSaving(false);
+    if (delError) { setError(`ลบไม่สำเร็จ: ${delError.message}`); return; }
+    setRows(current => (current || []).filter(row => row.id !== editing.id));
+    setMessage("ลบคาบแล้ว");
+    setEditing(null);
+  };
+
+  const openPlan = (day, period) => {
+    const date = shiftDateKey(weekStart, day - 1);
+    if (isMine) onOpenPlan?.({ date, period });
+    else setViewPlan({ emp: viewer || { id: viewId, name: nameOf(viewId) }, focus: { date, period } });
+  };
+
+  const th = { padding: "0.45rem 0.4rem", fontSize: "0.8rem", fontWeight: 800, color: "#233862", background: "#F3F8FD", borderBottom: "1px solid #E4EEF8", textAlign: "center", whiteSpace: "nowrap" };
+  const small = { ...inputStyle, padding: "0.4rem 0.55rem", fontSize: "0.88rem" };
+  const people = canViewAll ? [...new Map([[String(currentUser.id), currentUser], ...(employees || []).map(emp => [String(emp.id), emp])]).values()] : [];
 
   return (
-    <div>
-      <PageHeader title="ตารางสอน" count={filtered.length} onAdd={currentUser?.role === "admin" ? () => setShowAdd(true) : null} addLabel="เพิ่มคาบ" />
-
-      <Card>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem", alignItems: "end" }}>
+    <div style={{ display: "grid", gap: "1rem" }}>
+      <div style={{ background: "linear-gradient(90deg, #008CFF, #3EBFFB)", borderRadius: 18, padding: "1rem 1.2rem", color: "#fff", boxShadow: "0 4px 24px rgba(0,140,255,0.2)" }}>
+        <div style={{ fontSize: "1.2rem", fontWeight: 800 }}>ตารางสอน</div>
+        <div style={{ fontSize: "0.85rem", opacity: 0.9 }}>{isMine ? "กรอกตารางสอนของท่าน (วันจันทร์–ศุกร์ × คาบ) กดช่องเพื่อเพิ่ม/แก้ไข ข้อมูลนี้ใช้ในแผนรายคาบและหน้าผู้บริหาร" : `ตารางสอนของ ${viewer?.name || nameOf(viewId)} (ดูอย่างเดียว)`}</div>
+      </div>
+      {canViewAll && (
+        <Card padding="0.8rem">
           <Field label="ดูตารางสอนของ">
-            <select value={empView} onChange={e => setEmpView(e.target.value)} style={{ ...selectStyle, width: "auto", minWidth: 250 }}>
-              {currentUser?.role === "admin" && <option value="">ทั้งหมด</option>}
-              {employees.map(e => <option key={e.id} value={e.id}>{e.name} — {e.department}</option>)}
+            <select aria-label="ดูตารางสอนของ" value={viewId} onChange={event => { setViewId(event.target.value); setEditing(null); }} style={{ ...small, maxWidth: 360 }}>
+              {people.map(emp => <option key={emp.id} value={String(emp.id)}>{emp.name}{String(emp.id) === String(currentUser.id) ? " (ของฉัน)" : ""} · {(rows || []).filter(row => String(row.employee_id) === String(emp.id)).length} คาบ</option>)}
             </select>
           </Field>
-          {today >= 1 && today <= 5 && (
-            <div style={{ marginLeft: "auto", padding: "0.65rem 1rem", background: "#EAF5FF", borderRadius: "10px", fontSize: "0.85rem", color: "#0072D9", fontWeight: 600 }}>
-              📅 วันนี้: {DAY_NAMES[today]}
+        </Card>
+      )}
+      {error && <ErrorBox>{error}</ErrorBox>}
+      {message && <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", borderRadius: 10, padding: "0.5rem 0.8rem", color: "#166534", fontWeight: 700, fontSize: "0.88rem" }}>{message}</div>}
+      {editing && (
+        <Card padding="0.9rem">
+          <div style={{ fontWeight: 800, color: "#233862", marginBottom: "0.6rem" }}>{editing.id ? "แก้ไข" : "เพิ่ม"}คาบ · วัน{DAY_NAMES[editing.day]} คาบที่ {editing.period}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))", gap: "0.55rem" }}>
+            <Field label="วิชา *"><input aria-label="วิชา" value={editing.subject} onChange={event => setEditing(current => ({ ...current, subject: event.target.value }))} placeholder="เช่น ภาษาไทย" style={small} /></Field>
+            <Field label="ห้อง/ชั้น"><input aria-label="ห้อง/ชั้น" value={editing.class_room} onChange={event => setEditing(current => ({ ...current, class_room: event.target.value }))} placeholder="เช่น ป.2/1" style={small} /></Field>
+            <Field label="เวลาเริ่ม"><input type="time" value={editing.start_time} onChange={event => setEditing(current => ({ ...current, start_time: event.target.value }))} style={small} /></Field>
+            <Field label="เวลาสิ้นสุด"><input type="time" value={editing.end_time} onChange={event => setEditing(current => ({ ...current, end_time: event.target.value }))} style={small} /></Field>
+          </div>
+          <div style={{ display: "flex", gap: "0.45rem", marginTop: "0.7rem", flexWrap: "wrap" }}>
+            <button type="button" disabled={saving} onClick={saveEdit} style={{ ...btnPrimary, flex: "none", padding: "0.5rem 1.1rem", background: "linear-gradient(90deg, #008CFF, #3EBFFB)", color: "#fff", cursor: saving ? "wait" : "pointer" }}><Save size={15} /> บันทึกคาบ</button>
+            {editing.id && <button type="button" disabled={saving} onClick={removeEdit} style={{ ...btnSecondary, flex: "none", color: "#b91c1c" }}><Trash2 size={15} /> ลบคาบ</button>}
+            <button type="button" onClick={() => setEditing(null)} style={{ ...btnSecondary, flex: "none" }}>ยกเลิก</button>
+          </div>
+        </Card>
+      )}
+      <Card padding="0.8rem">
+        {!rows ? <div style={{ color: "#64748b" }}>กำลังโหลดตารางสอน...</div> : (
+          <>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 4, minWidth: 720 }}>
+                <thead><tr><th style={th}>คาบ</th>{[1, 2, 3, 4, 5].map(day => <th key={day} style={{ ...th, color: day === todayDow ? "#008CFF" : th.color }}>{DAY_NAMES[day]}{day === todayDow ? " (วันนี้)" : ""}</th>)}</tr></thead>
+                <tbody>
+                  {periods.map(period => (
+                    <tr key={period}>
+                      <td style={{ ...th, background: "#fff", fontSize: "0.78rem" }}>{period}<div style={{ fontWeight: 500, color: "#94a3b8", fontSize: "0.68rem" }}>{(TIMETABLE_DEFAULT_TIMES[period - 1] || []).join("–")}</div></td>
+                      {[1, 2, 3, 4, 5].map(day => {
+                        const items = cellRows(day, period);
+                        const active = editing && editing.day === day && editing.period === period;
+                        return (
+                          <td key={day} style={{ verticalAlign: "top", border: `1px ${items.length ? "solid" : "dashed"} ${active ? "#008CFF" : items.length ? "#B8E0FF" : "#E4EEF8"}`, background: items.length ? "#EAF5FF" : "#fff", borderRadius: 12, padding: "0.4rem 0.45rem", minWidth: 120, height: 64 }}>
+                            {items.length === 0 ? (
+                              isMine ? <button type="button" aria-label={`เพิ่มวัน${DAY_NAMES[day]} คาบ ${period}`} onClick={() => startEdit(day, period)} style={{ width: "100%", height: "100%", minHeight: 48, border: "none", background: "transparent", color: "#8FD0FF", fontSize: "1.2rem", cursor: "pointer" }}>+</button> : <span style={{ color: "#cbd5e1" }}>–</span>
+                            ) : items.map(row => (
+                              <div key={row.id} style={{ display: "grid", gap: "0.2rem" }}>
+                                <button type="button" onClick={() => startEdit(day, period)} disabled={!isMine} style={{ border: "none", background: "transparent", padding: 0, textAlign: "left", cursor: isMine ? "pointer" : "default", fontFamily: "inherit" }}>
+                                  <div style={{ fontWeight: 800, color: "#233862", fontSize: "0.85rem" }}>{row.subject}</div>
+                                  <div style={{ color: "#596068", fontSize: "0.75rem" }}>{row.class_room || "-"}{row.start_time && row.start_time !== "00:00:00" ? ` · ${String(row.start_time).slice(0, 5)}` : ""}</div>
+                                </button>
+                                <button type="button" onClick={() => openPlan(day, period)} style={{ border: "none", background: "linear-gradient(90deg, #FF7106, #FF9A3C)", color: "#fff", borderRadius: 999, padding: "0.12rem 0.5rem", fontSize: "0.7rem", fontWeight: 800, cursor: "pointer", width: "fit-content", fontFamily: "inherit" }}>แผนรายคาบ</button>
+                              </div>
+                            ))}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          )}
-        </div>
-      </Card>
-
-      {/* แสดงเป็น Grid ตาม วัน-คาบ */}
-      <div style={{ marginTop: "1rem" }}>
-        {[1, 2, 3, 4, 5].map(day => {
-          const daySchedules = filtered.filter(s => s.day_of_week === day);
-          if (daySchedules.length === 0) return null;
-          const isToday = day === today;
-          return (
-            <Card key={day} padding="1rem" >
-              <div style={{ marginBottom: "0.75rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <div style={{ fontSize: "1rem", fontWeight: 800, color: isToday ? "#008CFF" : "#233862" }}>
-                  {isToday && "📍 "}วัน{DAY_NAMES[day]}
-                </div>
-                {isToday && <span style={{ background: "#dcfce7", color: "#16a34a", fontSize: "0.7rem", fontWeight: 700, padding: "0.15rem 0.5rem", borderRadius: "20px" }}>วันนี้</span>}
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "0.6rem" }}>
-                {daySchedules.map(s => (
-                  <div key={s.id} style={{ background: isToday ? "#EAF5FF" : "#f8fafc", border: `1.5px solid ${isToday ? "#B8E0FF" : "#e2e8f0"}`, borderRadius: "10px", padding: "0.75rem", position: "relative" }}>
-                    <div style={{ fontSize: "0.7rem", color: "#64748b", fontWeight: 600 }}>คาบที่ {s.period}</div>
-                    <div style={{ fontSize: "0.95rem", fontWeight: 700, color: "#233862", marginTop: "0.25rem" }}>{s.subject}</div>
-                    {s.class_room && <div style={{ fontSize: "0.75rem", color: "#475569", marginTop: "0.15rem" }}>🏫 {s.class_room}</div>}
-                    {s.start_time && <div style={{ fontSize: "0.72rem", color: "#94a3b8", marginTop: "0.15rem" }}>⏰ {s.start_time?.slice(0,5)} - {s.end_time?.slice(0,5)}</div>}
-                    {!empView && <div style={{ fontSize: "0.72rem", color: "#7c3aed", marginTop: "0.15rem", fontWeight: 600 }}>👤 {s.employees?.name}</div>}
-                    {currentUser?.role === "admin" && (
-                      <button onClick={() => handleDelete(s.id)} style={{ position: "absolute", top: "0.4rem", right: "0.4rem", background: "#fef2f2", border: "none", borderRadius: "6px", padding: "0.25rem", cursor: "pointer", color: "#dc2626" }}><Trash2 size={12} /></button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </Card>
-          );
-        })}
-        {filtered.length === 0 && (
-          <Card><div style={{ textAlign: "center", padding: "2rem", color: "#94a3b8" }}>ยังไม่มีตารางสอน {currentUser?.role === "admin" && "— กดปุ่ม 'เพิ่มคาบ' เพื่อสร้าง"}</div></Card>
+            <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: "0.45rem" }}>
+              {mine.length === 0 ? (isMine ? "ยังไม่มีตารางสอน กดเครื่องหมาย + ในช่องเพื่อเพิ่มคาบ" : "ครูท่านนี้ยังไม่ได้กรอกตารางสอน") : `รวม ${mine.length} คาบ/สัปดาห์`} · ปุ่ม "แผนรายคาบ" เปิดแผนของคาบนั้นในสัปดาห์ปัจจุบัน
+            </div>
+          </>
         )}
-      </div>
-
-      {showAdd && <ScheduleModal employees={employees} onClose={() => setShowAdd(false)} onSave={() => { setShowAdd(false); refresh(); }} />}
+      </Card>
+      {viewPlan && <ExecPlanModal teacher={viewPlan.emp} weekStart={weekStart} focus={viewPlan.focus} onClose={() => setViewPlan(null)} />}
     </div>
   );
 }
@@ -3324,8 +3422,8 @@ function QuietFold({ title, children }) {
   );
 }
 
-function DayCard({ title, summary, children }) {
-  const [open, setOpen] = useState(false);
+function DayCard({ title, summary, children, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <Card>
       <button type="button" aria-expanded={open} onClick={() => setOpen(value => !value)} style={{ width: "100%", minHeight: 48, display: "flex", alignItems: "center", gap: "0.55rem", border: "none", background: "transparent", fontFamily: "inherit", textAlign: "left", cursor: "pointer", padding: 0 }}>
@@ -3338,18 +3436,21 @@ function DayCard({ title, summary, children }) {
   );
 }
 
-function WeekPeriodEditor({ period, disabled, onChange, onPickFile, onPickWorksheet, worksheetBusy, teacherName }) {
-  const [open, setOpen] = useState(false);
+function WeekPeriodEditor({ period, disabled, onChange, onPickFile, onPickWorksheet, worksheetBusy, teacherName, slot = null, timetable = [], defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const [typing, setTyping] = useState(false);
+  const subjectOptions = [...new Map((timetable || []).map(row => [timetableSlotLabel(row), row])).values()];
+  const applySlot = row => onChange({ subject: row.subject || "", plan_class: row.class_room || "", start_time: row.start_time && row.start_time !== "00:00:00" ? String(row.start_time).slice(0, 5) : period.start_time, end_time: row.end_time ? String(row.end_time).slice(0, 5) : period.end_time });
   const { plan } = selectedPlanParts(period);
   const summary = periodFoldSummary(period, plan);
   return (
-    <div style={{ border: "1px solid #e2e8f0", borderRadius: "12px", padding: open ? "0.75rem" : "0.35rem 0.5rem", display: "grid", gap: "0.75rem", minWidth: 0 }}>
+    <div id={`plan-${period.teach_date}-${period.period_no}`} style={{ border: `1px solid ${slot ? "#B8E0FF" : "#e2e8f0"}`, borderRadius: "12px", padding: open ? "0.75rem" : "0.35rem 0.5rem", display: "grid", gap: "0.75rem", minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", minWidth: 0 }}>
         <button type="button" aria-expanded={open} aria-label={open ? `หุบคาบที่ ${period.period_no}` : `เปิดคาบที่ ${period.period_no}`} onClick={() => setOpen(value => !value)} style={{ width: 44, height: 44, flex: "none", border: "1px solid #e2e8f0", borderRadius: "10px", background: "#fff", color: "#0072D9", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
           {open ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
         </button>
         <button type="button" onClick={() => setOpen(value => !value)} style={{ flex: 1, minWidth: 0, textAlign: "left", background: "transparent", border: "none", padding: "0.25rem 0", fontFamily: "inherit", cursor: "pointer" }}>
-          <div style={{ fontWeight: 800, color: "#233862" }}>คาบที่ {period.period_no}</div>
+          <div style={{ fontWeight: 800, color: "#233862" }}>คาบที่ {period.period_no}{slot && <span style={{ marginLeft: "0.4rem", fontSize: "0.72rem", fontWeight: 700, color: "#0072D9", background: "#EAF5FF", borderRadius: 999, padding: "0.05rem 0.5rem" }}>ตารางสอน: {timetableSlotLabel(slot)}</span>}</div>
           {!open && <div style={{ fontSize: "0.8rem", color: period.free ? "#64748b" : "#475569", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{summary}</div>}
         </button>
         <label style={{ display: "flex", alignItems: "center", gap: "0.35rem", minHeight: 44, flex: "none", fontWeight: 700, color: "#475569", cursor: disabled ? "not-allowed" : "pointer" }}>
@@ -3378,8 +3479,20 @@ function WeekPeriodEditor({ period, disabled, onChange, onPickFile, onPickWorksh
           <input type="time" value={period.end_time || ""} onChange={event => onChange({ end_time: event.target.value })} style={periodInput} />
         </Field>
       </div>
-      <Field label="วิชา">
-        <input value={period.subject || ""} onChange={event => onChange({ subject: event.target.value })} style={periodInput} />
+      <Field label="วิชา / ห้อง (จากตารางสอน)">
+        {subjectOptions.length > 0 && !typing ? (
+          <select aria-label="วิชาจากตารางสอน" value={subjectOptions.find(row => row.subject === period.subject && (row.class_room || "") === (period.plan_class || ""))?.id || subjectOptions.find(row => row.subject === period.subject)?.id || ""} disabled={disabled} onChange={event => { if (event.target.value === "__type") { setTyping(true); return; } const row = subjectOptions.find(item => String(item.id) === event.target.value); if (row) applySlot(row); else onChange({ subject: "", plan_class: "" }); }} style={periodSelect}>
+            <option value="">{period.subject ? `${period.subject} (พิมพ์ไว้เดิม)` : "-- เลือกวิชาจากตารางสอน --"}</option>
+            {subjectOptions.map(row => <option key={row.id} value={row.id}>{timetableSlotLabel(row)}{slot && timetableSlotLabel(slot) === timetableSlotLabel(row) ? " (ตรงกับคาบนี้)" : ""}</option>)}
+            <option value="__type">อื่น ๆ (พิมพ์เอง)</option>
+          </select>
+        ) : (
+          <input value={period.subject || ""} onChange={event => onChange({ subject: event.target.value })} placeholder={subjectOptions.length ? "พิมพ์ชื่อวิชา" : "ยังไม่มีตารางสอน — พิมพ์ชื่อวิชา หรือกรอกตารางสอนที่เมนู ตารางสอน"} style={periodInput} />
+        )}
+        {slot && !period.subject && (
+          <button type="button" disabled={disabled} onClick={() => applySlot(slot)} style={{ ...btnSecondary, flex: "none", width: "fit-content", marginTop: "0.4rem", padding: "0.3rem 0.7rem", fontSize: "0.8rem", color: "#0072D9" }}>ใช้ตามตารางสอน: {timetableSlotLabel(slot)}</button>
+        )}
+        {typing && subjectOptions.length > 0 && <button type="button" onClick={() => setTyping(false)} style={{ ...btnSecondary, flex: "none", width: "fit-content", marginTop: "0.4rem", padding: "0.3rem 0.7rem", fontSize: "0.8rem" }}>เลือกจากตารางสอน</button>}
       </Field>
       <QuietFold title="รายละเอียดการสอน">
         <Field label="1. ขั้นนำเข้าสู่บทเรียน">
@@ -3903,7 +4016,7 @@ function KindergartenSupervisionTeacher({ currentUser }) {
   );
 }
 
-function TeachingSupervisionPage({ employees, currentUser }) {
+function TeachingSupervisionPage({ employees, currentUser, planFocus = null }) {
   const [level, setLevel] = useState(currentUser?.role === "admin" ? "" : null);
   useEffect(() => {
     if (currentUser?.role === "admin") return undefined;
@@ -3924,11 +4037,23 @@ function TeachingSupervisionPage({ employees, currentUser }) {
   if (currentUser?.role === "admin") return <SupervisionAdmin employees={employees} currentUser={currentUser} />;
   if (level === null) return <Card><div style={{ textAlign: "center", color: "#64748b", padding: "1.5rem" }}>กำลังโหลดแผนสัปดาห์...</div></Card>;
   if (level === "อนุบาล") return <KindergartenSupervisionTeacher currentUser={currentUser} />;
-  return <SupervisionTeacher currentUser={currentUser} />;
+  return <SupervisionTeacher currentUser={currentUser} planFocus={planFocus} />;
 }
 
-function SupervisionTeacher({ currentUser }) {
-  const [weekStart, setWeekStart] = useState(() => mondayOf(todayISO()));
+function SupervisionTeacher({ currentUser, planFocus = null }) {
+  const [weekStart, setWeekStart] = useState(() => mondayOf(planFocus?.date || todayISO()));
+  const [timetable, setTimetable] = useState([]);
+  useEffect(() => {
+    let active = true;
+    fetchTimetableRows(currentUser.id).then(list => { if (active) setTimetable(list); }).catch(() => {});
+    return () => { active = false; };
+  }, [currentUser.id]);
+  useEffect(() => {
+    if (!planFocus?.date) return;
+    setWeekStart(mondayOf(planFocus.date));
+    const timer = setTimeout(() => document.getElementById(`plan-${planFocus.date}-${planFocus.period}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 900);
+    return () => clearTimeout(timer);
+  }, [planFocus]);
   const [rowId, setRowId] = useState(null);
   const [periods, setPeriods] = useState([]);
   const [baseline, setBaseline] = useState("[]");
@@ -4206,10 +4331,13 @@ function SupervisionTeacher({ currentUser }) {
               .sort((a, b) => (Number(a.period_no) || 0) - (Number(b.period_no) || 0));
             const filled = dayPeriods.filter(period => !periodIsBlank(period)).length;
             return (
-              <DayCard key={date} title={`วัน${DAY_NAMES[index + 1]}`} summary={`${formatThaiDateKey(date)} · ${filled}/6`}>
+              <DayCard key={`${date}-${planFocus?.at || 0}`} defaultOpen={planFocus?.date === date} title={`วัน${DAY_NAMES[index + 1]}`} summary={`${formatThaiDateKey(date)} · ${filled}/6${timetable.some(row => row.day_of_week === index + 1) ? ` · ตารางสอน ${timetable.filter(row => row.day_of_week === index + 1).length} คาบ` : ""}`}>
                 {dayPeriods.map(period => (
                   <WeekPeriodEditor
-                    key={period.id}
+                    key={`${period.id}-${planFocus?.at || 0}`}
+                    defaultOpen={planFocus?.date === date && Number(planFocus?.period) === Number(period.period_no)}
+                    slot={timetable.find(row => row.day_of_week === index + 1 && Number(row.period) === Number(period.period_no)) || null}
+                    timetable={timetable}
                     period={period}
                     disabled={saving}
                     onChange={patch => updatePeriod(period.id, patch)}
@@ -6249,7 +6377,7 @@ function ExecSection({ title, icon: Icon, right, children }) {
 }
 
 // ─── ตารางสอนรายคาบ (หน้าผู้บริหาร) ─────────────────────────────────────────
-const EXEC_SPECIAL_ROOMS = new Set([SUPERVISION_SCHEDULE_ROOM, STUDENT_ROLL_ROOM, ACADEMIC_RECORD_ROOM, ACTIVITY_PLAN_ROOM, "__TEACHER_EVAL__"]);
+const EXEC_SPECIAL_ROOMS = new Set([SUPERVISION_SCHEDULE_ROOM, STUDENT_ROLL_ROOM, ACADEMIC_RECORD_ROOM, ACTIVITY_PLAN_ROOM, "__TEACHER_EVAL__", "__CLEANING_DUTY__"]);
 const EXEC_DEFAULT_PERIOD_TIMES = [["08:30", "09:20"], ["09:20", "10:10"], ["10:20", "11:10"], ["11:10", "12:00"], ["13:00", "13:50"], ["13:50", "14:40"]];
 
 function execNowMinutes() {
@@ -6689,6 +6817,575 @@ function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEv
   );
 }
 
+// ─── เวรความสะอาด / เวรพื้นที่ (เฉพาะผู้บริหาร/แอดมิน) ─────────────────────────
+// แถวพิเศษใน teaching_schedule: class_room "__CLEANING_DUTY__"
+// period 1 = ทะเบียนห้องเรียนและพื้นที่รับผิดชอบ (kind "config"), period 2 = ผลการตรวจ 1 ครั้ง/แถว (kind "inspection")
+const CLEANING_DUTY_ROOM = "__CLEANING_DUTY__";
+const CLEANING_LOCAL_KEY = "hr_cleaning_duty_v1";
+const CLEANING_AREA_PRESETS = ["ห้องเรียน", "ทางเดิน", "สนาม", "ห้องน้ำ", "บันได", "สวนหย่อม"];
+const CLEANING_CRITERIA = [
+  { key: "trash", label: "ขยะ", hint: "ไม่มีขยะตกค้างบนพื้น ใต้โต๊ะ และมุมห้อง" },
+  { key: "floor", label: "ฝุ่น/พื้น", hint: "พื้นกวาดและถูสะอาด ไม่มีคราบหรือฝุ่นสะสม" },
+  { key: "furniture", label: "โต๊ะเก้าอี้เป็นระเบียบ", hint: "จัดโต๊ะเก้าอี้เป็นแถว สิ่งของจัดเก็บเรียบร้อย" },
+  { key: "board", label: "กระดาน/หน้าต่าง", hint: "กระดานลบสะอาด หน้าต่างและขอบหน้าต่างไม่มีฝุ่น" },
+  { key: "bins", label: "ถังขยะ/การคัดแยก", hint: "ถังขยะไม่ล้น มีฝาปิด และคัดแยกขยะถูกประเภท" },
+];
+const CLEANING_SCALE = [
+  { value: 5, label: "ดีเยี่ยม" }, { value: 4, label: "ดี" }, { value: 3, label: "พอใช้" },
+  { value: 2, label: "ควรปรับปรุง" }, { value: 1, label: "ต้องแก้ไขเร่งด่วน" }, { value: 0, label: "ไม่ได้ดำเนินการ" },
+];
+const CLEANING_MAX = CLEANING_CRITERIA.length * 5;
+const CLEANING_PHOTO_LIMIT = 4;
+
+function cleaningLevel(percent) {
+  if (percent >= 90) return { label: "ดีเยี่ยม", color: "#166534", bg: "#dcfce7" };
+  if (percent >= 75) return { label: "ดี", color: "#0072D9", bg: "#DCEFFF" };
+  if (percent >= 60) return { label: "พอใช้", color: "#b45309", bg: "#fef3c7" };
+  return { label: "ต้องปรับปรุง", color: "#b91c1c", bg: "#fee2e2" };
+}
+
+function cleanCleaningRoom(raw) {
+  const areas = [...new Set((Array.isArray(raw?.areas) ? raw.areas : []).map(area => String(area || "").trim().slice(0, 60)).filter(Boolean))];
+  return { id: String(raw?.id || newSupervisionId()), name: String(raw?.name || "").trim().slice(0, 80), areas };
+}
+
+function cleanCleaningConfig(raw) {
+  return {
+    kind: "config",
+    id: "config",
+    rooms: (Array.isArray(raw?.rooms) ? raw.rooms : []).map(cleanCleaningRoom).filter(room => room.name),
+    updated_at: String(raw?.updated_at || ""),
+    row_id: raw?.row_id || null,
+    pending: !!raw?.pending,
+  };
+}
+
+function cleaningTotal(scores) {
+  return CLEANING_CRITERIA.reduce((sum, item) => sum + (Number(scores?.[item.key]) || 0), 0);
+}
+
+function cleanCleaningInspection(raw) {
+  const scores = {};
+  CLEANING_CRITERIA.forEach(item => {
+    const value = Number(raw?.scores?.[item.key]);
+    scores[item.key] = Number.isFinite(value) ? Math.max(0, Math.min(5, Math.round(value))) : 0;
+  });
+  return {
+    kind: "inspection",
+    id: String(raw?.id || newSupervisionId()),
+    room_id: String(raw?.room_id || ""),
+    room_name: String(raw?.room_name || "").slice(0, 80),
+    area: String(raw?.area || "").slice(0, 60),
+    date: /^\d{4}-\d{2}-\d{2}$/.test(raw?.date || "") ? raw.date : todayISO(),
+    scores,
+    total: cleaningTotal(scores),
+    note: String(raw?.note || "").slice(0, 1000),
+    photos: (Array.isArray(raw?.photos) ? raw.photos : []).filter(photo => photo?.url || photo?.dataUrl).slice(0, CLEANING_PHOTO_LIMIT),
+    by: String(raw?.by || "").slice(0, 120),
+    by_id: String(raw?.by_id || ""),
+    at: String(raw?.at || ""),
+    updated_at: String(raw?.updated_at || raw?.at || ""),
+    row_id: raw?.row_id || null,
+    pending: !!raw?.pending,
+  };
+}
+
+function readCleaningLocal() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(CLEANING_LOCAL_KEY) || "{}");
+    return {
+      config: parsed.config ? cleanCleaningConfig(parsed.config) : null,
+      inspections: (parsed.inspections || []).map(cleanCleaningInspection),
+      deleted: Array.isArray(parsed.deleted) ? parsed.deleted.map(String) : [],
+    };
+  } catch { return { config: null, inspections: [], deleted: [] }; }
+}
+
+function writeCleaningLocal(config, inspections, deleted) {
+  try {
+    localStorage.setItem(CLEANING_LOCAL_KEY, JSON.stringify({ config, inspections, deleted, saved_at: new Date().toISOString() }));
+  } catch {
+    // รูปภาพทำให้พื้นที่เต็ม → เก็บเฉพาะรายการที่ยังไม่ซิงก์ แบบไม่มีรูป
+    try { localStorage.setItem(CLEANING_LOCAL_KEY, JSON.stringify({ config, inspections: inspections.filter(item => item.pending).map(item => ({ ...item, photos: item.photos.filter(photo => photo.url) })), deleted })); } catch { /* ignore */ }
+  }
+}
+
+async function fetchCleaningRows() {
+  const { data, error } = await supabase.from("teaching_schedule").select("id, employee_id, period, subject, created_at").eq("class_room", CLEANING_DUTY_ROOM);
+  if (error) throw new Error(error.message);
+  let config = null;
+  const inspections = [];
+  (data || []).forEach(row => {
+    let parsed = {};
+    try { parsed = JSON.parse(row.subject || "{}"); } catch { return; }
+    if (parsed.kind === "config") {
+      const next = cleanCleaningConfig({ ...parsed, row_id: row.id });
+      if (!config || next.updated_at > config.updated_at) config = next;
+    } else if (parsed.kind === "inspection") {
+      inspections.push(cleanCleaningInspection({ ...parsed, row_id: row.id }));
+    }
+  });
+  return { config, inspections };
+}
+
+async function writeCleaningRow(item, employeeId) {
+  const body = { ...item };
+  delete body.row_id;
+  delete body.pending;
+  const payload = { employee_id: employeeId || null, day_of_week: 0, period: item.kind === "config" ? 1 : 2, class_room: CLEANING_DUTY_ROOM, start_time: "00:00:00", end_time: null, subject: JSON.stringify(body) };
+  const result = item.row_id
+    ? await supabase.from("teaching_schedule").update(payload).eq("id", item.row_id).select("id").single()
+    : await supabase.from("teaching_schedule").insert(payload).select("id").single();
+  if (result.error) throw new Error(result.error.message);
+  return result.data.id;
+}
+
+async function storeCleaningPhoto(file) {
+  const source = await readFileAsDataUrl(file);
+  const image = await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("เปิดรูปภาพไม่สำเร็จ"));
+    img.src = source;
+  });
+  const scale = Math.min(1, 1024 / Math.max(image.width, image.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(image.width * scale);
+  canvas.height = Math.round(image.height * scale);
+  const ctx = canvas.getContext("2d");
+  if (ctx) ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+  const dataUrl = ctx ? canvas.toDataURL("image/jpeg", 0.7) : source;
+  try {
+    const blob = await (await fetch(dataUrl)).blob();
+    const objectPath = `cleaning/${todayISO()}/${newSupervisionId()}.jpg`;
+    const { error } = await supabase.storage.from(LESSON_FILE_BUCKET).upload(objectPath, blob, { contentType: "image/jpeg", upsert: false });
+    if (!error) {
+      const { data } = supabase.storage.from(LESSON_FILE_BUCKET).getPublicUrl(objectPath);
+      if (data?.publicUrl) return { url: data.publicUrl, path: objectPath, storage: "supabase" };
+    }
+  } catch { /* ไม่มี bucket → เก็บแบบย่อขนาดในรายการ */ }
+  return { dataUrl, storage: "inline" };
+}
+
+const photoSrc = photo => photo?.url || photo?.dataUrl || "";
+
+function CleaningLevelBadge({ percent }) {
+  const level = cleaningLevel(percent);
+  return <span style={{ background: level.bg, color: level.color, fontWeight: 800, fontSize: "0.72rem", borderRadius: 20, padding: "0.12rem 0.55rem", whiteSpace: "nowrap" }}>{level.label}</span>;
+}
+
+function emptyCleaningForm(rooms) {
+  const room = rooms[0];
+  const scores = {};
+  CLEANING_CRITERIA.forEach(item => { scores[item.key] = 5; });
+  return { room_id: room?.id || "", area: room?.areas?.[0] || "", date: todayISO(), scores, note: "", photos: [] };
+}
+
+function CleaningDutyPage({ currentUser }) {
+  if (!isExecutiveUser(currentUser)) return <NoAccessCard />;
+  return <CleaningDutyInner currentUser={currentUser} />;
+}
+
+function CleaningDutyInner({ currentUser }) {
+  const [tab, setTab] = useState("inspect");
+  const [config, setConfig] = useState(cleanCleaningConfig(null));
+  const [inspections, setInspections] = useState([]);
+  const [deleted, setDeleted] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [form, setForm] = useState(() => emptyCleaningForm([]));
+  const [busy, setBusy] = useState(false);
+  const [newRoom, setNewRoom] = useState("");
+  const [areaDrafts, setAreaDrafts] = useState({});
+  const [mode, setMode] = useState("week");
+  const [weekStart, setWeekStart] = useState(() => mondayOf(todayISO()));
+  const [month, setMonth] = useState(() => todayISO().slice(0, 7));
+  const [detailRoom, setDetailRoom] = useState("");
+  const [zoom, setZoom] = useState("");
+  const rooms = config.rooms;
+
+  const commit = (nextConfig, nextInspections, nextDeleted = deleted) => {
+    const sorted = [...nextInspections].sort((a, b) => b.date.localeCompare(a.date) || b.at.localeCompare(a.at));
+    setConfig(nextConfig);
+    setInspections(sorted);
+    setDeleted(nextDeleted);
+    writeCleaningLocal(nextConfig, sorted, nextDeleted);
+  };
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const local = readCleaningLocal();
+      try {
+        const remote = await fetchCleaningRows();
+        if (!active) return;
+        let nextConfig = remote.config || cleanCleaningConfig(null);
+        if (local.config && local.config.pending && local.config.updated_at > nextConfig.updated_at) {
+          nextConfig = { ...local.config, row_id: nextConfig.row_id || local.config.row_id };
+          try { nextConfig.row_id = await writeCleaningRow(nextConfig, currentUser.id); nextConfig.pending = false; } catch { /* คงไว้ในเครื่อง */ }
+        }
+        const deletedSet = new Set(local.deleted);
+        const byId = new Map();
+        remote.inspections.forEach(item => { if (!deletedSet.has(item.id)) byId.set(item.id, item); });
+        for (const item of local.inspections) {
+          if (deletedSet.has(item.id) || !item.pending) continue;
+          const merged = { ...item, row_id: byId.get(item.id)?.row_id || item.row_id };
+          try { merged.row_id = await writeCleaningRow(merged, currentUser.id); merged.pending = false; } catch { /* คงไว้ในเครื่อง */ }
+          byId.set(item.id, merged);
+        }
+        const toDelete = remote.inspections.filter(item => deletedSet.has(item.id) && item.row_id).map(item => item.row_id);
+        let remaining = local.deleted;
+        if (toDelete.length) {
+          const { error: delError } = await supabase.from("teaching_schedule").delete().in("id", toDelete);
+          if (!delError) remaining = [];
+        } else remaining = [];
+        if (active) { commit(nextConfig, [...byId.values()], remaining); setForm(emptyCleaningForm(nextConfig.rooms)); }
+      } catch (err) {
+        if (active) {
+          const fallback = local.config || cleanCleaningConfig(null);
+          commit(fallback, local.inspections, local.deleted);
+          setForm(emptyCleaningForm(fallback.rooms));
+          setError(`โหลดจากฐานข้อมูลไม่ได้ (${err.message || "เชื่อมต่อไม่สำเร็จ"}) แสดงข้อมูลที่บันทึกไว้ในเครื่องนี้`);
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const saveConfig = async (nextRooms, success) => {
+    const next = cleanCleaningConfig({ ...config, rooms: nextRooms, updated_at: new Date().toISOString() });
+    try {
+      next.row_id = await writeCleaningRow(next, currentUser.id);
+      next.pending = false;
+      setMessage(success);
+      setError("");
+    } catch (err) {
+      next.pending = true;
+      setError(`${err.message || "บันทึกไม่สำเร็จ"} · เก็บไว้ในเครื่องนี้แล้ว จะซิงก์เมื่อเปิดหน้านี้ครั้งถัดไป`);
+    }
+    commit(next, inspections);
+    if (!next.rooms.some(room => room.id === form.room_id)) setForm(emptyCleaningForm(next.rooms));
+  };
+
+  const addRoom = () => {
+    const name = newRoom.trim();
+    if (!name) return;
+    if (rooms.some(room => room.name === name)) { setError(`มีห้อง ${name} อยู่แล้ว`); return; }
+    saveConfig([...rooms, cleanCleaningRoom({ name, areas: ["ห้องเรียน"] })], `เพิ่มห้อง ${name} แล้ว`);
+    setNewRoom("");
+  };
+  const removeRoom = room => {
+    if (!window.confirm(`ลบห้อง ${room.name} ออกจากทะเบียน? (ผลการตรวจเดิมยังคงอยู่)`)) return;
+    saveConfig(rooms.filter(item => item.id !== room.id), `ลบห้อง ${room.name} แล้ว`);
+  };
+  const addArea = (room, area) => {
+    const text = String(area || "").trim();
+    if (!text || room.areas.includes(text)) return;
+    saveConfig(rooms.map(item => (item.id === room.id ? { ...item, areas: [...item.areas, text] } : item)), `เพิ่มพื้นที่ ${text} ให้ห้อง ${room.name} แล้ว`);
+    setAreaDrafts(current => ({ ...current, [room.id]: "" }));
+  };
+  const removeArea = (room, area) => saveConfig(rooms.map(item => (item.id === room.id ? { ...item, areas: item.areas.filter(value => value !== area) } : item)), `ลบพื้นที่ ${area} แล้ว`);
+
+  const pickPhotos = async event => {
+    const files = [...(event.target.files || [])];
+    event.target.value = "";
+    if (!files.length) return;
+    const room = CLEANING_PHOTO_LIMIT - form.photos.length;
+    if (room <= 0) { setError(`แนบรูปได้ไม่เกิน ${CLEANING_PHOTO_LIMIT} รูปต่อการตรวจ`); return; }
+    setBusy(true);
+    try {
+      const stored = [];
+      for (const file of files.slice(0, room)) {
+        if (!String(file.type).startsWith("image/")) continue;
+        stored.push(await storeCleaningPhoto(file));
+      }
+      setForm(current => ({ ...current, photos: [...current.photos, ...stored].slice(0, CLEANING_PHOTO_LIMIT) }));
+    } catch (err) {
+      setError(err.message || "แนบรูปไม่สำเร็จ");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitInspection = async () => {
+    const room = rooms.find(item => item.id === form.room_id);
+    if (!room) { setError("กรุณาเลือกห้องเรียน"); return; }
+    if (!form.area) { setError("กรุณาเลือกพื้นที่รับผิดชอบ"); return; }
+    const now = new Date().toISOString();
+    const item = cleanCleaningInspection({ ...form, id: newSupervisionId(), room_name: room.name, by: currentUser.name, by_id: currentUser.id, at: now, updated_at: now });
+    setBusy(true);
+    try {
+      item.row_id = await writeCleaningRow(item, currentUser.id);
+      item.pending = false;
+      setMessage(`บันทึกผลการตรวจ ${room.name} · ${item.area} แล้ว (${item.total}/${CLEANING_MAX} คะแนน)`);
+      setError("");
+    } catch (err) {
+      item.pending = true;
+      setError(`${err.message || "บันทึกไม่สำเร็จ"} · เก็บไว้ในเครื่องนี้แล้ว จะซิงก์เมื่อเปิดหน้านี้ครั้งถัดไป`);
+    }
+    commit(config, [item, ...inspections]);
+    setForm(current => ({ ...emptyCleaningForm(rooms), room_id: current.room_id, area: current.area, date: current.date }));
+    setBusy(false);
+  };
+
+  const deleteInspection = async item => {
+    if (!window.confirm(`ลบผลการตรวจ ${item.room_name} · ${item.area} วันที่ ${formatThaiDateKey(item.date)}?`)) return;
+    let nextDeleted = deleted;
+    if (item.row_id) {
+      const { error: delError } = await supabase.from("teaching_schedule").delete().eq("id", item.row_id);
+      if (delError) nextDeleted = [...deleted, item.id];
+    }
+    commit(config, inspections.filter(entry => entry.id !== item.id), nextDeleted);
+    setMessage("ลบผลการตรวจแล้ว");
+  };
+
+  // สรุปผลตามช่วงเวลา
+  const rangeStart = mode === "week" ? weekStart : `${month}-01`;
+  const rangeEnd = mode === "week" ? shiftDateKey(weekStart, 6) : `${month}-31`;
+  const inRange = inspections.filter(item => item.date >= rangeStart && item.date <= rangeEnd);
+  const roomKeys = new Map();
+  rooms.forEach(room => roomKeys.set(room.id, room.name));
+  inRange.forEach(item => { if (!roomKeys.has(item.room_id)) roomKeys.set(item.room_id, item.room_name || "ห้องที่ลบแล้ว"); });
+  const summary = [...roomKeys.entries()].map(([id, name]) => {
+    const list = inRange.filter(item => item.room_id === id);
+    const total = list.reduce((sum, item) => sum + item.total, 0);
+    const average = list.length ? total / list.length : 0;
+    const percent = list.length ? (average / CLEANING_MAX) * 100 : 0;
+    const byCriterion = {};
+    CLEANING_CRITERIA.forEach(c => { byCriterion[c.key] = list.length ? list.reduce((sum, item) => sum + item.scores[c.key], 0) / list.length : 0; });
+    return { id, name, list, count: list.length, total, average, percent, byCriterion };
+  }).sort((a, b) => (b.count > 0) - (a.count > 0) || b.percent - a.percent || a.name.localeCompare(b.name, "th"));
+  let rank = 0;
+  summary.forEach(row => { row.rank = row.count ? ++rank : null; });
+
+  const small = { ...inputStyle, padding: "0.4rem 0.55rem", fontSize: "0.88rem" };
+  const tabs = [["inspect", "บันทึกผลการตรวจ"], ["summary", "สรุปผลและอันดับ"], ["rooms", "ทะเบียนห้องและพื้นที่"]];
+  const formRoom = rooms.find(room => room.id === form.room_id);
+  const formTotal = cleaningTotal(form.scores);
+  const chip = active => ({ border: `1px solid ${active ? "#008CFF" : "#E4EEF8"}`, background: active ? "linear-gradient(90deg, #008CFF, #3EBFFB)" : "#fff", color: active ? "#fff" : "#233862", borderRadius: 999, padding: "0.3rem 0.75rem", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", fontFamily: "inherit" });
+  const th = { padding: "0.4rem 0.5rem", fontSize: "0.75rem", color: "#596068", textAlign: "left", fontWeight: 800, whiteSpace: "nowrap", borderBottom: "1px solid #E4EEF8" };
+  const td = { padding: "0.45rem 0.5rem", fontSize: "0.85rem", borderTop: "1px solid #f1f5f9" };
+
+  const photoStrip = (photos, onRemove) => (
+    <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+      {photos.map((photo, index) => (
+        <div key={index} style={{ position: "relative" }}>
+          <img src={photoSrc(photo)} alt={`รูปประกอบ ${index + 1}`} onClick={() => setZoom(photoSrc(photo))} style={{ width: 92, height: 92, objectFit: "cover", borderRadius: 10, border: "1px solid #E4EEF8", cursor: "zoom-in" }} />
+          {onRemove && <button type="button" aria-label="ลบรูป" onClick={() => onRemove(index)} style={{ position: "absolute", top: 3, right: 3, width: 22, height: 22, borderRadius: "50%", border: "none", background: "#fee2e2", color: "#b91c1c", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}><X size={12} /></button>}
+        </div>
+      ))}
+    </div>
+  );
+
+  const inspectionCard = item => {
+    const percent = (item.total / CLEANING_MAX) * 100;
+    return (
+      <div key={item.id} style={{ border: "1px solid #E4EEF8", borderRadius: 14, padding: "0.7rem 0.8rem", display: "grid", gap: "0.45rem", background: "#fff" }}>
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+          <strong style={{ color: "#233862" }}>{formatThaiDateKey(item.date)} · {item.room_name} · {item.area}</strong>
+          <span style={{ fontWeight: 900, color: cleaningLevel(percent).color }}>{item.total}/{CLEANING_MAX}</span>
+          <CleaningLevelBadge percent={percent} />
+          {item.pending && <span style={{ fontSize: "0.7rem", color: "#b45309" }}>รอซิงก์</span>}
+          <span style={{ marginLeft: "auto", fontSize: "0.72rem", color: "#94a3b8" }}>ผู้ตรวจ {item.by || "-"}{item.at ? ` · ${fmtDate(item.at)} ${fmtTime(item.at)}` : ""}</span>
+          <button type="button" aria-label="ลบผลการตรวจ" onClick={() => deleteInspection(item)} style={{ border: "none", background: "#fee2e2", color: "#b91c1c", borderRadius: 8, padding: "0.2rem 0.4rem", cursor: "pointer" }}><Trash2 size={13} /></button>
+        </div>
+        <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
+          {CLEANING_CRITERIA.map(c => <span key={c.key} style={{ fontSize: "0.75rem", background: item.scores[c.key] >= 4 ? "#EAF5FF" : item.scores[c.key] >= 3 ? "#fef9c3" : "#fee2e2", color: "#233862", borderRadius: 8, padding: "0.15rem 0.45rem" }}>{c.label} {item.scores[c.key]}/5</span>)}
+        </div>
+        {item.note && <div style={{ fontSize: "0.83rem", color: "#334155", whiteSpace: "pre-wrap" }}><strong>จุดที่ต้องแก้ไข: </strong>{item.note}</div>}
+        {item.photos.length > 0 && photoStrip(item.photos)}
+      </div>
+    );
+  };
+
+  const header = (
+    <div style={{ background: "linear-gradient(90deg, #008CFF, #3EBFFB)", borderRadius: 18, padding: "1rem 1.2rem", color: "#fff", boxShadow: "0 4px 24px rgba(0,140,255,0.2)" }}>
+      <div style={{ fontSize: "1.2rem", fontWeight: 800 }}>เวรความสะอาด / เวรพื้นที่</div>
+      <div style={{ fontSize: "0.85rem", opacity: 0.9 }}>บันทึกผลการตรวจความสะอาดพื้นที่รับผิดชอบของแต่ละห้องเรียน (เฉพาะผู้บริหาร)</div>
+    </div>
+  );
+
+  if (loading) return <div style={{ display: "grid", gap: "1rem" }}>{header}<Card><div style={{ color: "#64748b" }}>กำลังโหลดข้อมูล...</div></Card></div>;
+
+  const detail = detailRoom ? summary.find(row => row.id === detailRoom) : null;
+
+  return (
+    <div style={{ display: "grid", gap: "1rem", maxWidth: 1080 }}>
+      {header}
+      <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+        {tabs.map(([key, label]) => <button key={key} type="button" aria-pressed={tab === key} onClick={() => { setTab(key); setDetailRoom(""); }} style={chip(tab === key)}>{label}</button>)}
+      </div>
+      {error && <ErrorBox>{error}</ErrorBox>}
+      {message && <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", borderRadius: 10, padding: "0.5rem 0.8rem", color: "#166534", fontWeight: 700, fontSize: "0.88rem" }}>{message}</div>}
+
+      {tab !== "rooms" && rooms.length === 0 && (
+        <Card><div style={{ color: "#9a4a00", fontWeight: 700 }}>ยังไม่มีทะเบียนห้องเรียน กรุณาเพิ่มห้องและพื้นที่รับผิดชอบที่แท็บ "ทะเบียนห้องและพื้นที่" ก่อนบันทึกผลการตรวจ</div></Card>
+      )}
+
+      {tab === "inspect" && rooms.length > 0 && (
+        <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 460px), 1fr))", alignItems: "start" }}>
+          <Card>
+            <div style={{ fontWeight: 800, color: "#233862", marginBottom: "0.7rem" }}>แบบบันทึกผลการตรวจ</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 140px), 1fr))", gap: "0.6rem" }}>
+              <Field label="ห้องเรียน">
+                <select value={form.room_id} onChange={event => { const room = rooms.find(item => item.id === event.target.value); setForm(current => ({ ...current, room_id: event.target.value, area: room?.areas?.[0] || "" })); }} style={small}>
+                  {rooms.map(room => <option key={room.id} value={room.id}>{room.name}</option>)}
+                </select>
+              </Field>
+              <Field label="วันที่ตรวจ">
+                <input type="date" value={form.date} max={todayISO()} onChange={event => setForm(current => ({ ...current, date: event.target.value }))} style={small} />
+              </Field>
+              <Field label="พื้นที่รับผิดชอบ">
+                <select value={form.area} onChange={event => setForm(current => ({ ...current, area: event.target.value }))} style={small}>
+                  {(formRoom?.areas || []).length === 0 && <option value="">ยังไม่กำหนดพื้นที่</option>}
+                  {(formRoom?.areas || []).map(area => <option key={area} value={area}>{area}</option>)}
+                </select>
+              </Field>
+            </div>
+            <div style={{ display: "grid", gap: "0.55rem", marginTop: "0.8rem" }}>
+              {CLEANING_CRITERIA.map((c, index) => (
+                <div key={c.key} style={{ background: "#F3F8FD", border: "1px solid #E4EEF8", borderRadius: 12, padding: "0.55rem 0.7rem" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", alignItems: "baseline" }}>
+                    <span style={{ fontWeight: 800, color: "#233862", fontSize: "0.88rem" }}>{index + 1}. {c.label}</span>
+                    <span style={{ fontSize: "0.75rem", color: "#596068" }}>{CLEANING_SCALE.find(s => s.value === form.scores[c.key])?.label}</span>
+                  </div>
+                  <div style={{ fontSize: "0.75rem", color: "#596068", margin: "0.15rem 0 0.35rem" }}>{c.hint}</div>
+                  <div role="radiogroup" aria-label={c.label} style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap" }}>
+                    {[0, 1, 2, 3, 4, 5].map(value => (
+                      <button key={value} type="button" role="radio" aria-checked={form.scores[c.key] === value} onClick={() => setForm(current => ({ ...current, scores: { ...current.scores, [c.key]: value } }))} style={{ minWidth: 38, height: 34, borderRadius: 10, border: `1px solid ${form.scores[c.key] === value ? "#008CFF" : "#d6e4f2"}`, background: form.scores[c.key] === value ? "linear-gradient(135deg, #008CFF, #3EBFFB)" : "#fff", color: form.scores[c.key] === value ? "#fff" : "#233862", fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>{value}</button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: "0.7rem" }}>
+              <Field label="บันทึกเพิ่มเติม / จุดที่ไม่สะอาด">
+                <textarea value={form.note} onChange={event => setForm(current => ({ ...current, note: event.target.value }))} placeholder="เช่น มีขยะใต้โต๊ะแถวหลัง, ขอบหน้าต่างด้านทิศเหนือมีฝุ่น" rows={3} style={{ ...inputStyle, resize: "vertical" }} />
+              </Field>
+            </div>
+            <div style={{ display: "grid", gap: "0.45rem", marginTop: "0.6rem" }}>
+              <label style={{ ...btnSecondary, flex: "none", width: "fit-content", cursor: busy ? "wait" : "pointer" }}>
+                <Upload size={16} /> {busy ? "กำลังประมวลผลรูป..." : `แนบรูปถ่าย (ไม่เกิน ${CLEANING_PHOTO_LIMIT} รูป)`}
+                <input type="file" accept="image/*" multiple disabled={busy} onChange={pickPhotos} style={{ display: "none" }} />
+              </label>
+              {form.photos.length > 0 && photoStrip(form.photos, index => setForm(current => ({ ...current, photos: current.photos.filter((_, i) => i !== index) })))}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginTop: "0.9rem", flexWrap: "wrap" }}>
+              <div style={{ fontWeight: 900, fontSize: "1.3rem", color: cleaningLevel((formTotal / CLEANING_MAX) * 100).color }}>{formTotal}/{CLEANING_MAX}</div>
+              <CleaningLevelBadge percent={(formTotal / CLEANING_MAX) * 100} />
+              <button type="button" disabled={busy} onClick={submitInspection} style={{ ...btnPrimary, flex: "none", marginLeft: "auto", padding: "0.6rem 1.2rem", background: "linear-gradient(90deg, #FF7106, #FF9A3C)", color: "#fff", cursor: busy ? "wait" : "pointer", boxShadow: "0 4px 14px rgba(255,113,6,0.3)" }}><Save size={16} /> บันทึกผลการตรวจ</button>
+            </div>
+          </Card>
+          <Card>
+            <div style={{ fontWeight: 800, color: "#233862", marginBottom: "0.6rem" }}>ผลการตรวจล่าสุด</div>
+            {inspections.length === 0 ? <div style={{ color: "#94a3b8" }}>ยังไม่มีผลการตรวจ</div> : <div style={{ display: "grid", gap: "0.5rem", maxHeight: 900, overflowY: "auto" }}>{inspections.slice(0, 12).map(inspectionCard)}</div>}
+          </Card>
+        </div>
+      )}
+
+      {tab === "summary" && rooms.length + inspections.length > 0 && (
+        <Card>
+          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginBottom: "0.8rem" }}>
+            <button type="button" aria-pressed={mode === "week"} onClick={() => setMode("week")} style={chip(mode === "week")}>รายสัปดาห์</button>
+            <button type="button" aria-pressed={mode === "month"} onClick={() => setMode("month")} style={chip(mode === "month")}>รายเดือน</button>
+            {mode === "week" ? <WeekSwitcher weekStart={weekStart} onChange={setWeekStart} /> : <input type="month" aria-label="เดือน" value={month} onChange={event => event.target.value && setMonth(event.target.value)} style={{ ...small, width: "auto" }} />}
+            <span style={{ fontSize: "0.8rem", color: "#596068" }}>ตรวจทั้งหมด {inRange.length} ครั้ง</span>
+          </div>
+          {detail ? (
+            <div style={{ display: "grid", gap: "0.6rem" }}>
+              <button type="button" onClick={() => setDetailRoom("")} style={{ ...btnSecondary, flex: "none", width: "fit-content", padding: "0.35rem 0.7rem", fontSize: "0.82rem" }}><ChevronLeft size={14} /> กลับไปตารางสรุป</button>
+              <div style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ fontSize: "1.15rem", fontWeight: 800, color: "#233862" }}>{detail.name}{detail.rank ? ` · อันดับ ${detail.rank}` : ""}</div>
+                <div style={{ fontWeight: 900, color: cleaningLevel(detail.percent).color }}>เฉลี่ย {detail.average.toFixed(1)}/{CLEANING_MAX} ({detail.percent.toFixed(0)}%)</div>
+                {detail.count > 0 && <CleaningLevelBadge percent={detail.percent} />}
+              </div>
+              {detail.count > 0 && (
+                <div style={{ display: "grid", gap: "0.25rem" }}>
+                  {CLEANING_CRITERIA.map(c => (
+                    <div key={c.key} style={{ display: "grid", gridTemplateColumns: "10rem 1fr 3rem", gap: "0.5rem", alignItems: "center", fontSize: "0.8rem" }}>
+                      <span style={{ color: "#233862", fontWeight: 700 }}>{c.label}</span>
+                      <div style={{ background: "#F3F8FD", borderRadius: 8, height: 12 }}><div style={{ width: `${(detail.byCriterion[c.key] / 5) * 100}%`, height: "100%", borderRadius: 8, background: "linear-gradient(90deg, #008CFF, #3EBFFB)" }} /></div>
+                      <span style={{ textAlign: "right", fontWeight: 800 }}>{detail.byCriterion[c.key].toFixed(1)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {detail.list.length === 0 ? <div style={{ color: "#94a3b8" }}>ไม่มีผลการตรวจในช่วงนี้</div> : detail.list.map(inspectionCard)}
+            </div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 620 }}>
+                <thead><tr>{["อันดับ", "ห้องเรียน", "จำนวนครั้งที่ตรวจ", "คะแนนรวม", "คะแนนเฉลี่ย", "ร้อยละ", "ระดับ"].map(label => <th key={label} style={th}>{label}</th>)}</tr></thead>
+                <tbody>
+                  {summary.map(row => (
+                    <tr key={row.id} onClick={() => setDetailRoom(row.id)} style={{ cursor: "pointer" }} title="ดูรายละเอียดและรูปถ่าย">
+                      <td style={{ ...td, fontWeight: 900, color: row.rank === 1 ? "#FF7106" : "#233862" }}>{row.rank ? (row.rank <= 3 ? ["🥇", "🥈", "🥉"][row.rank - 1] + " " : "") + row.rank : "-"}</td>
+                      <td style={{ ...td, fontWeight: 700, color: "#233862" }}>{row.name}</td>
+                      <td style={td}>{row.count}</td>
+                      <td style={td}>{row.count ? `${row.total}/${row.count * CLEANING_MAX}` : "-"}</td>
+                      <td style={td}>{row.count ? `${row.average.toFixed(1)}/${CLEANING_MAX}` : "-"}</td>
+                      <td style={td}>{row.count ? `${row.percent.toFixed(0)}%` : "-"}</td>
+                      <td style={td}>{row.count ? <CleaningLevelBadge percent={row.percent} /> : <span style={{ color: "#94a3b8", fontSize: "0.78rem" }}>ยังไม่ได้ตรวจ</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: "0.4rem" }}>เรียงอันดับตามคะแนนเฉลี่ยต่อครั้ง · กดที่แถวเพื่อดูรายละเอียดและรูปถ่าย</div>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {tab === "rooms" && (
+        <Card>
+          <div style={{ fontWeight: 800, color: "#233862", marginBottom: "0.6rem" }}>ทะเบียนห้องเรียนและพื้นที่รับผิดชอบ</div>
+          <div style={{ display: "flex", gap: "0.45rem", marginBottom: "0.8rem", flexWrap: "wrap" }}>
+            <input value={newRoom} onChange={event => setNewRoom(event.target.value)} onKeyDown={event => { if (event.key === "Enter") addRoom(); }} placeholder="ชื่อห้อง เช่น ป.1/1" aria-label="ชื่อห้องใหม่" style={{ ...small, flex: "1 1 200px" }} />
+            <button type="button" onClick={addRoom} style={{ ...btnPrimary, flex: "none", padding: "0.45rem 1rem", background: "linear-gradient(90deg, #008CFF, #3EBFFB)", color: "#fff", cursor: "pointer" }}><Plus size={15} /> เพิ่มห้องเรียน</button>
+          </div>
+          {rooms.length === 0 ? <div style={{ color: "#94a3b8" }}>ยังไม่มีห้องเรียนในทะเบียน</div> : (
+            <div style={{ display: "grid", gap: "0.55rem" }}>
+              {rooms.map(room => (
+                <div key={room.id} style={{ border: "1px solid #E4EEF8", borderRadius: 14, padding: "0.65rem 0.8rem", display: "grid", gap: "0.45rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <strong style={{ color: "#233862", flex: 1 }}>{room.name}</strong>
+                    <button type="button" onClick={() => removeRoom(room)} style={{ border: "none", background: "#fee2e2", color: "#b91c1c", borderRadius: 8, padding: "0.25rem 0.55rem", cursor: "pointer", fontFamily: "inherit", fontSize: "0.78rem", fontWeight: 700 }}><Trash2 size={12} /> ลบห้อง</button>
+                  </div>
+                  <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", alignItems: "center" }}>
+                    <span style={{ fontSize: "0.78rem", color: "#596068" }}>พื้นที่รับผิดชอบ:</span>
+                    {room.areas.length === 0 && <span style={{ fontSize: "0.78rem", color: "#94a3b8" }}>ยังไม่กำหนด</span>}
+                    {room.areas.map(area => (
+                      <span key={area} style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem", background: "#EAF5FF", color: "#0072D9", borderRadius: 999, padding: "0.15rem 0.3rem 0.15rem 0.6rem", fontSize: "0.8rem", fontWeight: 700 }}>
+                        {area}
+                        <button type="button" aria-label={`ลบพื้นที่ ${area}`} onClick={() => removeArea(room, area)} style={{ border: "none", background: "transparent", color: "#0072D9", cursor: "pointer", padding: 0, display: "inline-flex" }}><X size={12} /></button>
+                      </span>
+                    ))}
+                  </div>
+                  <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap", alignItems: "center" }}>
+                    {CLEANING_AREA_PRESETS.filter(area => !room.areas.includes(area)).map(area => <button key={area} type="button" onClick={() => addArea(room, area)} style={{ border: "1px dashed #8FD0FF", background: "#fff", color: "#0072D9", borderRadius: 999, padding: "0.12rem 0.55rem", fontSize: "0.75rem", cursor: "pointer", fontFamily: "inherit" }}>+ {area}</button>)}
+                    <input value={areaDrafts[room.id] || ""} onChange={event => setAreaDrafts(current => ({ ...current, [room.id]: event.target.value }))} onKeyDown={event => { if (event.key === "Enter") addArea(room, areaDrafts[room.id]); }} placeholder="พื้นที่อื่น ๆ" aria-label={`เพิ่มพื้นที่ให้ ${room.name}`} style={{ ...small, width: 150, padding: "0.25rem 0.5rem", fontSize: "0.8rem" }} />
+                    <button type="button" onClick={() => addArea(room, areaDrafts[room.id])} style={{ ...btnSecondary, flex: "none", padding: "0.25rem 0.6rem", fontSize: "0.78rem" }}>เพิ่ม</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {zoom && (
+        <div role="dialog" aria-modal="true" onClick={() => setZoom("")} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.75)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem", cursor: "zoom-out" }}>
+          <img src={zoom} alt="รูปขยาย" style={{ maxWidth: "100%", maxHeight: "90vh", borderRadius: 12 }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── ดูแผนสำหรับสอนแทน (อ่านอย่างเดียว ยกเว้นความเห็นผู้บริหาร) ──────────────
 function SubstitutePlanView({ employees, currentUser }) {
   const isAdmin = currentUser?.role === "admin";
@@ -6815,7 +7512,7 @@ const ACADEMIC_TABS = [
   ...ACADEMIC_EXTRA_TABS,
 ];
 
-function AcademicPage({ employees, currentUser }) {
+function AcademicPage({ employees, currentUser, planFocus = null }) {
   const [tab, setTab] = useState("plan");
   return (
     <div style={{ display: "grid", gap: "1rem", minWidth: 0 }}>
@@ -6838,7 +7535,7 @@ function AcademicPage({ employees, currentUser }) {
           })}
         </div>
       </div>
-      {tab === "plan" && <TeachingSupervisionPage employees={employees} currentUser={currentUser} />}
+      {tab === "plan" && <TeachingSupervisionPage employees={employees} currentUser={currentUser} planFocus={planFocus} />}
       {tab === "roll" && <StudentRollPage employees={employees} currentUser={currentUser} />}
       {tab === "substitute" && <SubstitutePlanView employees={employees} currentUser={currentUser} />}
       {tab !== "plan" && tab !== "roll" && tab !== "substitute" && <AcademicExtra tab={tab} employees={employees} currentUser={currentUser} />}
@@ -9016,6 +9713,7 @@ export default function HRApp() {
   };
   const [activePage, setActivePage] = useState(getInitialPage);
   const [evalFocus, setEvalFocus] = useState("");
+  const [planFocus, setPlanFocus] = useState(null);
   const landedRef = useRef("");
   useEffect(() => {
     // ผู้บริหาร/แอดมิน เข้าสู่ระบบแล้วไปหน้าผู้บริหารก่อน (ครั้งเดียวต่อการล็อกอิน)
@@ -9027,10 +9725,10 @@ export default function HRApp() {
   }, [currentUser]);
   const [showAttendance, setShowAttendance] = useState(false);
   const [attMode, setAttMode] = useState("in");
-  const [activityLog, setActivityLog] = useState([]);
-  const [employees, setEmployees] = useState([]);
-  const [leaves, setLeaves] = useState([]);
-  const [outings, setOutings] = useState([]);
+  const [allActivityLog, setActivityLog] = useState([]);
+  const [allEmployees, setEmployees] = useState([]);
+  const [allLeaves, setLeaves] = useState([]);
+  const [allOutings, setOutings] = useState([]);
   const [settings, setSettings] = useState({ work_start: "08:00", work_end: "16:30", late_grace_minutes: 0 });
   const [currentTime, setCurrentTime] = useState(new Date());
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -9082,7 +9780,7 @@ export default function HRApp() {
       setActivePage("dashboard");
       return;
     }
-    if ((activePage === "teacherEval" || activePage === "execDash") && !isExecutiveUser(currentUser)) {
+    if ((activePage === "teacherEval" || activePage === "execDash" || activePage === "cleaningDuty") && !isExecutiveUser(currentUser)) {
       setActivePage("dashboard");
       return;
     }
@@ -9125,8 +9823,16 @@ export default function HRApp() {
 
   if (!currentUser) return <LoginPage onLogin={setCurrentUser} />;
 
-  const previewTeacher = employees.find(emp => emp.username === "teacher.try" && emp.role !== "admin");
-  const actingUser = currentUser.role === "admin" && teacherPreview && previewTeacher ? previewTeacher : currentUser;
+  const canUseTestTeacher = isTestTeacherOwner(currentUser);
+  const previewTeacher = allEmployees.find(emp => isTestTeacher(emp) && emp.role !== "admin");
+  const actingUser = canUseTestTeacher && teacherPreview && previewTeacher ? previewTeacher : currentUser;
+  // ซ่อนครูทดลองระบบจากรายชื่อ/สถิติของผู้ใช้อื่นทั้งหมด
+  const hiddenIds = canUseTestTeacher ? new Set() : new Set(allEmployees.filter(isTestTeacher).map(emp => String(emp.id)));
+  const notHidden = row => !hiddenIds.has(String(row.employee_id));
+  const employees = hiddenIds.size ? allEmployees.filter(emp => !hiddenIds.has(String(emp.id))) : allEmployees;
+  const activityLog = hiddenIds.size ? allActivityLog.filter(notHidden) : allActivityLog;
+  const leaves = hiddenIds.size ? allLeaves.filter(notHidden) : allLeaves;
+  const outings = hiddenIds.size ? allOutings.filter(notHidden) : allOutings;
   const todayDateStr = todayISO();
   const isToday = (dt) => new Date(dt).toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }) === todayDateStr;
   const todayAttendance = activityLog.filter(a => isToday(a.check_in));
@@ -9186,7 +9892,8 @@ export default function HRApp() {
       window.history.replaceState(null, "", window.location.pathname);
     }
     setEvalFocus("");
-    if ((key === "teacherEval" || key === "execDash") && !isExecutiveUser(actingUser)) {
+    setPlanFocus(null);
+    if ((key === "teacherEval" || key === "execDash" || key === "cleaningDuty") && !isExecutiveUser(actingUser)) {
       setActivePage("dashboard");
       setSidebarOpen(false);
       return;
@@ -9253,7 +9960,7 @@ export default function HRApp() {
               </div>
             </div>
           )}
-          {currentUser.role === "admin" && (
+          {canUseTestTeacher && previewTeacher && (
             <button
               type="button"
               onClick={() => {
@@ -9537,10 +10244,11 @@ export default function HRApp() {
               {activePage === "outing" && <OutingPage employees={employees} outings={outings} currentUser={actingUser} onRefresh={fetchData} />}
               {activePage === "finance" && currentUser.role === "admin" && <FinancePortal employees={employees} attendance={activityLog} leaves={leaves} settings={settings} />}
               {activePage === "report" && <ReportPage employees={employees} attendance={activityLog} leaves={leaves} outings={outings} settings={settings} />}
-              {activePage === "schedule" && <SchedulePage employees={employees} currentUser={actingUser} onRefresh={fetchData} />}
-              {activePage === "academic" && <AcademicPage employees={employees} currentUser={actingUser} />}
+              {activePage === "schedule" && <SchedulePage employees={employees} currentUser={actingUser} onOpenPlan={focus => { setPlanFocus({ ...focus, at: Date.now() }); setActivePage("academic"); }} />}
+              {activePage === "academic" && <AcademicPage employees={employees} currentUser={actingUser} planFocus={planFocus} />}
               {activePage === "activityPlan" && <ActivityPlanPage employees={employees} currentUser={actingUser} />}
               {activePage === "execDash" && (isExecutiveUser(actingUser) ? <ExecutiveDashboard employees={employees} leaves={leaves} settings={settings} currentUser={actingUser} onOpenEval={id => { setEvalFocus(String(id)); setActivePage("teacherEval"); }} onOpenLeave={() => openNavItem("leave")} /> : <NoAccessCard />)}
+              {activePage === "cleaningDuty" && (isExecutiveUser(actingUser) ? <CleaningDutyPage currentUser={actingUser} /> : <NoAccessCard />)}
               {activePage === "teacherEval" && (isExecutiveUser(actingUser) ? <TeacherEvalPage employees={employees} currentUser={actingUser} initialSelected={evalFocus} /> : <NoAccessCard />)}
               {activePage === "settings" && <SettingsPage settings={settings} onRefresh={fetchData} />}
             </>

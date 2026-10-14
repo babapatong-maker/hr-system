@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import { AcademicExtra, ACADEMIC_EXTRA_TABS, ACADEMIC_RECORD_ROOM, TEACHING_GRADE_GROUPS, loadAssignedPlanLevels, loadTeachingGrades, saveTeachingGrade } from "./academicRecords.jsx";
 import { read as readWorkbook, utils as xlsxUtils, writeFile as writeWorkbookFile } from "xlsx";
 import { supabase } from "./supabase.js";
+import { STUDENT_STATS_TEMPLATE_URL, STUDENT_STATS_LEVELS, MILK_OTHER, MILK_NONE, buildStudentStats, fillStudentStatsWorkbook, statsTotals, studentSex, remarkName, formDateLine } from "./studentStatsForm.js";
 import {
   Users, Building2, Clock, CheckCircle, XCircle, MapPin,
   Navigation, LogIn, LogOut, Settings, Bell, Search,
@@ -10,8 +11,7 @@ import {
   Shield, WifiOff, RefreshCw, UserPlus, DollarSign,
   Umbrella, AlertCircle, Activity, Home, X, Edit, Trash2, Save, Phone, Mail,
   Plus, Calendar, ArrowRightLeft, ArrowLeftRight, TrendingUp, User, Lock, Eye, EyeOff, Key, Menu,
-  BookOpen, ChevronLeft, ChevronUp, Copy, Upload
-} from "lucide-react";
+  BookOpen, ChevronLeft, ChevronUp, Copy, Upload, Download, Printer, Pencil } from "lucide-react";
 
 function isLocalPreview() {
   if (typeof window === "undefined") return false;
@@ -4779,6 +4779,7 @@ function cleanRollStudents(students) {
       number: String(student?.number || index + 1).trim().slice(0, 4) || String(index + 1),
       name: String(student?.name || "").replace(/\s+/g, " ").trim().slice(0, 40),
       surname: String(student?.surname || "").replace(/\s+/g, " ").trim().slice(0, 40),
+      sex: student?.sex === "M" || student?.sex === "F" ? student.sex : "",
     }))
     .filter(student => student.name)
     .slice(0, STUDENT_ROLL_MAX);
@@ -4821,7 +4822,16 @@ function parseRollBook(subject) {
         Object.entries(day?.health && typeof day.health === "object" ? day.health : {}).forEach(([id, item]) => {
           if (marks[id] === "sick") health[id] = cleanSickHealth(item);
         });
-        days[date] = { saved_at: day?.saved_at || null, marks, health };
+        // เช็คนม: คนที่ไม่มาเรียน/ลา → ใครดื่มนมแทน (id นักเรียนที่มา, MILK_OTHER หรือ MILK_NONE)
+        const milk = {};
+        const milkNote = {};
+        Object.entries(day?.milk && typeof day.milk === "object" ? day.milk : {}).forEach(([id, pick]) => {
+          if (marks[id] && marks[id] !== "present" && typeof pick === "string" && pick) milk[id] = pick.slice(0, 64);
+        });
+        Object.entries(day?.milk_note && typeof day.milk_note === "object" ? day.milk_note : {}).forEach(([id, note]) => {
+          if (milk[id] === MILK_OTHER) milkNote[id] = String(note || "").slice(0, 80);
+        });
+        days[date] = { saved_at: day?.saved_at || null, marks, health, milk, milk_note: milkNote };
       });
     }
     // ย้ายรายชื่อที่เคยติดอยู่ในข้อมูลรายวัน (days[date].students / roster) ขึ้นเป็นรายชื่อถาวร
@@ -4937,7 +4947,7 @@ function mergeRoster(existing, incoming) {
     const match = samePerson || sameName;
     if (!match) return student;
     used.add(match.id);
-    return { id: match.id, number: student.number, name: student.name, surname: student.surname || "" };
+    return { id: match.id, number: student.number, name: student.name, surname: student.surname || "", sex: match.sex || student.sex || "" };
   });
 }
 
@@ -6905,6 +6915,7 @@ function cleanCleaningInspection(raw) {
     by_id: String(raw?.by_id || ""),
     at: String(raw?.at || ""),
     updated_at: String(raw?.updated_at || raw?.at || ""),
+    edited_by: String(raw?.edited_by || "").slice(0, 120),
     row_id: raw?.row_id || null,
     pending: !!raw?.pending,
   };
@@ -7023,7 +7034,13 @@ function CleaningDutyInner({ currentUser }) {
   const [month, setMonth] = useState(() => todayISO().slice(0, 7));
   const [detailRoom, setDetailRoom] = useState("");
   const [zoom, setZoom] = useState("");
+  const [editingId, setEditingId] = useState("");
+  const [roomEdit, setRoomEdit] = useState(null); // { id, name }
+  const [areaEdit, setAreaEdit] = useState(null); // { roomId, from, to }
+  const [confirmBox, setConfirmBox] = useState(null); // { title, text, confirmLabel, onConfirm }
   const rooms = config.rooms;
+  const askConfirm = (title, text, onConfirm, confirmLabel = "ลบ") => setConfirmBox({ title, text, onConfirm, confirmLabel });
+  const roomNameOf = item => rooms.find(room => room.id === item.room_id)?.name || item.room_name || "ห้องที่ลบแล้ว";
 
   const commit = (nextConfig, nextInspections, nextDeleted = deleted) => {
     const sorted = [...nextInspections].sort((a, b) => b.date.localeCompare(a.date) || b.at.localeCompare(a.at));
@@ -7076,7 +7093,7 @@ function CleaningDutyInner({ currentUser }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const saveConfig = async (nextRooms, success) => {
+  const saveConfig = async (nextRooms, success, nextInspections = inspections) => {
     const next = cleanCleaningConfig({ ...config, rooms: nextRooms, updated_at: new Date().toISOString() });
     try {
       next.row_id = await writeCleaningRow(next, currentUser.id);
@@ -7087,8 +7104,8 @@ function CleaningDutyInner({ currentUser }) {
       next.pending = true;
       setError(`${err.message || "บันทึกไม่สำเร็จ"} · เก็บไว้ในเครื่องนี้แล้ว จะซิงก์เมื่อเปิดหน้านี้ครั้งถัดไป`);
     }
-    commit(next, inspections);
-    if (!next.rooms.some(room => room.id === form.room_id)) setForm(emptyCleaningForm(next.rooms));
+    commit(next, nextInspections);
+    if (!editingId && !next.rooms.some(room => room.id === form.room_id)) setForm(emptyCleaningForm(next.rooms));
   };
 
   const addRoom = () => {
@@ -7099,8 +7116,42 @@ function CleaningDutyInner({ currentUser }) {
     setNewRoom("");
   };
   const removeRoom = room => {
-    if (!window.confirm(`ลบห้อง ${room.name} ออกจากทะเบียน? (ผลการตรวจเดิมยังคงอยู่)`)) return;
-    saveConfig(rooms.filter(item => item.id !== room.id), `ลบห้อง ${room.name} แล้ว`);
+    const count = inspections.filter(item => item.room_id === room.id).length;
+    askConfirm(`ลบห้อง ${room.name}?`, `ห้องนี้จะถูกนำออกจากทะเบียน${count ? ` · ผลการตรวจเดิม ${count} รายการยังคงอยู่ในสรุปผล` : ""}`, () => saveConfig(rooms.filter(item => item.id !== room.id), `ลบห้อง ${room.name} แล้ว`));
+  };
+  const renameRoom = () => {
+    if (!roomEdit) return;
+    const room = rooms.find(item => item.id === roomEdit.id);
+    const name = roomEdit.name.trim().slice(0, 80);
+    if (!room || !name) { setError("กรุณากรอกชื่อห้อง"); return; }
+    if (name === room.name) { setRoomEdit(null); return; }
+    if (rooms.some(item => item.id !== room.id && item.name === name)) { setError(`มีห้อง ${name} อยู่แล้ว`); return; }
+    setRoomEdit(null);
+    saveConfig(rooms.map(item => (item.id === room.id ? { ...item, name } : item)), `เปลี่ยนชื่อห้อง ${room.name} เป็น ${name} แล้ว`);
+  };
+  // เปลี่ยนชื่อพื้นที่ → แก้ชื่อพื้นที่ในผลการตรวจเดิมของห้องนั้นด้วย
+  const renameArea = async () => {
+    if (!areaEdit) return;
+    const room = rooms.find(item => item.id === areaEdit.roomId);
+    const to = areaEdit.to.trim().slice(0, 60);
+    if (!room || !to) { setError("กรุณากรอกชื่อพื้นที่"); return; }
+    if (to === areaEdit.from) { setAreaEdit(null); return; }
+    if (room.areas.includes(to)) { setError(`ห้อง ${room.name} มีพื้นที่ ${to} อยู่แล้ว`); return; }
+    const from = areaEdit.from;
+    setAreaEdit(null);
+    setBusy(true);
+    const now = new Date().toISOString();
+    let failed = 0;
+    const nextInspections = [];
+    for (const item of inspections) {
+      if (item.room_id !== room.id || item.area !== from) { nextInspections.push(item); continue; }
+      const next = { ...item, area: to, updated_at: now };
+      try { next.row_id = await writeCleaningRow(next, currentUser.id); next.pending = false; } catch { next.pending = true; failed += 1; }
+      nextInspections.push(next);
+    }
+    await saveConfig(rooms.map(item => (item.id === room.id ? { ...item, areas: item.areas.map(value => (value === from ? to : value)) } : item)), `เปลี่ยนชื่อพื้นที่ ${from} เป็น ${to} แล้ว${failed ? ` (ผลการตรวจ ${failed} รายการรอซิงก์)` : ""}`, nextInspections);
+    if (form.room_id === room.id && form.area === from) setForm(current => ({ ...current, area: to }));
+    setBusy(false);
   };
   const addArea = (room, area) => {
     const text = String(area || "").trim();
@@ -7108,7 +7159,7 @@ function CleaningDutyInner({ currentUser }) {
     saveConfig(rooms.map(item => (item.id === room.id ? { ...item, areas: [...item.areas, text] } : item)), `เพิ่มพื้นที่ ${text} ให้ห้อง ${room.name} แล้ว`);
     setAreaDrafts(current => ({ ...current, [room.id]: "" }));
   };
-  const removeArea = (room, area) => saveConfig(rooms.map(item => (item.id === room.id ? { ...item, areas: item.areas.filter(value => value !== area) } : item)), `ลบพื้นที่ ${area} แล้ว`);
+  const removeArea = (room, area) => askConfirm(`ลบพื้นที่ ${area} ของห้อง ${room.name}?`, "ผลการตรวจเดิมของพื้นที่นี้ยังคงอยู่", () => saveConfig(rooms.map(item => (item.id === room.id ? { ...item, areas: item.areas.filter(value => value !== area) } : item)), `ลบพื้นที่ ${area} แล้ว`));
 
   const pickPhotos = async event => {
     const files = [...(event.target.files || [])];
@@ -7136,30 +7187,51 @@ function CleaningDutyInner({ currentUser }) {
     if (!room) { setError("กรุณาเลือกห้องเรียน"); return; }
     if (!form.area) { setError("กรุณาเลือกพื้นที่รับผิดชอบ"); return; }
     const now = new Date().toISOString();
-    const item = cleanCleaningInspection({ ...form, id: newSupervisionId(), room_name: room.name, by: currentUser.name, by_id: currentUser.id, at: now, updated_at: now });
+    const original = editingId ? inspections.find(entry => entry.id === editingId) : null;
+    const item = original
+      ? cleanCleaningInspection({ ...original, room_id: form.room_id, area: form.area, date: form.date, scores: form.scores, note: form.note, photos: form.photos, room_name: room.name, updated_at: now, edited_by: currentUser.name })
+      : cleanCleaningInspection({ ...form, id: newSupervisionId(), room_name: room.name, by: currentUser.name, by_id: currentUser.id, at: now, updated_at: now });
+    if (original) item.edited_by = currentUser.name;
     setBusy(true);
     try {
       item.row_id = await writeCleaningRow(item, currentUser.id);
       item.pending = false;
-      setMessage(`บันทึกผลการตรวจ ${room.name} · ${item.area} แล้ว (${item.total}/${CLEANING_MAX} คะแนน)`);
+      setMessage(`${original ? "แก้ไข" : "บันทึก"}ผลการตรวจ ${room.name} · ${item.area} แล้ว (${item.total}/${CLEANING_MAX} คะแนน)`);
       setError("");
     } catch (err) {
       item.pending = true;
       setError(`${err.message || "บันทึกไม่สำเร็จ"} · เก็บไว้ในเครื่องนี้แล้ว จะซิงก์เมื่อเปิดหน้านี้ครั้งถัดไป`);
     }
-    commit(config, [item, ...inspections]);
-    setForm(current => ({ ...emptyCleaningForm(rooms), room_id: current.room_id, area: current.area, date: current.date }));
+    commit(config, original ? inspections.map(entry => (entry.id === original.id ? item : entry)) : [item, ...inspections]);
+    setEditingId("");
+    setForm(current => ({ ...emptyCleaningForm(rooms), room_id: current.room_id, area: current.area, date: original ? todayISO() : current.date }));
     setBusy(false);
   };
 
-  const deleteInspection = async item => {
-    if (!window.confirm(`ลบผลการตรวจ ${item.room_name} · ${item.area} วันที่ ${formatThaiDateKey(item.date)}?`)) return;
+  const startEdit = item => {
+    setEditingId(item.id);
+    setForm({ room_id: item.room_id, area: item.area, date: item.date, scores: { ...item.scores }, note: item.note, photos: [...item.photos] });
+    setTab("inspect");
+    setDetailRoom("");
+    setMessage("");
+    setError(rooms.some(room => room.id === item.room_id) ? "" : "ห้องของผลการตรวจนี้ถูกลบจากทะเบียนแล้ว กรุณาเลือกห้องใหม่ก่อนบันทึก");
+    if (!rooms.some(room => room.id === item.room_id)) setForm(current => ({ ...current, room_id: rooms[0]?.id || "", area: rooms[0]?.areas?.[0] || "" }));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const cancelEdit = () => {
+    setEditingId("");
+    setForm(emptyCleaningForm(rooms));
+  };
+
+  const deleteInspection = item => askConfirm("ลบผลการตรวจนี้?", `${roomNameOf(item)} · ${item.area} · วันที่ ${formatThaiDateKey(item.date)} (${item.total}/${CLEANING_MAX} คะแนน) — ลบแล้วกู้คืนไม่ได้`, () => removeInspection(item));
+  const removeInspection = async item => {
     let nextDeleted = deleted;
     if (item.row_id) {
       const { error: delError } = await supabase.from("teaching_schedule").delete().eq("id", item.row_id);
       if (delError) nextDeleted = [...deleted, item.id];
     }
     commit(config, inspections.filter(entry => entry.id !== item.id), nextDeleted);
+    if (editingId === item.id) cancelEdit();
     setMessage("ลบผลการตรวจแล้ว");
   };
 
@@ -7206,12 +7278,14 @@ function CleaningDutyInner({ currentUser }) {
     return (
       <div key={item.id} style={{ border: "1px solid #E4EEF8", borderRadius: 14, padding: "0.7rem 0.8rem", display: "grid", gap: "0.45rem", background: "#fff" }}>
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-          <strong style={{ color: "#233862" }}>{formatThaiDateKey(item.date)} · {item.room_name} · {item.area}</strong>
+          <strong style={{ color: "#233862" }}>{formatThaiDateKey(item.date)} · {roomNameOf(item)} · {item.area}</strong>
           <span style={{ fontWeight: 900, color: cleaningLevel(percent).color }}>{item.total}/{CLEANING_MAX}</span>
           <CleaningLevelBadge percent={percent} />
           {item.pending && <span style={{ fontSize: "0.7rem", color: "#b45309" }}>รอซิงก์</span>}
-          <span style={{ marginLeft: "auto", fontSize: "0.72rem", color: "#94a3b8" }}>ผู้ตรวจ {item.by || "-"}{item.at ? ` · ${fmtDate(item.at)} ${fmtTime(item.at)}` : ""}</span>
-          <button type="button" aria-label="ลบผลการตรวจ" onClick={() => deleteInspection(item)} style={{ border: "none", background: "#fee2e2", color: "#b91c1c", borderRadius: 8, padding: "0.2rem 0.4rem", cursor: "pointer" }}><Trash2 size={13} /></button>
+          {editingId === item.id && <span style={{ fontSize: "0.7rem", color: "#FF7106", fontWeight: 800 }}>กำลังแก้ไข</span>}
+          <span style={{ marginLeft: "auto", fontSize: "0.72rem", color: "#94a3b8" }}>ผู้ตรวจ {item.by || "-"}{item.at ? ` · ${fmtDate(item.at)} ${fmtTime(item.at)}` : ""}{item.edited_by && item.updated_at !== item.at ? ` · แก้ไขโดย ${item.edited_by} ${fmtDate(item.updated_at)} ${fmtTime(item.updated_at)}` : ""}</span>
+          <button type="button" aria-label="แก้ไขผลการตรวจ" title="แก้ไข" onClick={() => startEdit(item)} style={{ border: "none", background: "#EAF5FF", color: "#0072D9", borderRadius: 8, padding: "0.2rem 0.4rem", cursor: "pointer" }}><Pencil size={13} /></button>
+          <button type="button" aria-label="ลบผลการตรวจ" title="ลบ" onClick={() => deleteInspection(item)} style={{ border: "none", background: "#fee2e2", color: "#b91c1c", borderRadius: 8, padding: "0.2rem 0.4rem", cursor: "pointer" }}><Trash2 size={13} /></button>
         </div>
         <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
           {CLEANING_CRITERIA.map(c => <span key={c.key} style={{ fontSize: "0.75rem", background: item.scores[c.key] >= 4 ? "#EAF5FF" : item.scores[c.key] >= 3 ? "#fef9c3" : "#fee2e2", color: "#233862", borderRadius: 8, padding: "0.15rem 0.45rem" }}>{c.label} {item.scores[c.key]}/5</span>)}
@@ -7249,7 +7323,10 @@ function CleaningDutyInner({ currentUser }) {
       {tab === "inspect" && rooms.length > 0 && (
         <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 460px), 1fr))", alignItems: "start" }}>
           <Card>
-            <div style={{ fontWeight: 800, color: "#233862", marginBottom: "0.7rem" }}>แบบบันทึกผลการตรวจ</div>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.7rem", flexWrap: "wrap" }}>
+              <div style={{ fontWeight: 800, color: editingId ? "#FF7106" : "#233862" }}>{editingId ? "แก้ไขผลการตรวจ" : "แบบบันทึกผลการตรวจ"}</div>
+              {editingId && <span style={{ fontSize: "0.75rem", color: "#9a4a00", background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 999, padding: "0.1rem 0.55rem" }}>แก้ไขวันที่ ห้อง พื้นที่ คะแนน บันทึก และรูปได้</span>}
+            </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 140px), 1fr))", gap: "0.6rem" }}>
               <Field label="ห้องเรียน">
                 <select value={form.room_id} onChange={event => { const room = rooms.find(item => item.id === event.target.value); setForm(current => ({ ...current, room_id: event.target.value, area: room?.areas?.[0] || "" })); }} style={small}>
@@ -7261,7 +7338,8 @@ function CleaningDutyInner({ currentUser }) {
               </Field>
               <Field label="พื้นที่รับผิดชอบ">
                 <select value={form.area} onChange={event => setForm(current => ({ ...current, area: event.target.value }))} style={small}>
-                  {(formRoom?.areas || []).length === 0 && <option value="">ยังไม่กำหนดพื้นที่</option>}
+                  {(formRoom?.areas || []).length === 0 && !form.area && <option value="">ยังไม่กำหนดพื้นที่</option>}
+                  {form.area && !(formRoom?.areas || []).includes(form.area) && <option value={form.area}>{form.area} (ไม่อยู่ในทะเบียนแล้ว)</option>}
                   {(formRoom?.areas || []).map(area => <option key={area} value={area}>{area}</option>)}
                 </select>
               </Field>
@@ -7297,7 +7375,8 @@ function CleaningDutyInner({ currentUser }) {
             <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginTop: "0.9rem", flexWrap: "wrap" }}>
               <div style={{ fontWeight: 900, fontSize: "1.3rem", color: cleaningLevel((formTotal / CLEANING_MAX) * 100).color }}>{formTotal}/{CLEANING_MAX}</div>
               <CleaningLevelBadge percent={(formTotal / CLEANING_MAX) * 100} />
-              <button type="button" disabled={busy} onClick={submitInspection} style={{ ...btnPrimary, flex: "none", marginLeft: "auto", padding: "0.6rem 1.2rem", background: "linear-gradient(90deg, #FF7106, #FF9A3C)", color: "#fff", cursor: busy ? "wait" : "pointer", boxShadow: "0 4px 14px rgba(255,113,6,0.3)" }}><Save size={16} /> บันทึกผลการตรวจ</button>
+              {editingId && <button type="button" disabled={busy} onClick={cancelEdit} style={{ ...btnSecondary, flex: "none", marginLeft: "auto", padding: "0.6rem 1rem" }}><X size={16} /> ยกเลิกการแก้ไข</button>}
+              <button type="button" disabled={busy} onClick={submitInspection} style={{ ...btnPrimary, flex: "none", marginLeft: editingId ? 0 : "auto", padding: "0.6rem 1.2rem", background: "linear-gradient(90deg, #FF7106, #FF9A3C)", color: "#fff", cursor: busy ? "wait" : "pointer", boxShadow: "0 4px 14px rgba(255,113,6,0.3)" }}><Save size={16} /> {editingId ? "บันทึกการแก้ไข" : "บันทึกผลการตรวจ"}</button>
             </div>
           </Card>
           <Card>
@@ -7372,18 +7451,36 @@ function CleaningDutyInner({ currentUser }) {
               {rooms.map(room => (
                 <div key={room.id} style={{ border: "1px solid #E4EEF8", borderRadius: 14, padding: "0.65rem 0.8rem", display: "grid", gap: "0.45rem" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <strong style={{ color: "#233862", flex: 1 }}>{room.name}</strong>
+                    {roomEdit?.id === room.id ? (
+                      <>
+                        <input autoFocus value={roomEdit.name} onChange={event => setRoomEdit({ id: room.id, name: event.target.value })} onKeyDown={event => { if (event.key === "Enter") renameRoom(); if (event.key === "Escape") setRoomEdit(null); }} aria-label={`ชื่อใหม่ของห้อง ${room.name}`} style={{ ...small, flex: 1, padding: "0.3rem 0.5rem" }} />
+                        <button type="button" onClick={renameRoom} style={{ ...btnPrimary, flex: "none", padding: "0.25rem 0.6rem", fontSize: "0.78rem", background: "linear-gradient(90deg, #008CFF, #3EBFFB)", color: "#fff", cursor: "pointer" }}><Save size={12} /> บันทึก</button>
+                        <button type="button" onClick={() => setRoomEdit(null)} style={{ ...btnSecondary, flex: "none", padding: "0.25rem 0.6rem", fontSize: "0.78rem" }}>ยกเลิก</button>
+                      </>
+                    ) : (
+                      <>
+                        <strong style={{ color: "#233862", flex: 1 }}>{room.name}</strong>
+                        <button type="button" onClick={() => setRoomEdit({ id: room.id, name: room.name })} style={{ border: "none", background: "#EAF5FF", color: "#0072D9", borderRadius: 8, padding: "0.25rem 0.55rem", cursor: "pointer", fontFamily: "inherit", fontSize: "0.78rem", fontWeight: 700 }}><Pencil size={12} /> เปลี่ยนชื่อ</button>
+                      </>
+                    )}
                     <button type="button" onClick={() => removeRoom(room)} style={{ border: "none", background: "#fee2e2", color: "#b91c1c", borderRadius: 8, padding: "0.25rem 0.55rem", cursor: "pointer", fontFamily: "inherit", fontSize: "0.78rem", fontWeight: 700 }}><Trash2 size={12} /> ลบห้อง</button>
                   </div>
                   <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", alignItems: "center" }}>
                     <span style={{ fontSize: "0.78rem", color: "#596068" }}>พื้นที่รับผิดชอบ:</span>
                     {room.areas.length === 0 && <span style={{ fontSize: "0.78rem", color: "#94a3b8" }}>ยังไม่กำหนด</span>}
-                    {room.areas.map(area => (
+                    {room.areas.map(area => (areaEdit?.roomId === room.id && areaEdit.from === area ? (
+                      <span key={area} style={{ display: "inline-flex", gap: "0.25rem", alignItems: "center" }}>
+                        <input autoFocus value={areaEdit.to} onChange={event => setAreaEdit({ ...areaEdit, to: event.target.value })} onKeyDown={event => { if (event.key === "Enter") renameArea(); if (event.key === "Escape") setAreaEdit(null); }} aria-label={`ชื่อใหม่ของพื้นที่ ${area}`} style={{ ...small, width: 140, padding: "0.2rem 0.45rem", fontSize: "0.8rem" }} />
+                        <button type="button" aria-label="บันทึกชื่อพื้นที่" onClick={renameArea} disabled={busy} style={{ border: "none", background: "#008CFF", color: "#fff", borderRadius: 8, padding: "0.2rem 0.4rem", cursor: "pointer", display: "inline-flex" }}><Save size={12} /></button>
+                        <button type="button" aria-label="ยกเลิก" onClick={() => setAreaEdit(null)} style={{ border: "none", background: "#f1f5f9", color: "#596068", borderRadius: 8, padding: "0.2rem 0.4rem", cursor: "pointer", display: "inline-flex" }}><X size={12} /></button>
+                      </span>
+                    ) : (
                       <span key={area} style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem", background: "#EAF5FF", color: "#0072D9", borderRadius: 999, padding: "0.15rem 0.3rem 0.15rem 0.6rem", fontSize: "0.8rem", fontWeight: 700 }}>
                         {area}
+                        <button type="button" aria-label={`เปลี่ยนชื่อพื้นที่ ${area}`} title="เปลี่ยนชื่อ" onClick={() => setAreaEdit({ roomId: room.id, from: area, to: area })} style={{ border: "none", background: "transparent", color: "#0072D9", cursor: "pointer", padding: 0, display: "inline-flex" }}><Pencil size={11} /></button>
                         <button type="button" aria-label={`ลบพื้นที่ ${area}`} onClick={() => removeArea(room, area)} style={{ border: "none", background: "transparent", color: "#0072D9", cursor: "pointer", padding: 0, display: "inline-flex" }}><X size={12} /></button>
                       </span>
-                    ))}
+                    )))}
                   </div>
                   <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap", alignItems: "center" }}>
                     {CLEANING_AREA_PRESETS.filter(area => !room.areas.includes(area)).map(area => <button key={area} type="button" onClick={() => addArea(room, area)} style={{ border: "1px dashed #8FD0FF", background: "#fff", color: "#0072D9", borderRadius: 999, padding: "0.12rem 0.55rem", fontSize: "0.75rem", cursor: "pointer", fontFamily: "inherit" }}>+ {area}</button>)}
@@ -7400,6 +7497,18 @@ function CleaningDutyInner({ currentUser }) {
       {zoom && (
         <div role="dialog" aria-modal="true" onClick={() => setZoom("")} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.75)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem", cursor: "zoom-out" }}>
           <img src={zoom} alt="รูปขยาย" style={{ maxWidth: "100%", maxHeight: "90vh", borderRadius: 12 }} />
+        </div>
+      )}
+      {confirmBox && (
+        <div role="alertdialog" aria-modal="true" aria-label={confirmBox.title} onClick={() => setConfirmBox(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", zIndex: 1001, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
+          <div onClick={event => event.stopPropagation()} style={{ background: "#fff", borderRadius: 16, padding: "1.1rem 1.2rem", maxWidth: 420, width: "100%", boxShadow: "0 12px 40px rgba(15,23,42,0.3)", display: "grid", gap: "0.6rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: 800, color: "#b91c1c", fontSize: "1.05rem" }}><Trash2 size={18} /> {confirmBox.title}</div>
+            <div style={{ color: "#334155", fontSize: "0.9rem" }}>{confirmBox.text}</div>
+            <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", marginTop: "0.3rem" }}>
+              <button type="button" autoFocus onClick={() => setConfirmBox(null)} style={{ ...btnSecondary, flex: "none", padding: "0.5rem 1rem" }}>ยกเลิก</button>
+              <button type="button" onClick={() => { const action = confirmBox.onConfirm; setConfirmBox(null); action(); }} style={{ ...btnPrimary, flex: "none", padding: "0.5rem 1rem", background: "#dc2626", color: "#fff", cursor: "pointer" }}><Trash2 size={15} /> {confirmBox.confirmLabel}</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -7585,6 +7694,8 @@ function StudentRollTeacher({ currentUser }) {
   const [month, setMonth] = useState(() => todayISO().slice(0, 7));
   const [newName, setNewName] = useState("");
   const [health, setHealth] = useState({});
+  const [milk, setMilk] = useState({});
+  const [milkNote, setMilkNote] = useState({});
   const rollLocalKey = `hr_student_roll_${currentUser.id}`;
 
   useEffect(() => {
@@ -7638,6 +7749,8 @@ function StudentRollTeacher({ currentUser }) {
         setDate(today);
         setMarks({ ...(loaded.days[today]?.marks || {}) });
         setHealth({ ...(loaded.days[today]?.health || {}) });
+        setMilk({ ...(loaded.days[today]?.milk || {}) });
+        setMilkNote({ ...(loaded.days[today]?.milk_note || {}) });
         const extras = rows.slice(1).map(item => item.id);
         if (extras.length) await supabase.from("teaching_schedule").delete().in("id", extras);
       } catch (err) {
@@ -7724,6 +7837,15 @@ function StudentRollTeacher({ currentUser }) {
     const cleanHealth = {};
     Object.keys(clean).forEach(id => { if (clean[id] === "sick") cleanHealth[id] = cleanSickHealth(health[id]); });
     nextBook.days[date].health = cleanHealth;
+    const cleanMilk = {};
+    const cleanMilkNote = {};
+    Object.keys(clean).forEach(id => {
+      if (clean[id] === "present" || !milk[id]) return;
+      cleanMilk[id] = milk[id];
+      if (milk[id] === MILK_OTHER) cleanMilkNote[id] = String(milkNote[id] || "").trim().slice(0, 80);
+    });
+    nextBook.days[date].milk = cleanMilk;
+    nextBook.days[date].milk_note = cleanMilkNote;
     const unset = students.length - Object.keys(clean).length;
     persist(nextBook, unset > 0 ? `บันทึกการเช็คชื่อแล้ว ยังไม่ติ๊ก ${unset} คน` : "บันทึกการเช็คชื่อวันนี้แล้ว");
   };
@@ -7734,8 +7856,19 @@ function StudentRollTeacher({ currentUser }) {
     setDate(next);
     setMarks({ ...(baseline.days[next]?.marks || {}) });
     setHealth({ ...(baseline.days[next]?.health || {}) });
+    setMilk({ ...(baseline.days[next]?.milk || {}) });
+    setMilkNote({ ...(baseline.days[next]?.milk_note || {}) });
     setMessage("");
     setError("");
+  };
+
+  // เพศ (ใช้นับ ชาย/หญิง ในแบบฟอร์มสถิติ): กดสลับ ช → ญ → ไม่ระบุ แล้วบันทึกทันที
+  const toggleSex = (student) => {
+    if (saving) return;
+    const current = studentSex(student);
+    const next = current === "M" ? "F" : current === "F" ? "" : "M";
+    const students = cleanRollStudents(book.students).map(item => (item.id === student.id ? { ...item, sex: next } : item));
+    persist({ ...book, students }, `${studentLabel(student)}: ${next === "M" ? "ชาย" : next === "F" ? "หญิง" : "ไม่ระบุเพศ"}`, true);
   };
 
   const markAllPresent = () => {
@@ -7770,7 +7903,7 @@ function StudentRollTeacher({ currentUser }) {
                   </div>
                   {baseline.days[date]?.saved_at && <span style={{ background: "#dcfce7", color: "#166534", fontWeight: 800, fontSize: "0.75rem", borderRadius: 20, padding: "0.25rem 0.6rem" }}>บันทึกแล้ว {fmtTime(baseline.days[date].saved_at)}</span>}
                 </div>
-                <div style={{ color: "#64748b", fontSize: "0.84rem", lineHeight: 1.55 }}>ติ๊กช่องละ 1 อย่างต่อคน ถ้าลาป่วยจะมีช่องคัดกรองอาการให้กรอก</div>
+                <div style={{ color: "#64748b", fontSize: "0.84rem", lineHeight: 1.55 }}>ติ๊กช่องละ 1 อย่างต่อคน ถ้าลาป่วยจะมีช่องคัดกรองอาการให้กรอก · ถ้าไม่มาหรือลา จะมีช่องเลือกคนดื่มนมแทน · ปุ่ม ช/ญ หน้าชื่อใช้นับในแบบฟอร์มสถิติ (กดสลับได้)</div>
                 <RollDateBar date={date} onChange={changeDate} />
                 <RollCountChips counts={counts} />
                 <div style={{ overflowX: "auto", minWidth: 0, border: "1px solid #e2e8f0", borderRadius: 8 }}>
@@ -7797,7 +7930,10 @@ function StudentRollTeacher({ currentUser }) {
                           <Fragment key={student.id}>
                             <tr style={{ borderTop: "1px solid #f1f5f9", background: value === "sick" ? "#EAF5FF" : undefined }}>
                               <td style={{ ...rollTd, color: "#94a3b8", fontWeight: 700 }}>{student.number}</td>
-                              <td style={{ ...rollTd, textAlign: "left", fontWeight: 700, color: "#233862", whiteSpace: "nowrap", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis" }} title={studentLabel(student)}>{studentLabel(student)}</td>
+                              <td style={{ ...rollTd, textAlign: "left", fontWeight: 700, color: "#233862", whiteSpace: "nowrap", maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis" }} title={studentLabel(student)}>
+                                <button type="button" onClick={() => toggleSex(student)} disabled={saving} aria-label={`เพศของ ${studentLabel(student)}`} title="กดเพื่อสลับ ชาย/หญิง" style={{ marginRight: 4, minWidth: 24, height: 20, borderRadius: 6, border: "1px solid #cbd5e1", background: studentSex(student) === "M" ? "#DCEFFF" : studentSex(student) === "F" ? "#fce7f3" : "#fff7ed", color: studentSex(student) === "M" ? "#0072D9" : studentSex(student) === "F" ? "#be185d" : "#c2410c", fontWeight: 800, fontSize: "0.7rem", cursor: "pointer", padding: "0 4px", fontFamily: "inherit" }}>{studentSex(student) === "M" ? "ช" : studentSex(student) === "F" ? "ญ" : "?"}</button>
+                                {studentLabel(student)}
+                              </td>
                               {["present", "personal", "sick"].map(status => (
                                 <td key={status} style={rollTd}>
                                   <input type="checkbox" aria-label={`${studentLabel(student)} ${labelOf(ROLL_STATUSES, status)}`} disabled={saving} checked={value === status} onChange={tick(status)} style={{ width: 16, height: 16, cursor: "pointer" }} />
@@ -7811,6 +7947,25 @@ function StudentRollTeacher({ currentUser }) {
                               <tr>
                                 <td colSpan={6} style={{ padding: "0 0.3rem 0.35rem" }}>
                                   <SickScreening value={health[student.id]} disabled={saving} onChange={item => setHealth(current => ({ ...current, [student.id]: item }))} />
+                                </td>
+                              </tr>
+                            )}
+                            {value && value !== "present" && (
+                              <tr style={{ background: "#fffbeb" }}>
+                                <td colSpan={6} style={{ padding: "0.2rem 0.4rem 0.4rem" }}>
+                                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", alignItems: "center", fontSize: "0.78rem" }}>
+                                    <span style={{ fontWeight: 800, color: "#92400e" }}>🥛 นมของ {student.name} ใครดื่มแทน</span>
+                                    <select aria-label={`ผู้ดื่มนมแทน ${studentLabel(student)}`} value={milk[student.id] || ""} disabled={saving} onChange={event => setMilk(current => ({ ...current, [student.id]: event.target.value }))} style={{ minHeight: 30, borderRadius: 8, border: "1px solid #fcd34d", fontSize: "0.8rem", fontFamily: "inherit", padding: "0 0.3rem", background: "#fff", maxWidth: "100%" }}>
+                                      <option value="">— เลือก —</option>
+                                      {namedStudents.filter(item => marks[item.id] === "present").map(item => <option key={item.id} value={item.id}>{item.number}. {studentLabel(item)}</option>)}
+                                      <option value={MILK_OTHER}>อื่น ๆ</option>
+                                      <option value={MILK_NONE}>ไม่มี (ไม่มีใครดื่มแทน)</option>
+                                    </select>
+                                    {milk[student.id] === MILK_OTHER && (
+                                      <input aria-label={`ผู้ดื่มนมแทน (อื่น ๆ) ${studentLabel(student)}`} value={milkNote[student.id] || ""} disabled={saving} placeholder="ระบุ เช่น นักเรียนห้องอื่น / เก็บคืน" onChange={event => setMilkNote(current => ({ ...current, [student.id]: event.target.value }))} style={{ minHeight: 30, borderRadius: 8, border: "1px solid #fcd34d", fontSize: "0.8rem", fontFamily: "inherit", padding: "0 0.4rem", flex: "1 1 160px" }} />
+                                    )}
+                                    {milk[student.id] && milk[student.id] !== MILK_OTHER && milk[student.id] !== MILK_NONE && marks[milk[student.id]] !== "present" && <span style={{ color: "#b91c1c", fontWeight: 700 }}>คนที่เลือกไม่ได้ติ๊ก "มา"</span>}
+                                  </div>
                                 </td>
                               </tr>
                             )}
@@ -7831,6 +7986,167 @@ function StudentRollTeacher({ currentUser }) {
         </>
       )}
     </div>
+  );
+}
+
+// ─── แบบฟอร์ม "สถิตินักเรียนมาเรียนประจำวัน" (ไฟล์ต้นฉบับของโรงเรียน) ───────────────
+const STATS_PRINT_COLS = [18.5703125, 6.140625, 6.140625, 6.140625, 6.140625, 6.140625, 6.140625, 6.140625, 6.140625, 6.140625, 35.7109375];
+const STATS_PRINT_ROW_PT = { 1: 21.75, 2: 21.75, 3: 21.75, 4: 15, 5: 21.75, 6: 21.75, 7: 21.75, 10: 39.75, 11: 21.75, 12: 39.75, 13: 39.75, 14: 39.75, 15: 21.75, 16: 39.75, 17: 39.75, 18: 39.75, 19: 39.75, 20: 39.75, 21: 39.75, 22: 21.75, 23: 39.75, 24: 39.75, 25: 39.75, 26: 21.75, 27: 21.75, 28: 21.75, 29: 18, 30: 21.75, 31: 21.75, 32: 19.5, 33: 21.75, 34: 21.75 };
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[char]));
+}
+
+// หน้าพิมพ์ที่จำลองแบบฟอร์มต้นฉบับ (ขนาดคอลัมน์/แถว ฟอนต์ เส้น และข้อความเหมือนไฟล์ Excel)
+function studentStatsPrintHtml(stats) {
+  const { groups, all } = statsTotals(stats);
+  // ย่อ 85% เหมือน pageSetup scale="85" ของไฟล์ต้นฉบับ (ย่อขนาดจริง ไม่ใช้ CSS zoom เพราะ Chrome ตัดหน้าตามขนาดก่อนย่อ)
+  const S = 0.85;
+  const px = width => Math.round((width * 7 + 5) * S * 100) / 100;
+  const pt = value => Math.round(value * S * 100) / 100;
+  const cell = (value, bold = false) => `<td class="n${bold ? " b" : ""}">${value}</td>`;
+  const numbers = (item, bold = false) => {
+    const total = item.boys + item.girls;
+    const present = item.boysPresent + item.girlsPresent;
+    return cell(item.boys, bold) + cell(item.girls, bold) + cell(total, true) + cell(item.boysPresent, bold) + cell(item.girlsPresent, bold) + cell(present, true) + cell(item.boys - item.boysPresent, bold) + cell(item.girls - item.girlsPresent, bold) + cell(total - present, true);
+  };
+  const row = (r, label, item, { bold = false, remark = "", labelSize = 16 } = {}) => `<tr style="height:${pt(STATS_PRINT_ROW_PT[r])}pt"><td class="lab${bold ? " b" : ""}" style="font-size:${pt(labelSize)}pt">${escapeHtml(label)}</td>${numbers(item, bold)}<td class="rm">${escapeHtml(remark)}</td></tr>`;
+  const level = key => stats.levels[key];
+  const remarkOf = key => level(key).absent.map(entry => remarkName(entry.student)).join(" , ");
+  const body = [
+    row(10, "เตรียมอนุบาล", level("เตรียมอนุบาล"), { remark: remarkOf("เตรียมอนุบาล") }),
+    row(11, "รวมเตรียมอนุบาล", groups["เตรียมอนุบาล"], { bold: true }),
+    ...["อ.1", "อ.2", "อ.3"].map((key, index) => row(12 + index, key, level(key), { remark: remarkOf(key) })),
+    row(15, "รวมก่อนประถมศึกษา", groups["ก่อนประถมศึกษา"], { bold: true }),
+    ...["ป.1", "ป.2", "ป.3", "ป.4", "ป.5", "ป.6"].map((key, index) => row(16 + index, key, level(key), { remark: remarkOf(key) })),
+    row(22, "รวมประถมศึกษา", groups["ประถมศึกษา"], { bold: true }),
+    ...["ม.1", "ม.2", "ม.3"].map((key, index) => row(23 + index, key, level(key), { remark: remarkOf(key) })),
+    row(26, "รวมมัธยมศึกษาตอนต้น", groups["มัธยมศึกษาตอนต้น"], { bold: true, labelSize: 15 }),
+    row(27, "รวมทั้งสิ้น", all, { bold: true }),
+  ].join("");
+  return `<!doctype html><html lang="th"><head><meta charset="utf-8"><title>สถิตินักเรียนมาเรียนประจำวัน ${escapeHtml(stats.date)}</title>
+<style>
+/* ฟอนต์ต้นฉบับ Angsana New (ถ้าเครื่องมี) · ถ้าไม่มีใช้ Sarabun ย่อขนาดให้กว้างใกล้ Angsana */
+@font-face { font-family: "FormAngsana"; font-weight: 400; src: local("Angsana New"), local("AngsanaNew"), local("AngsanaUPC"); }
+@font-face { font-family: "FormAngsana"; font-weight: 700; src: local("Angsana New Bold"), local("AngsanaNew-Bold"), local("AngsanaUPC Bold"); }
+@font-face { font-family: "FormSarabun"; font-weight: 400; size-adjust: 72%; unicode-range: U+02D7, U+0303, U+0331, U+0E01-0E5B, U+200C-200D, U+25CC; src: url(https://fonts.gstatic.com/s/sarabun/v17/DtVjJx26TKEr37c9aAFJn2QN.woff2) format("woff2"); }
+@font-face { font-family: "FormSarabun"; font-weight: 700; size-adjust: 72%; unicode-range: U+02D7, U+0303, U+0331, U+0E01-0E5B, U+200C-200D, U+25CC; src: url(https://fonts.gstatic.com/s/sarabun/v17/DtVmJx26TKEr37c9YK5sik8s6zDX.woff2) format("woff2"); }
+@font-face { font-family: "FormSarabun"; font-weight: 400; size-adjust: 72%; unicode-range: U+0000-00FF, U+2000-206F; src: url(https://fonts.gstatic.com/s/sarabun/v17/DtVjJx26TKEr37c9aBVJnw.woff2) format("woff2"); }
+@font-face { font-family: "FormSarabun"; font-weight: 700; size-adjust: 72%; unicode-range: U+0000-00FF, U+2000-206F; src: url(https://fonts.gstatic.com/s/sarabun/v17/DtVmJx26TKEr37c9YK5silss6w.woff2) format("woff2"); }
+@page { size: A4 portrait; margin: 0 0.4cm 0 1cm; }
+* { box-sizing: border-box; }
+body { margin: 0; font-family: "FormAngsana", "FormSarabun", sans-serif; color: #000; }
+.page { width: ${STATS_PRINT_COLS.reduce((sum, width) => sum + px(width), 0)}px; margin: 0 auto; }
+table { border-collapse: collapse; table-layout: fixed; width: 100%; }
+td { padding: 0 2px; overflow: hidden; white-space: nowrap; font-size: ${pt(16)}pt; line-height: 1; vertical-align: middle; }
+.title td { text-align: center; font-weight: bold; font-size: ${pt(18)}pt; }
+.grid td { border: 1px solid #000; }
+.head td { text-align: center; font-weight: bold; }
+.n { text-align: center; } .b { font-weight: bold; }
+.lab { text-align: center; }
+.rm { font-size: ${pt(11)}pt; white-space: normal; text-align: left; line-height: 1.05; }
+.sig td { font-size: ${pt(16)}pt; }
+</style></head><body><div class="page"><table>
+<colgroup>${STATS_PRINT_COLS.map(width => `<col style="width:${px(width)}px">`).join("")}</colgroup>
+<tbody class="title">
+<tr style="height:${pt(21.75)}pt"><td colspan="11">สถิตินักเรียนมาเรียนประจำวัน</td></tr>
+<tr style="height:${pt(21.75)}pt"><td colspan="11">โรงเรียนนิมิตศึกษา&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; อำเภอไพศาลี&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; จังหวัดนครสวรรค์</td></tr>
+<tr style="height:${pt(21.75)}pt"><td colspan="11">${escapeHtml(formDateLine(stats.date))}</td></tr>
+<tr style="height:${pt(15)}pt"><td colspan="11"></td></tr>
+</tbody>
+<tbody class="grid">
+<tr class="head" style="height:${pt(21.75)}pt"><td rowspan="3">ระดับชั้น/ห้องเรียน</td><td colspan="3">จำนวนนักเรียนเต็ม</td><td colspan="3">จำนวนนักเรียน</td><td colspan="3">จำนวนนักเรียน</td><td rowspan="2">หมายเหตุ</td></tr>
+<tr class="head" style="height:${pt(21.75)}pt"><td colspan="3">เต็มตามบัญชีเรียกชื่อ</td><td colspan="3">มาเรียน</td><td colspan="3">ไม่มาเรียน</td></tr>
+<tr class="head" style="height:${pt(21.75)}pt"><td>ชาย</td><td>หญิง</td><td>รวม</td><td>ชาย</td><td>หญิง</td><td>รวม</td><td>ชาย</td><td>หญิง</td><td>รวม</td><td>(รายชื่อนักเรียนไม่มาเรียน)</td></tr>
+${body}
+</tbody>
+<tbody class="sig">
+<tr style="height:${pt(21.75)}pt"><td class="b">หมายเหตุ</td><td colspan="10"></td></tr>
+<tr style="height:${pt(18)}pt"><td colspan="11"></td></tr>
+<tr style="height:${pt(21.75)}pt"><td colspan="6"></td><td colspan="5">ลงชื่อ...............................................................ผู้รวบรวม</td></tr>
+<tr style="height:${pt(21.75)}pt"><td colspan="6"></td><td colspan="5" style="white-space:pre">                                     ( นางสาวเบญจวรรณ   เจิมแหล่ )</td></tr>
+<tr style="height:${pt(19.5)}pt"><td colspan="11"></td></tr>
+<tr style="height:${pt(21.75)}pt"><td colspan="6"></td><td colspan="5" style="white-space:pre">           ลงชื่อ.....................................................ผู้อำนวยการโรงเรียน</td></tr>
+<tr style="height:${pt(21.75)}pt"><td colspan="6"></td><td colspan="5" style="white-space:pre">                                   (   นางศศิธร    มีสมสืบ  )</td></tr>
+</tbody></table></div>
+<script>window.onload = () => (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => setTimeout(() => window.print(), 200));</script>
+</body></html>`;
+}
+
+function StudentStatsFormCard({ rows, employees }) {
+  const [date, setDate] = useState(todayISO);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const books = (rows || []).map(row => parseRollBook(row.subject));
+  const stats = buildStudentStats(books, date);
+  const { all } = statsTotals(stats);
+  const unknownSex = STUDENT_STATS_LEVELS.flatMap(level => stats.levels[level.key].unknownSex.map(student => `${level.key} ${studentLabel(student)}`));
+  const unchecked = STUDENT_STATS_LEVELS.filter(level => stats.levels[level.key].unchecked > 0).map(level => level.key);
+  const milkRows = STUDENT_STATS_LEVELS.flatMap(level => stats.levels[level.key].milk.map(item => ({ level: level.key, ...item })));
+  const milkLabel = item => item.choice === "student" ? studentLabel(item.drinker) : item.choice === "other" ? `อื่น ๆ${item.note ? `: ${item.note}` : ""}` : item.choice === "none" ? "ไม่มี" : "ยังไม่เลือก";
+  const statusLabel = status => ({ personal: "ลากิจ", sick: "ลาป่วย", absent: "ขาด", "": "ยังไม่เช็ค" }[status] ?? status);
+
+  const downloadExcel = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const [{ default: ExcelJS }, { default: JSZip }] = await Promise.all([import("exceljs"), import("jszip")]);
+      const response = await fetch(STUDENT_STATS_TEMPLATE_URL);
+      if (!response.ok) throw new Error("ไม่พบไฟล์แบบฟอร์มต้นฉบับ");
+      const output = await fillStudentStatsWorkbook(ExcelJS, JSZip, await response.arrayBuffer(), stats);
+      const url = URL.createObjectURL(new Blob([output], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `สถิตินักเรียนมาเรียน_${date}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    } catch (err) {
+      setError(err.message || "สร้างไฟล์ไม่สำเร็จ");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openPrint = () => {
+    const win = window.open("", "_blank");
+    if (!win) { setError("เบราว์เซอร์บล็อกหน้าต่างพิมพ์ ให้อนุญาต pop-up ก่อน"); return; }
+    win.document.open();
+    win.document.write(studentStatsPrintHtml(stats));
+    win.document.close();
+  };
+
+  return (
+    <Card>
+      <div style={{ display: "grid", gap: "0.7rem", minWidth: 0 }}>
+        <div style={{ fontWeight: 800, color: "#233862", fontSize: "1.05rem" }}>แบบฟอร์มสถิตินักเรียนมาเรียนประจำวัน</div>
+        <div style={{ color: "#64748b", fontSize: "0.82rem" }}>ดึงจากการเช็คชื่อของทุกห้องตามวันที่เลือก · ไฟล์ Excel เติมลงสำเนาแบบฟอร์มต้นฉบับของโรงเรียน (เลย์เอาต์/สูตร/ฟอนต์เดิม)</div>
+        {error && <ErrorBox>{error}</ErrorBox>}
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "end" }}>
+          <Field label="วันที่">
+            <input type="date" value={date} max={todayISO()} onChange={event => setDate(event.target.value || todayISO())} style={{ ...periodInput, maxWidth: 200 }} />
+          </Field>
+          <button type="button" onClick={downloadExcel} disabled={busy} style={{ ...btnPrimary, flex: "none", minHeight: 44, background: "linear-gradient(135deg, #16a34a, #15803d)", color: "#fff", cursor: busy ? "wait" : "pointer" }}><Download size={16} /> {busy ? "กำลังสร้างไฟล์..." : "ดาวน์โหลด Excel (แบบฟอร์ม)"}</button>
+          <button type="button" onClick={openPrint} style={{ ...btnSecondary, flex: "none", minHeight: 44 }}><Printer size={16} /> พิมพ์ / บันทึก PDF</button>
+        </div>
+        <div style={{ fontSize: "0.85rem", color: "#233862" }}>รวมทั้งสิ้น: เต็ม {all.boys + all.girls} คน (ช {all.boys} ญ {all.girls}) · มา {all.boysPresent + all.girlsPresent} · ไม่มา {all.boys + all.girls - all.boysPresent - all.girlsPresent}</div>
+        {stats.unmapped.length > 0 && <div style={{ color: "#b45309", fontSize: "0.8rem" }}>⚠️ ห้องที่จับคู่ชั้นในแบบฟอร์มไม่ได้ (ตั้งชื่อห้องเป็น เช่น ป.2/1, อ.1, ม.3, เตรียมอนุบาล): {stats.unmapped.join(", ")}</div>}
+        {unknownSex.length > 0 && <div style={{ color: "#b45309", fontSize: "0.8rem" }}>⚠️ ยังไม่ระบุเพศ {unknownSex.length} คน (ไม่ถูกนับในช่อง ชาย/หญิง): {unknownSex.slice(0, 8).join(", ")}{unknownSex.length > 8 ? " ..." : ""}</div>}
+        {unchecked.length > 0 && <div style={{ color: "#b45309", fontSize: "0.8rem" }}>⚠️ ชั้นที่ยังไม่ได้เช็คชื่อวันนี้ (นับเป็นไม่มาเรียน): {unchecked.join(", ")}</div>}
+        <details>
+          <summary style={{ cursor: "pointer", fontWeight: 800, color: "#92400e" }}>🥛 เช็คนม: คนไม่มา/ลา และผู้ดื่มแทน ({milkRows.length})</summary>
+          {milkRows.length === 0 ? <div style={{ color: "#94a3b8", fontSize: "0.82rem", padding: "0.4rem 0" }}>ไม่มีนักเรียนไม่มาเรียน</div> : (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem", marginTop: "0.4rem" }}>
+              <thead><tr style={{ background: "#fffbeb" }}><th style={rollTh}>ชั้น</th><th style={{ ...rollTh, textAlign: "left" }}>นักเรียน</th><th style={rollTh}>สถานะ</th><th style={{ ...rollTh, textAlign: "left" }}>ผู้ดื่มนมแทน</th></tr></thead>
+              <tbody>{milkRows.map(item => (
+                <tr key={`${item.level}-${item.student.id}`} style={{ borderTop: "1px solid #f1f5f9" }}><td style={rollTd}>{item.level}</td><td style={{ ...rollTd, textAlign: "left" }}>{studentLabel(item.student)}</td><td style={rollTd}>{statusLabel(item.status)}</td><td style={{ ...rollTd, textAlign: "left", color: item.choice ? "#233862" : "#b91c1c" }}>{milkLabel(item)}</td></tr>
+              ))}</tbody>
+            </table>
+          )}
+        </details>
+      </div>
+    </Card>
   );
 }
 
@@ -7983,6 +8299,7 @@ function StudentRollAdmin({ employees }) {
         )
       ) : (
       <>
+      <StudentStatsFormCard rows={rows} employees={employees} />
       <Card>
         <div style={{ display: "grid", gap: "0.8rem", minWidth: 0 }}>
           <div>

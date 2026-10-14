@@ -652,22 +652,28 @@ const SUPERVISION_FILE_ACCEPT = ".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.gif,appl
 
 // ผู้ดูหน้าประเมินครูได้: role admin หรือ ผู้บริหารตามตำแหน่ง (ผู้อำนวยการ/ผอ./รองผอ./ผู้บริหาร)
 const EXECUTIVE_POSITION_PATTERN = /(ผู้อำนวยการ|รองผู้อำนวยการ|ผอ\.?|รอง\s*ผอ|ผู้บริหาร|ผู้จัดการโรงเรียน|director|principal)/i;
-// รายชื่อผู้บริหารที่กำหนดเอง (ตรวจด้วย id และชื่อ-สกุลแบบตัดคำนำหน้า/ช่องว่าง)
+// ผู้บริหาร = 4 คนนี้เท่านั้น สิทธิ์เท่ากันทุกหน้าผู้บริหาร (ตรวจด้วย id และชื่อ-สกุลแบบตัดคำนำหน้า/ช่องว่าง)
 const EXECUTIVE_ALLOWLIST_IDS = new Set([
-  "b76e8f05-984c-4c2d-83d8-5ea886836824", // ศศิธร มีสมสืบ
   "c5306809-307e-47ae-bce1-42c2a9b38f1d", // เรณู เล็กดี
+  "193538b9-9672-4c18-b29d-114dcc5befaf", // จักรพล พลโสภาพ
+  "b76e8f05-984c-4c2d-83d8-5ea886836824", // ศศิธร มีสมสืบ
   "1c21605d-3404-4424-a640-d2eb25361c19", // ศักดิ์ศิริ มีสมสืบ
 ]);
 function normalizePersonName(name) {
   return String(name || "").normalize("NFC").trim().replace(/^(นางสาว|นาง|นาย|น\.ส\.|ครู|ดร\.)\s*/, "").replace(/\s+/g, "");
 }
-const EXECUTIVE_ALLOWLIST_NAMES = new Set(["ศศิธร มีสมสืบ", "เรณู เล็กดี", "ศักดิ์ศิริ มีสมสืบ"].map(normalizePersonName));
-// บัญชีทดสอบ "ครูทดลองระบบ" (username teacher.try) ใช้/เห็นได้เฉพาะ นายศักดิ์ศิริ มีสมสืบ และผู้ใช้ role admin
+const EXECUTIVE_ALLOWLIST_NAMES = new Set(["เรณู เล็กดี", "จักรพล พลโสภาพ", "ศศิธร มีสมสืบ", "ศักดิ์ศิริ มีสมสืบ"].map(normalizePersonName));
+// เงินเดือนเป็นความลับสูงสุด: เห็น/เข้าได้เฉพาะ ศักดิ์ศิริ มีสมสืบ คนเดียว (ไม่ใช้ role admin เพราะมี admin หลายคน)
+const SALARY_OWNER_ID = "1c21605d-3404-4424-a640-d2eb25361c19";
+function isSalaryOwner(user) {
+  if (!user) return false;
+  return String(user.id || "") === SALARY_OWNER_ID;
+}
+// บัญชีทดสอบ "ครูทดลองระบบ" (username teacher.try) ใช้/เห็นได้เฉพาะ ศักดิ์ศิริ มีสมสืบ เท่านั้น
 const TEST_TEACHER_OWNER_IDS = new Set(["1c21605d-3404-4424-a640-d2eb25361c19"]);
 const TEST_TEACHER_OWNER_NAMES = new Set([normalizePersonName("ศักดิ์ศิริ มีสมสืบ")]);
 function isTestTeacherOwner(user) {
   if (!user) return false;
-  if (user.role === "admin") return true;
   return TEST_TEACHER_OWNER_IDS.has(String(user.id || "")) || TEST_TEACHER_OWNER_NAMES.has(normalizePersonName(user.name));
 }
 function isTestTeacher(emp) {
@@ -678,16 +684,19 @@ function isTestTeacher(emp) {
 
 function isExecutiveUser(user) {
   if (!user) return false;
-  if (user.role === "admin") return true;
-  if (EXECUTIVE_ALLOWLIST_IDS.has(String(user.id || ""))) return true;
-  if (EXECUTIVE_ALLOWLIST_NAMES.has(normalizePersonName(user.name))) return true;
-  return EXECUTIVE_POSITION_PATTERN.test(String(user.position || ""));
+  return EXECUTIVE_ALLOWLIST_IDS.has(String(user.id || "")) || EXECUTIVE_ALLOWLIST_NAMES.has(normalizePersonName(user.name));
+}
+
+// ผู้บริหารทั้ง 4 คนมีสิทธิ์เท่ากับ admin ในทุกหน้าที่ไม่ใช่เงินเดือน
+function hasAdminRights(user) {
+  return !!user && (user.role === "admin" || isExecutiveUser(user));
 }
 
 function canAccessNavItem(item, user) {
   if (!item || !user) return false;
+  if (item.key === "finance") return isSalaryOwner(user);
   if (item.key === "teacherEval" || item.key === "execDash" || item.key === "cleaningDuty") return isExecutiveUser(user);
-  return item.roles.includes(user.role === "admin" ? "admin" : "employee");
+  return item.roles.includes(hasAdminRights(user) ? "admin" : "employee");
 }
 
 function NoAccessCard() {
@@ -923,7 +932,7 @@ function LoginPage({ onLogin }) {
 }
 
 // ─── EMPLOYEE MODAL ───────────────────────────────────────────────────────────
-function EmployeeModal({ employee, onClose, onSave }) {
+function EmployeeModal({ employee, onClose, onSave, canSeePay = false }) {
   const [form, setForm] = useState({
     name: employee?.name || "", department: employee?.department || "",
     position: employee?.position || "", email: employee?.email || "", phone: employee?.phone || "",
@@ -975,8 +984,9 @@ function EmployeeModal({ employee, onClose, onSave }) {
       overtime_rate: 0,
       leave_deduct_types: formatEmployeePayrollMeta(payrollConfig),
     };
+    // ผู้ที่ไม่ใช่เจ้าของข้อมูลเงินเดือน แก้ได้แค่ระดับครู ไม่แตะตัวเลขเงินเดือนเดิม
     const salaryResult = salarySettingId
-      ? await supabase.from("salary_settings").update(salaryPayload).eq("id", salarySettingId)
+      ? await supabase.from("salary_settings").update(canSeePay ? salaryPayload : { leave_deduct_types: salaryPayload.leave_deduct_types }).eq("id", salarySettingId)
       : await supabase.from("salary_settings").insert(salaryPayload);
     setSaving(false);
     if (salaryResult.error) { setError(salaryResult.error.message); return; }
@@ -1004,13 +1014,14 @@ function EmployeeModal({ employee, onClose, onSave }) {
           </select>
         </Field>
         <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.9rem", display: "grid", gap: "0.85rem" }}>
-          <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "#233862" }}>ข้อมูลเงินเดือนและการสอนแทน</div>
+          <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "#233862" }}>{canSeePay ? "ข้อมูลเงินเดือนและการสอนแทน" : "ระดับครู"}</div>
           <Field label="ระดับครู *">
             <select value={payrollConfig.teacher_level || ""} onChange={e => setPayrollConfig(f => ({ ...f, teacher_level: e.target.value }))} style={selectStyle}>
               <option value="">-- เลือกระดับครู --</option>
               {LEAVE_TEACHER_LEVELS.map(level => <option key={level} value={level}>ครู{level}</option>)}
             </select>
           </Field>
+          {canSeePay && (<>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
             <Field label="ประเภทค่าจ้าง">
               <select value={payrollConfig.pay_type || "daily"} onChange={e => setPayrollConfig(f => ({ ...f, pay_type: e.target.value }))} style={selectStyle}>
@@ -1037,6 +1048,7 @@ function EmployeeModal({ employee, onClose, onSave }) {
               </div>
             </>
           )}
+          </>)}
         </div>
 
         <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "10px", padding: "0.75rem", marginTop: "0.5rem" }}>
@@ -1656,6 +1668,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
 
 // ─── PAGES ────────────────────────────────────────────────────────────────────
 function EmployeePage({ employees, currentUser, onRefresh }) {
+  const canSeePay = isSalaryOwner(currentUser);
   const [showModal, setShowModal] = useState(false);
   const [editEmp, setEditEmp] = useState(null);
   const [search, setSearch] = useState("");
@@ -1706,7 +1719,7 @@ function EmployeePage({ employees, currentUser, onRefresh }) {
     (async () => {
       const { data } = await supabase.from("user_devices").select("*");
       setDevices(data || []);
-      const { data: salaryData } = await supabase.from("salary_settings").select("*").not("employee_id", "is", null);
+      const { data: salaryData } = await supabase.from("salary_settings").select(isSalaryOwner(currentUser) ? "*" : "employee_id, leave_deduct_types").not("employee_id", "is", null);
       setSalaryRows(salaryData || []);
     })();
   }, [employees]);
@@ -1740,14 +1753,14 @@ function EmployeePage({ employees, currentUser, onRefresh }) {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
             <thead>
               <tr style={{ background: "#f8fafc", borderBottom: "2px solid #f1f5f9" }}>
-                {["#", "ชื่อ-นามสกุล", "Username", "แผนก", "ระดับ", "ค่าจ้าง", "เงินเข้า บช", "สิทธิ์", "เครื่อง", "จัดการ"].map(h => (
+                {["#", "ชื่อ-นามสกุล", "Username", "แผนก", "ระดับ", ...(canSeePay ? ["ค่าจ้าง", "เงินเข้า บช"] : []), "สิทธิ์", "เครื่อง", "จัดการ"].map(h => (
                   <th key={h} style={{ padding: "0.75rem 1rem", textAlign: "left", color: "#64748b", fontWeight: 600, fontSize: "0.78rem", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={10} style={{ padding: "3rem", textAlign: "center", color: "#94a3b8" }}>ไม่พบข้อมูล</td></tr>
+                <tr><td colSpan={canSeePay ? 10 : 8} style={{ padding: "3rem", textAlign: "center", color: "#94a3b8" }}>ไม่พบข้อมูล</td></tr>
               ) : filtered.map((emp, i) => {
                 const device = devices.find(d => d.employee_id === emp.id);
                 const salaryRow = salaryRows.find(row => row.employee_id === emp.id);
@@ -1775,11 +1788,13 @@ function EmployeePage({ employees, currentUser, onRefresh }) {
                     <td style={{ padding: "0.75rem 1rem", color: "#475569", fontFamily: "monospace", fontSize: "0.8rem" }}>{emp.username || "-"}</td>
                     <td style={{ padding: "0.75rem 1rem" }}><span style={{ background: "#EAF5FF", color: "#008CFF", fontSize: "0.75rem", fontWeight: 600, padding: "0.2rem 0.6rem", borderRadius: "20px" }}>{emp.department || "-"}</span></td>
                     <td style={{ padding: "0.75rem 1rem", color: "#475569", whiteSpace: "nowrap" }}>{salaryMeta.teacher_level ? `ครู${salaryMeta.teacher_level}` : "-"}</td>
+                    {canSeePay && (<>
                     <td style={{ padding: "0.75rem 1rem", whiteSpace: "nowrap" }}>
                       <div style={{ color: "#233862", fontWeight: 800 }}>{formatMoney(salaryRow?.daily_rate || 0)}</div>
                       <div style={{ color: "#64748b", fontSize: "0.7rem" }}>{salaryMeta.pay_type === "monthly" ? "รายเดือน" : "รายวัน"}</div>
                     </td>
                     <td style={{ padding: "0.75rem 1rem", color: "#233862", fontWeight: 800, whiteSpace: "nowrap" }}>{formatMoney(salaryMeta.bank_deposit || 0)}</td>
+                    </>)}
                     <td style={{ padding: "0.75rem 1rem" }}>
                       {emp.role === "admin"
                         ? <span style={{ background: "#fef3c7", color: "#d97706", fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>Admin</span>
@@ -1813,7 +1828,7 @@ function EmployeePage({ employees, currentUser, onRefresh }) {
           </table>
         </div>
       </Card>
-      {showModal && <EmployeeModal employee={editEmp} onClose={() => { setShowModal(false); setEditEmp(null); }} onSave={() => { setShowModal(false); setEditEmp(null); onRefresh(); }} />}
+      {showModal && <EmployeeModal employee={editEmp} canSeePay={canSeePay} onClose={() => { setShowModal(false); setEditEmp(null); }} onSave={() => { setShowModal(false); setEditEmp(null); onRefresh(); }} />}
     </div>
   );
 }
@@ -1821,7 +1836,7 @@ function EmployeePage({ employees, currentUser, onRefresh }) {
 function AttendancePage({ employees, activityLog, currentUser, settings, onRefresh }) {
   const [showIn, setShowIn] = useState(false);
   const [showOut, setShowOut] = useState(false);
-  const filtered = currentUser?.role === "admin" ? activityLog : activityLog.filter(a => a.employee_id === currentUser?.id);
+  const filtered = hasAdminRights(currentUser) ? activityLog : activityLog.filter(a => a.employee_id === currentUser?.id);
 
   return (
     <div>
@@ -1919,7 +1934,7 @@ function AttendancePage({ employees, activityLog, currentUser, settings, onRefre
 
 function LeavePage({ employees, leaves, currentUser, onRefresh }) {
   const [showModal, setShowModal] = useState(false);
-  const filtered = currentUser?.role === "admin" ? leaves : leaves.filter(l => l.employee_id === currentUser?.id);
+  const filtered = hasAdminRights(currentUser) ? leaves : leaves.filter(l => l.employee_id === currentUser?.id);
 
   const updateStatus = async (id, status) => { await supabase.from("leaves").update({ status }).eq("id", id); onRefresh(); };
   const handleDelete = async (id) => { if (!window.confirm("ลบรายการนี้?")) return; await supabase.from("leaves").delete().eq("id", id); onRefresh(); };
@@ -1997,7 +2012,7 @@ function LeavePage({ employees, leaves, currentUser, onRefresh }) {
                   <td style={{ padding: "0.65rem 0.75rem" }}>{stsBadge(row.status)}</td>
                   <td style={{ padding: "0.65rem 0.75rem" }}>
                     <div style={{ display: "flex", gap: "0.3rem" }}>
-                      {currentUser?.role === "admin" && row.status === "pending" && (
+                      {hasAdminRights(currentUser) && row.status === "pending" && (
                         <>
                           <button onClick={() => updateStatus(row.id, "approved")} style={iconBtn("#dcfce7", "#16a34a")}><CheckCircle size={14} /></button>
                           <button onClick={() => updateStatus(row.id, "rejected")} style={iconBtn("#fef2f2", "#dc2626")}><XCircle size={14} /></button>
@@ -2019,7 +2034,7 @@ function LeavePage({ employees, leaves, currentUser, onRefresh }) {
 
 function OutingPage({ employees, outings, currentUser, onRefresh }) {
   const [showModal, setShowModal] = useState(false);
-  const filtered = currentUser?.role === "admin" ? outings : outings.filter(o => o.employee_id === currentUser?.id);
+  const filtered = hasAdminRights(currentUser) ? outings : outings.filter(o => o.employee_id === currentUser?.id);
 
   const markReturn = async (id) => { await supabase.from("outings").update({ return_time: new Date().toISOString(), status: "returned" }).eq("id", id); onRefresh(); };
   const handleDelete = async (id) => { if (!window.confirm("ลบรายการนี้?")) return; await supabase.from("outings").delete().eq("id", id); onRefresh(); };
@@ -4019,9 +4034,10 @@ function KindergartenSupervisionTeacher({ currentUser }) {
 }
 
 function TeachingSupervisionPage({ employees, currentUser, planFocus = null }) {
-  const [level, setLevel] = useState(currentUser?.role === "admin" ? "" : null);
+  const isExec = isExecutiveUser(currentUser);
+  const [level, setLevel] = useState(isExec ? "" : null);
   useEffect(() => {
-    if (currentUser?.role === "admin") return undefined;
+    if (isExec) return undefined;
     let active = true;
     Promise.all([
       fetchTeacherLevel(currentUser.id).catch(() => ""),
@@ -4035,8 +4051,8 @@ function TeachingSupervisionPage({ employees, currentUser, planFocus = null }) {
       if (active) setLevel("");
     });
     return () => { active = false; };
-  }, [currentUser?.id, currentUser?.role]);
-  if (currentUser?.role === "admin") return <SupervisionAdmin employees={employees} currentUser={currentUser} />;
+  }, [currentUser?.id, isExec]);
+  if (isExec) return <SupervisionAdmin employees={employees} currentUser={currentUser} />;
   if (level === null) return <Card><div style={{ textAlign: "center", color: "#64748b", padding: "1.5rem" }}>กำลังโหลดแผนสัปดาห์...</div></Card>;
   if (level === "อนุบาล") return <KindergartenSupervisionTeacher currentUser={currentUser} />;
   return <SupervisionTeacher currentUser={currentUser} planFocus={planFocus} />;
@@ -5374,7 +5390,7 @@ function ActivityRowsEditor({ title, rows, withUnit, onChange }) {
 }
 
 function ActivityPlanPage({ employees, currentUser }) {
-  const isAdmin = currentUser?.role === "admin";
+  const isAdmin = isExecutiveUser(currentUser);
   const [plans, setPlans] = useState([]);
   const [deleted, setDeleted] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -7392,7 +7408,7 @@ function CleaningDutyInner({ currentUser }) {
 
 // ─── ดูแผนสำหรับสอนแทน (อ่านอย่างเดียว ยกเว้นความเห็นผู้บริหาร) ──────────────
 function SubstitutePlanView({ employees, currentUser }) {
-  const isAdmin = currentUser?.role === "admin";
+  const isAdmin = isExecutiveUser(currentUser);
   const teachers = (employees || []).filter(emp => emp.id !== currentUser?.id);
   const [teacherId, setTeacherId] = useState("");
   const [date, setDate] = useState(() => todayISO());
@@ -7548,7 +7564,7 @@ function AcademicPage({ employees, currentUser, planFocus = null }) {
 }
 
 function StudentRollPage({ employees, currentUser }) {
-  if (currentUser?.role === "admin") return <StudentRollAdmin employees={employees} />;
+  if (isExecutiveUser(currentUser)) return <StudentRollAdmin employees={employees} />;
   return <StudentRollTeacher currentUser={currentUser} />;
 }
 
@@ -9763,7 +9779,7 @@ export default function HRApp() {
     const handleHashChange = () => {
       if (!currentUser) return;
       if (window.location.hash === "#finance" || window.location.hash === "#payroll") {
-        if (currentUser.role === "admin") {
+        if (isSalaryOwner(currentUser)) {
           setActivePage(window.location.hash === "#payroll" ? "payrollStandalone" : "finance");
         } else {
           window.history.replaceState(null, "", window.location.pathname);
@@ -9779,7 +9795,7 @@ export default function HRApp() {
   useEffect(() => {
     if (!currentUser) return;
     const currentPage = navItems.find(item => item.key === activePage);
-    if (activePage === "payrollStandalone" && currentUser.role !== "admin") {
+    if ((activePage === "payrollStandalone" || activePage === "finance") && !isSalaryOwner(currentUser)) {
       window.history.replaceState(null, "", window.location.pathname);
       setActivePage("dashboard");
       return;
@@ -9788,7 +9804,7 @@ export default function HRApp() {
       setActivePage("dashboard");
       return;
     }
-    if (currentPage && !currentPage.executiveOnly && !currentPage.roles.includes(currentUser.role)) {
+    if (currentPage && !currentPage.executiveOnly && !currentPage.roles.includes(hasAdminRights(currentUser) ? "admin" : "employee")) {
       if (window.location.hash === "#finance" || window.location.hash === "#payroll") {
         window.history.replaceState(null, "", window.location.pathname);
       }
@@ -9844,7 +9860,7 @@ export default function HRApp() {
   const pendingLeaves = leaves.filter(l => l.status === "pending").length;
   const myAttToday = activityLog.find(a => a.employee_id === actingUser.id && isToday(a.check_in));
 
-  const stats = actingUser.role === "admin" ? [
+  const stats = hasAdminRights(actingUser) ? [
     { label: "พนักงานทั้งหมด", value: employees.length, icon: Users, color: "#008CFF", bg: "#EAF5FF", trend: "ข้อมูลจริง" },
     { label: "ลงเวลาวันนี้", value: todayAttendance.length, icon: CheckCircle, color: "#059669", bg: "#ecfdf5", trend: `${employees.length > 0 ? Math.round(todayAttendance.length / employees.length * 100) : 0}%` },
     { label: "มาสายวันนี้", value: todayAttendance.filter(a => checkLate(a.check_in, settings?.work_start, settings?.late_grace_minutes)?.late).length, icon: AlertCircle, color: "#dc2626", bg: "#fef2f2", trend: "นับเฉพาะวันนี้" },
@@ -9882,7 +9898,7 @@ export default function HRApp() {
   const openCheckOut = () => { setAttMode("out"); setShowAttendance(true); };
   const openNavItem = (key) => {
     if (key === "finance") {
-      if (currentUser.role !== "admin") {
+      if (!isSalaryOwner(currentUser)) {
         setActivePage("dashboard");
         setSidebarOpen(false);
         return;
@@ -9908,7 +9924,7 @@ export default function HRApp() {
 
   const visibleNavItems = navItems.filter(item => canAccessNavItem(item, actingUser));
 
-  if (activePage === "payrollStandalone" && currentUser.role === "admin") {
+  if (activePage === "payrollStandalone" && isSalaryOwner(currentUser)) {
     return loading ? (
       <div style={{ fontFamily: "'Anuphan', 'Sarabun', 'Noto Sans Thai', sans-serif", background: "#F3F8FD", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b" }}>
         <style>{`@import url('https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600;700&family=Sarabun:wght@400;600;700&display=swap'); @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
@@ -10084,7 +10100,7 @@ export default function HRApp() {
                     {stats.map(stat => <StatCard key={stat.label} stat={stat} />)}
                   </div>
 
-                  {actingUser.role === "admin" && (
+                  {hasAdminRights(actingUser) && (
                     <>
                       {/* Pending Approvals */}
                       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
@@ -10246,7 +10262,7 @@ export default function HRApp() {
               {activePage === "attendance" && <AttendancePage employees={employees} activityLog={activityLog} currentUser={actingUser} settings={settings} onRefresh={fetchData} />}
               {activePage === "leave" && <LeavePage employees={employees} leaves={leaves} currentUser={actingUser} onRefresh={fetchData} />}
               {activePage === "outing" && <OutingPage employees={employees} outings={outings} currentUser={actingUser} onRefresh={fetchData} />}
-              {activePage === "finance" && currentUser.role === "admin" && <FinancePortal employees={employees} attendance={activityLog} leaves={leaves} settings={settings} />}
+              {activePage === "finance" && isSalaryOwner(currentUser) && isSalaryOwner(actingUser) && <FinancePortal employees={employees} attendance={activityLog} leaves={leaves} settings={settings} />}
               {activePage === "report" && <ReportPage employees={employees} attendance={activityLog} leaves={leaves} outings={outings} settings={settings} />}
               {activePage === "schedule" && <SchedulePage employees={employees} currentUser={actingUser} onOpenPlan={focus => { setPlanFocus({ ...focus, at: Date.now() }); setActivePage("academic"); }} />}
               {activePage === "academic" && <AcademicPage employees={employees} currentUser={actingUser} planFocus={planFocus} />}

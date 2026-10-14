@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import { AcademicExtra, ACADEMIC_EXTRA_TABS, ACADEMIC_RECORD_ROOM, TEACHING_GRADE_GROUPS, loadAssignedPlanLevels, loadTeachingGrades, saveTeachingGrade } from "./academicRecords.jsx";
 import { read as readWorkbook, utils as xlsxUtils, writeFile as writeWorkbookFile } from "xlsx";
 import { supabase } from "./supabase.js";
+import { MILK_RECORD_TEMPLATE_URL, buildMilkRecord, fillMilkRecordWorkbook, milkRecordPrintHtml, milkClassLine } from "./milkRecordForm.js";
 import { STUDENT_STATS_TEMPLATE_URL, STUDENT_STATS_LEVELS, MILK_OTHER, MILK_NONE, buildStudentStats, fillStudentStatsWorkbook, statsTotals, studentSex, remarkName, formDateLine } from "./studentStatsForm.js";
 import {
   Users, Building2, Clock, CheckCircle, XCircle, MapPin,
@@ -6864,7 +6865,16 @@ const CLEANING_SCALE = [
   { value: 5, label: "ดีเยี่ยม" }, { value: 4, label: "ดี" }, { value: 3, label: "พอใช้" },
   { value: 2, label: "ควรปรับปรุง" }, { value: 1, label: "ต้องแก้ไขเร่งด่วน" }, { value: 0, label: "ไม่ได้ดำเนินการ" },
 ];
-const CLEANING_MAX = CLEANING_CRITERIA.length * 5;
+// เกณฑ์จัดการได้โดยผู้บริหาร เก็บใน config.criteria · ผลการตรวจแต่ละครั้งเก็บสำเนาเกณฑ์ของตัวเอง (criteria) ไว้
+// คะแนนเต็ม = จำนวนเกณฑ์ × 5 · ผลการตรวจเก่าที่ไม่มีสำเนาเกณฑ์ = ใช้ 5 เกณฑ์ตั้งต้น
+const CLEANING_CRITERIA_LIMIT = 15;
+function cleanCleaningCriteria(raw, fallback = CLEANING_CRITERIA) {
+  if (!Array.isArray(raw)) return fallback.map(c => ({ key: c.key, label: c.label, hint: c.hint || "" }));
+  const seen = new Set();
+  return raw.map(c => ({ key: String(c?.key || "").trim().slice(0, 40), label: String(c?.label || "").trim().slice(0, 60), hint: String(c?.hint || "").trim().slice(0, 200) }))
+    .filter(c => c.key && c.label && !seen.has(c.key) && seen.add(c.key)).slice(0, CLEANING_CRITERIA_LIMIT);
+}
+const cleaningMaxOf = criteria => criteria.length * 5;
 const CLEANING_PHOTO_LIMIT = 4;
 
 function cleaningLevel(percent) {
@@ -6884,19 +6894,21 @@ function cleanCleaningConfig(raw) {
     kind: "config",
     id: "config",
     rooms: (Array.isArray(raw?.rooms) ? raw.rooms : []).map(cleanCleaningRoom).filter(room => room.name),
+    criteria: (() => { const list = cleanCleaningCriteria(raw?.criteria); return list.length ? list : cleanCleaningCriteria(null); })(),
     updated_at: String(raw?.updated_at || ""),
     row_id: raw?.row_id || null,
     pending: !!raw?.pending,
   };
 }
 
-function cleaningTotal(scores) {
-  return CLEANING_CRITERIA.reduce((sum, item) => sum + (Number(scores?.[item.key]) || 0), 0);
+function cleaningTotal(scores, criteria = CLEANING_CRITERIA) {
+  return criteria.reduce((sum, item) => sum + (Number(scores?.[item.key]) || 0), 0);
 }
 
 function cleanCleaningInspection(raw) {
+  const criteria = cleanCleaningCriteria(raw?.criteria).map(c => ({ key: c.key, label: c.label }));
   const scores = {};
-  CLEANING_CRITERIA.forEach(item => {
+  criteria.forEach(item => {
     const value = Number(raw?.scores?.[item.key]);
     scores[item.key] = Number.isFinite(value) ? Math.max(0, Math.min(5, Math.round(value))) : 0;
   });
@@ -6907,8 +6919,10 @@ function cleanCleaningInspection(raw) {
     room_name: String(raw?.room_name || "").slice(0, 80),
     area: String(raw?.area || "").slice(0, 60),
     date: /^\d{4}-\d{2}-\d{2}$/.test(raw?.date || "") ? raw.date : todayISO(),
+    criteria,
     scores,
-    total: cleaningTotal(scores),
+    total: cleaningTotal(scores, criteria),
+    max: cleaningMaxOf(criteria),
     note: String(raw?.note || "").slice(0, 1000),
     photos: (Array.isArray(raw?.photos) ? raw.photos : []).filter(photo => photo?.url || photo?.dataUrl).slice(0, CLEANING_PHOTO_LIMIT),
     by: String(raw?.by || "").slice(0, 120),
@@ -7005,11 +7019,11 @@ function CleaningLevelBadge({ percent }) {
   return <span style={{ background: level.bg, color: level.color, fontWeight: 800, fontSize: "0.72rem", borderRadius: 20, padding: "0.12rem 0.55rem", whiteSpace: "nowrap" }}>{level.label}</span>;
 }
 
-function emptyCleaningForm(rooms) {
+function emptyCleaningForm(rooms, criteria = CLEANING_CRITERIA) {
   const room = rooms[0];
   const scores = {};
-  CLEANING_CRITERIA.forEach(item => { scores[item.key] = 5; });
-  return { room_id: room?.id || "", area: room?.areas?.[0] || "", date: todayISO(), scores, note: "", photos: [] };
+  criteria.forEach(item => { scores[item.key] = 5; });
+  return { room_id: room?.id || "", area: room?.areas?.[0] || "", date: todayISO(), criteria: criteria.map(c => ({ key: c.key, label: c.label, hint: c.hint || "" })), scores, note: "", photos: [] };
 }
 
 function CleaningDutyPage({ currentUser }) {
@@ -7037,7 +7051,9 @@ function CleaningDutyInner({ currentUser }) {
   const [editingId, setEditingId] = useState("");
   const [roomEdit, setRoomEdit] = useState(null); // { id, name }
   const [areaEdit, setAreaEdit] = useState(null); // { roomId, from, to }
-  const [confirmBox, setConfirmBox] = useState(null); // { title, text, confirmLabel, onConfirm }
+  const [confirmBox, setConfirmBox] = useState(null);
+  const [criterionEdit, setCriterionEdit] = useState(null); // { key, label, hint }
+  const [criterionDraft, setCriterionDraft] = useState({ label: "", hint: "" }); // { title, text, confirmLabel, onConfirm }
   const rooms = config.rooms;
   const askConfirm = (title, text, onConfirm, confirmLabel = "ลบ") => setConfirmBox({ title, text, onConfirm, confirmLabel });
   const roomNameOf = item => rooms.find(room => room.id === item.room_id)?.name || item.room_name || "ห้องที่ลบแล้ว";
@@ -7077,12 +7093,12 @@ function CleaningDutyInner({ currentUser }) {
           const { error: delError } = await supabase.from("teaching_schedule").delete().in("id", toDelete);
           if (!delError) remaining = [];
         } else remaining = [];
-        if (active) { commit(nextConfig, [...byId.values()], remaining); setForm(emptyCleaningForm(nextConfig.rooms)); }
+        if (active) { commit(nextConfig, [...byId.values()], remaining); setForm(emptyCleaningForm(nextConfig.rooms, nextConfig.criteria)); }
       } catch (err) {
         if (active) {
           const fallback = local.config || cleanCleaningConfig(null);
           commit(fallback, local.inspections, local.deleted);
-          setForm(emptyCleaningForm(fallback.rooms));
+          setForm(emptyCleaningForm(fallback.rooms, fallback.criteria));
           setError(`โหลดจากฐานข้อมูลไม่ได้ (${err.message || "เชื่อมต่อไม่สำเร็จ"}) แสดงข้อมูลที่บันทึกไว้ในเครื่องนี้`);
         }
       } finally {
@@ -7093,8 +7109,8 @@ function CleaningDutyInner({ currentUser }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const saveConfig = async (nextRooms, success, nextInspections = inspections) => {
-    const next = cleanCleaningConfig({ ...config, rooms: nextRooms, updated_at: new Date().toISOString() });
+  const saveConfig = async (nextRooms, success, nextInspections = inspections, nextCriteria = config.criteria) => {
+    const next = cleanCleaningConfig({ ...config, rooms: nextRooms, criteria: nextCriteria, updated_at: new Date().toISOString() });
     try {
       next.row_id = await writeCleaningRow(next, currentUser.id);
       next.pending = false;
@@ -7105,7 +7121,9 @@ function CleaningDutyInner({ currentUser }) {
       setError(`${err.message || "บันทึกไม่สำเร็จ"} · เก็บไว้ในเครื่องนี้แล้ว จะซิงก์เมื่อเปิดหน้านี้ครั้งถัดไป`);
     }
     commit(next, nextInspections);
-    if (!editingId && !next.rooms.some(room => room.id === form.room_id)) setForm(emptyCleaningForm(next.rooms));
+    if (!editingId && (!next.rooms.some(room => room.id === form.room_id) || nextCriteria !== config.criteria)) {
+      setForm(current => ({ ...emptyCleaningForm(next.rooms, next.criteria), ...(next.rooms.some(room => room.id === current.room_id) ? { room_id: current.room_id, area: current.area, date: current.date, note: current.note, photos: current.photos } : {}) }));
+    }
   };
 
   const addRoom = () => {
@@ -7161,6 +7179,37 @@ function CleaningDutyInner({ currentUser }) {
   };
   const removeArea = (room, area) => askConfirm(`ลบพื้นที่ ${area} ของห้อง ${room.name}?`, "ผลการตรวจเดิมของพื้นที่นี้ยังคงอยู่", () => saveConfig(rooms.map(item => (item.id === room.id ? { ...item, areas: item.areas.filter(value => value !== area) } : item)), `ลบพื้นที่ ${area} แล้ว`));
 
+  const criteria = config.criteria;
+  const saveCriteria = (list, success) => saveConfig(rooms, success, inspections, list);
+  const addCriterion = () => {
+    const label = criterionDraft.label.trim().slice(0, 60);
+    if (!label) { setError("กรุณากรอกชื่อเกณฑ์"); return; }
+    if (criteria.length >= CLEANING_CRITERIA_LIMIT) { setError(`มีเกณฑ์ได้ไม่เกิน ${CLEANING_CRITERIA_LIMIT} ข้อ`); return; }
+    if (criteria.some(c => c.label === label)) { setError(`มีเกณฑ์ ${label} อยู่แล้ว`); return; }
+    saveCriteria([...criteria, { key: `c_${newSupervisionId()}`, label, hint: criterionDraft.hint.trim().slice(0, 200) }], `เพิ่มเกณฑ์ ${label} แล้ว · คะแนนเต็มใหม่ ${cleaningMaxOf(criteria) + 5}`);
+    setCriterionDraft({ label: "", hint: "" });
+  };
+  const saveCriterionEdit = () => {
+    if (!criterionEdit) return;
+    const label = criterionEdit.label.trim().slice(0, 60);
+    if (!label) { setError("กรุณากรอกชื่อเกณฑ์"); return; }
+    if (criteria.some(c => c.key !== criterionEdit.key && c.label === label)) { setError(`มีเกณฑ์ ${label} อยู่แล้ว`); return; }
+    const edit = criterionEdit;
+    setCriterionEdit(null);
+    saveCriteria(criteria.map(c => (c.key === edit.key ? { ...c, label, hint: edit.hint.trim().slice(0, 200) } : c)), `แก้ไขเกณฑ์ ${label} แล้ว (ผลการตรวจเดิมยังแสดงชื่อเกณฑ์ตามที่บันทึกไว้)`);
+  };
+  const removeCriterion = c => {
+    if (criteria.length <= 1) { setError("ต้องมีเกณฑ์อย่างน้อย 1 ข้อ"); return; }
+    askConfirm(`ลบเกณฑ์ ${c.label}?`, `คะแนนเต็มของการตรวจครั้งต่อไปจะเป็น ${cleaningMaxOf(criteria) - 5} คะแนน (${criteria.length - 1} เกณฑ์ × 5) · ผลการตรวจเดิมยังคงคะแนนและเกณฑ์ตามที่บันทึกไว้`, () => saveCriteria(criteria.filter(item => item.key !== c.key), `ลบเกณฑ์ ${c.label} แล้ว`));
+  };
+  const moveCriterion = (index, delta) => {
+    const target = index + delta;
+    if (target < 0 || target >= criteria.length) return;
+    const list = [...criteria];
+    [list[index], list[target]] = [list[target], list[index]];
+    saveCriteria(list, "จัดลำดับเกณฑ์แล้ว");
+  };
+
   const pickPhotos = async event => {
     const files = [...(event.target.files || [])];
     event.target.value = "";
@@ -7189,14 +7238,14 @@ function CleaningDutyInner({ currentUser }) {
     const now = new Date().toISOString();
     const original = editingId ? inspections.find(entry => entry.id === editingId) : null;
     const item = original
-      ? cleanCleaningInspection({ ...original, room_id: form.room_id, area: form.area, date: form.date, scores: form.scores, note: form.note, photos: form.photos, room_name: room.name, updated_at: now, edited_by: currentUser.name })
+      ? cleanCleaningInspection({ ...original, room_id: form.room_id, area: form.area, date: form.date, criteria: form.criteria, scores: form.scores, note: form.note, photos: form.photos, room_name: room.name, updated_at: now, edited_by: currentUser.name })
       : cleanCleaningInspection({ ...form, id: newSupervisionId(), room_name: room.name, by: currentUser.name, by_id: currentUser.id, at: now, updated_at: now });
     if (original) item.edited_by = currentUser.name;
     setBusy(true);
     try {
       item.row_id = await writeCleaningRow(item, currentUser.id);
       item.pending = false;
-      setMessage(`${original ? "แก้ไข" : "บันทึก"}ผลการตรวจ ${room.name} · ${item.area} แล้ว (${item.total}/${CLEANING_MAX} คะแนน)`);
+      setMessage(`${original ? "แก้ไข" : "บันทึก"}ผลการตรวจ ${room.name} · ${item.area} แล้ว (${item.total}/${item.max} คะแนน)`);
       setError("");
     } catch (err) {
       item.pending = true;
@@ -7204,13 +7253,13 @@ function CleaningDutyInner({ currentUser }) {
     }
     commit(config, original ? inspections.map(entry => (entry.id === original.id ? item : entry)) : [item, ...inspections]);
     setEditingId("");
-    setForm(current => ({ ...emptyCleaningForm(rooms), room_id: current.room_id, area: current.area, date: original ? todayISO() : current.date }));
+    setForm(current => ({ ...emptyCleaningForm(rooms, criteria), room_id: current.room_id, area: current.area, date: original ? todayISO() : current.date }));
     setBusy(false);
   };
 
   const startEdit = item => {
     setEditingId(item.id);
-    setForm({ room_id: item.room_id, area: item.area, date: item.date, scores: { ...item.scores }, note: item.note, photos: [...item.photos] });
+    setForm({ room_id: item.room_id, area: item.area, date: item.date, criteria: item.criteria.map(c => ({ ...c, hint: criteria.find(x => x.key === c.key)?.hint || "" })), scores: { ...item.scores }, note: item.note, photos: [...item.photos] });
     setTab("inspect");
     setDetailRoom("");
     setMessage("");
@@ -7220,10 +7269,10 @@ function CleaningDutyInner({ currentUser }) {
   };
   const cancelEdit = () => {
     setEditingId("");
-    setForm(emptyCleaningForm(rooms));
+    setForm(emptyCleaningForm(rooms, criteria));
   };
 
-  const deleteInspection = item => askConfirm("ลบผลการตรวจนี้?", `${roomNameOf(item)} · ${item.area} · วันที่ ${formatThaiDateKey(item.date)} (${item.total}/${CLEANING_MAX} คะแนน) — ลบแล้วกู้คืนไม่ได้`, () => removeInspection(item));
+  const deleteInspection = item => askConfirm("ลบผลการตรวจนี้?", `${roomNameOf(item)} · ${item.area} · วันที่ ${formatThaiDateKey(item.date)} (${item.total}/${item.max} คะแนน) — ลบแล้วกู้คืนไม่ได้`, () => removeInspection(item));
   const removeInspection = async item => {
     let nextDeleted = deleted;
     if (item.row_id) {
@@ -7245,19 +7294,28 @@ function CleaningDutyInner({ currentUser }) {
   const summary = [...roomKeys.entries()].map(([id, name]) => {
     const list = inRange.filter(item => item.room_id === id);
     const total = list.reduce((sum, item) => sum + item.total, 0);
+    const maxSum = list.reduce((sum, item) => sum + item.max, 0);
     const average = list.length ? total / list.length : 0;
-    const percent = list.length ? (average / CLEANING_MAX) * 100 : 0;
-    const byCriterion = {};
-    CLEANING_CRITERIA.forEach(c => { byCriterion[c.key] = list.length ? list.reduce((sum, item) => sum + item.scores[c.key], 0) / list.length : 0; });
-    return { id, name, list, count: list.length, total, average, percent, byCriterion };
+    const avgMax = list.length ? maxSum / list.length : cleaningMaxOf(criteria);
+    const percent = maxSum ? (total / maxSum) * 100 : 0;
+    // เฉลี่ยรายเกณฑ์: เกณฑ์ที่ใช้อยู่ + เกณฑ์ที่ถูกลบแต่ยังมีในผลการตรวจช่วงนี้ (นับเฉพาะครั้งที่มีเกณฑ์นั้น)
+    const labels = new Map(criteria.map(c => [c.key, { label: c.label, active: true }]));
+    list.forEach(item => item.criteria.forEach(c => { if (!labels.has(c.key)) labels.set(c.key, { label: c.label, active: false }); }));
+    const byCriterion = [...labels.entries()].map(([key, info]) => {
+      const scored = list.filter(item => item.criteria.some(c => c.key === key));
+      return { key, ...info, n: scored.length, avg: scored.length ? scored.reduce((sum, item) => sum + item.scores[key], 0) / scored.length : 0 };
+    }).filter(row => row.active || row.n);
+    return { id, name, list, count: list.length, total, maxSum, average, avgMax, percent, byCriterion };
   }).sort((a, b) => (b.count > 0) - (a.count > 0) || b.percent - a.percent || a.name.localeCompare(b.name, "th"));
   let rank = 0;
   summary.forEach(row => { row.rank = row.count ? ++rank : null; });
 
   const small = { ...inputStyle, padding: "0.4rem 0.55rem", fontSize: "0.88rem" };
-  const tabs = [["inspect", "บันทึกผลการตรวจ"], ["summary", "สรุปผลและอันดับ"], ["rooms", "ทะเบียนห้องและพื้นที่"]];
+  const tabs = [["inspect", "บันทึกผลการตรวจ"], ["summary", "สรุปผลและอันดับ"], ["rooms", "ทะเบียนห้อง พื้นที่ และเกณฑ์"]];
   const formRoom = rooms.find(room => room.id === form.room_id);
-  const formTotal = cleaningTotal(form.scores);
+  const formCriteria = form.criteria || criteria;
+  const formTotal = cleaningTotal(form.scores, formCriteria);
+  const formMax = cleaningMaxOf(formCriteria);
   const chip = active => ({ border: `1px solid ${active ? "#008CFF" : "#E4EEF8"}`, background: active ? "linear-gradient(90deg, #008CFF, #3EBFFB)" : "#fff", color: active ? "#fff" : "#233862", borderRadius: 999, padding: "0.3rem 0.75rem", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", fontFamily: "inherit" });
   const th = { padding: "0.4rem 0.5rem", fontSize: "0.75rem", color: "#596068", textAlign: "left", fontWeight: 800, whiteSpace: "nowrap", borderBottom: "1px solid #E4EEF8" };
   const td = { padding: "0.45rem 0.5rem", fontSize: "0.85rem", borderTop: "1px solid #f1f5f9" };
@@ -7274,12 +7332,12 @@ function CleaningDutyInner({ currentUser }) {
   );
 
   const inspectionCard = item => {
-    const percent = (item.total / CLEANING_MAX) * 100;
+    const percent = item.max ? (item.total / item.max) * 100 : 0;
     return (
       <div key={item.id} style={{ border: "1px solid #E4EEF8", borderRadius: 14, padding: "0.7rem 0.8rem", display: "grid", gap: "0.45rem", background: "#fff" }}>
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
           <strong style={{ color: "#233862" }}>{formatThaiDateKey(item.date)} · {roomNameOf(item)} · {item.area}</strong>
-          <span style={{ fontWeight: 900, color: cleaningLevel(percent).color }}>{item.total}/{CLEANING_MAX}</span>
+          <span style={{ fontWeight: 900, color: cleaningLevel(percent).color }}>{item.total}/{item.max}</span>
           <CleaningLevelBadge percent={percent} />
           {item.pending && <span style={{ fontSize: "0.7rem", color: "#b45309" }}>รอซิงก์</span>}
           {editingId === item.id && <span style={{ fontSize: "0.7rem", color: "#FF7106", fontWeight: 800 }}>กำลังแก้ไข</span>}
@@ -7288,7 +7346,7 @@ function CleaningDutyInner({ currentUser }) {
           <button type="button" aria-label="ลบผลการตรวจ" title="ลบ" onClick={() => deleteInspection(item)} style={{ border: "none", background: "#fee2e2", color: "#b91c1c", borderRadius: 8, padding: "0.2rem 0.4rem", cursor: "pointer" }}><Trash2 size={13} /></button>
         </div>
         <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
-          {CLEANING_CRITERIA.map(c => <span key={c.key} style={{ fontSize: "0.75rem", background: item.scores[c.key] >= 4 ? "#EAF5FF" : item.scores[c.key] >= 3 ? "#fef9c3" : "#fee2e2", color: "#233862", borderRadius: 8, padding: "0.15rem 0.45rem" }}>{c.label} {item.scores[c.key]}/5</span>)}
+          {item.criteria.map(c => <span key={c.key} style={{ fontSize: "0.75rem", background: item.scores[c.key] >= 4 ? "#EAF5FF" : item.scores[c.key] >= 3 ? "#fef9c3" : "#fee2e2", color: "#233862", borderRadius: 8, padding: "0.15rem 0.45rem" }}>{c.label} {item.scores[c.key]}/5</span>)}
         </div>
         {item.note && <div style={{ fontSize: "0.83rem", color: "#334155", whiteSpace: "pre-wrap" }}><strong>จุดที่ต้องแก้ไข: </strong>{item.note}</div>}
         {item.photos.length > 0 && photoStrip(item.photos)}
@@ -7345,7 +7403,7 @@ function CleaningDutyInner({ currentUser }) {
               </Field>
             </div>
             <div style={{ display: "grid", gap: "0.55rem", marginTop: "0.8rem" }}>
-              {CLEANING_CRITERIA.map((c, index) => (
+              {formCriteria.map((c, index) => (
                 <div key={c.key} style={{ background: "#F3F8FD", border: "1px solid #E4EEF8", borderRadius: 12, padding: "0.55rem 0.7rem" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", alignItems: "baseline" }}>
                     <span style={{ fontWeight: 800, color: "#233862", fontSize: "0.88rem" }}>{index + 1}. {c.label}</span>
@@ -7373,8 +7431,9 @@ function CleaningDutyInner({ currentUser }) {
               {form.photos.length > 0 && photoStrip(form.photos, index => setForm(current => ({ ...current, photos: current.photos.filter((_, i) => i !== index) })))}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginTop: "0.9rem", flexWrap: "wrap" }}>
-              <div style={{ fontWeight: 900, fontSize: "1.3rem", color: cleaningLevel((formTotal / CLEANING_MAX) * 100).color }}>{formTotal}/{CLEANING_MAX}</div>
-              <CleaningLevelBadge percent={(formTotal / CLEANING_MAX) * 100} />
+              <div style={{ fontWeight: 900, fontSize: "1.3rem", color: cleaningLevel(formMax ? (formTotal / formMax) * 100 : 0).color }}>{formTotal}/{formMax}</div>
+              <CleaningLevelBadge percent={formMax ? (formTotal / formMax) * 100 : 0} />
+              <span style={{ fontSize: "0.75rem", color: "#596068" }}>{formCriteria.length} เกณฑ์ × 5</span>
               {editingId && <button type="button" disabled={busy} onClick={cancelEdit} style={{ ...btnSecondary, flex: "none", marginLeft: "auto", padding: "0.6rem 1rem" }}><X size={16} /> ยกเลิกการแก้ไข</button>}
               <button type="button" disabled={busy} onClick={submitInspection} style={{ ...btnPrimary, flex: "none", marginLeft: editingId ? 0 : "auto", padding: "0.6rem 1.2rem", background: "linear-gradient(90deg, #FF7106, #FF9A3C)", color: "#fff", cursor: busy ? "wait" : "pointer", boxShadow: "0 4px 14px rgba(255,113,6,0.3)" }}><Save size={16} /> {editingId ? "บันทึกการแก้ไข" : "บันทึกผลการตรวจ"}</button>
             </div>
@@ -7399,16 +7458,16 @@ function CleaningDutyInner({ currentUser }) {
               <button type="button" onClick={() => setDetailRoom("")} style={{ ...btnSecondary, flex: "none", width: "fit-content", padding: "0.35rem 0.7rem", fontSize: "0.82rem" }}><ChevronLeft size={14} /> กลับไปตารางสรุป</button>
               <div style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
                 <div style={{ fontSize: "1.15rem", fontWeight: 800, color: "#233862" }}>{detail.name}{detail.rank ? ` · อันดับ ${detail.rank}` : ""}</div>
-                <div style={{ fontWeight: 900, color: cleaningLevel(detail.percent).color }}>เฉลี่ย {detail.average.toFixed(1)}/{CLEANING_MAX} ({detail.percent.toFixed(0)}%)</div>
+                <div style={{ fontWeight: 900, color: cleaningLevel(detail.percent).color }}>เฉลี่ย {detail.average.toFixed(1)}/{Number.isInteger(detail.avgMax) ? detail.avgMax : detail.avgMax.toFixed(1)} ({detail.percent.toFixed(0)}%)</div>
                 {detail.count > 0 && <CleaningLevelBadge percent={detail.percent} />}
               </div>
               {detail.count > 0 && (
                 <div style={{ display: "grid", gap: "0.25rem" }}>
-                  {CLEANING_CRITERIA.map(c => (
-                    <div key={c.key} style={{ display: "grid", gridTemplateColumns: "10rem 1fr 3rem", gap: "0.5rem", alignItems: "center", fontSize: "0.8rem" }}>
-                      <span style={{ color: "#233862", fontWeight: 700 }}>{c.label}</span>
-                      <div style={{ background: "#F3F8FD", borderRadius: 8, height: 12 }}><div style={{ width: `${(detail.byCriterion[c.key] / 5) * 100}%`, height: "100%", borderRadius: 8, background: "linear-gradient(90deg, #008CFF, #3EBFFB)" }} /></div>
-                      <span style={{ textAlign: "right", fontWeight: 800 }}>{detail.byCriterion[c.key].toFixed(1)}</span>
+                  {detail.byCriterion.map(c => (
+                    <div key={c.key} style={{ display: "grid", gridTemplateColumns: "12rem 1fr 3rem", gap: "0.5rem", alignItems: "center", fontSize: "0.8rem" }}>
+                      <span style={{ color: c.active ? "#233862" : "#94a3b8", fontWeight: 700 }}>{c.label}{!c.active ? " (เลิกใช้)" : ""}{c.n < detail.count ? ` · ${c.n} ครั้ง` : ""}</span>
+                      <div style={{ background: "#F3F8FD", borderRadius: 8, height: 12 }}><div style={{ width: `${(c.avg / 5) * 100}%`, height: "100%", borderRadius: 8, background: c.active ? "linear-gradient(90deg, #008CFF, #3EBFFB)" : "#cbd5e1" }} /></div>
+                      <span style={{ textAlign: "right", fontWeight: 800 }}>{c.n ? c.avg.toFixed(1) : "-"}</span>
                     </div>
                   ))}
                 </div>
@@ -7425,17 +7484,61 @@ function CleaningDutyInner({ currentUser }) {
                       <td style={{ ...td, fontWeight: 900, color: row.rank === 1 ? "#FF7106" : "#233862" }}>{row.rank ? (row.rank <= 3 ? ["🥇", "🥈", "🥉"][row.rank - 1] + " " : "") + row.rank : "-"}</td>
                       <td style={{ ...td, fontWeight: 700, color: "#233862" }}>{row.name}</td>
                       <td style={td}>{row.count}</td>
-                      <td style={td}>{row.count ? `${row.total}/${row.count * CLEANING_MAX}` : "-"}</td>
-                      <td style={td}>{row.count ? `${row.average.toFixed(1)}/${CLEANING_MAX}` : "-"}</td>
+                      <td style={td}>{row.count ? `${row.total}/${row.maxSum}` : "-"}</td>
+                      <td style={td}>{row.count ? `${row.average.toFixed(1)}/${Number.isInteger(row.avgMax) ? row.avgMax : row.avgMax.toFixed(1)}` : "-"}</td>
                       <td style={td}>{row.count ? `${row.percent.toFixed(0)}%` : "-"}</td>
                       <td style={td}>{row.count ? <CleaningLevelBadge percent={row.percent} /> : <span style={{ color: "#94a3b8", fontSize: "0.78rem" }}>ยังไม่ได้ตรวจ</span>}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: "0.4rem" }}>เรียงอันดับตามคะแนนเฉลี่ยต่อครั้ง · กดที่แถวเพื่อดูรายละเอียดและรูปถ่าย</div>
+              <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: "0.4rem" }}>เรียงอันดับตามร้อยละของคะแนนที่ได้ (คะแนนเต็มของแต่ละครั้ง = จำนวนเกณฑ์ ณ วันที่ตรวจ × 5) · กดที่แถวเพื่อดูรายละเอียดและรูปถ่าย</div>
             </div>
           )}
+        </Card>
+      )}
+
+      {tab === "rooms" && (
+        <Card>
+          <div style={{ display: "flex", alignItems: "baseline", gap: "0.6rem", flexWrap: "wrap", marginBottom: "0.3rem" }}>
+            <div style={{ fontWeight: 800, color: "#233862" }}>เกณฑ์การให้คะแนน</div>
+            <span style={{ fontSize: "0.8rem", color: "#0072D9", fontWeight: 800 }}>{criteria.length} เกณฑ์ × 5 = คะแนนเต็ม {cleaningMaxOf(criteria)}</span>
+          </div>
+          <div style={{ fontSize: "0.78rem", color: "#596068", marginBottom: "0.6rem" }}>ใช้กับการตรวจครั้งต่อไป · ผลการตรวจเดิมยังคงเกณฑ์ คะแนน และคะแนนเต็มตามที่บันทึกไว้</div>
+          <div style={{ display: "grid", gap: "0.45rem" }}>
+            {criteria.map((c, index) => (
+              <div key={c.key} style={{ border: "1px solid #E4EEF8", borderRadius: 12, padding: "0.5rem 0.7rem", background: criterionEdit?.key === c.key ? "#F3F8FD" : "#fff" }}>
+                {criterionEdit?.key === c.key ? (
+                  <div style={{ display: "grid", gap: "0.4rem" }}>
+                    <input autoFocus value={criterionEdit.label} onChange={event => setCriterionEdit({ ...criterionEdit, label: event.target.value })} onKeyDown={event => { if (event.key === "Escape") setCriterionEdit(null); }} aria-label={`ชื่อใหม่ของเกณฑ์ ${c.label}`} placeholder="ชื่อเกณฑ์" style={small} />
+                    <input value={criterionEdit.hint} onChange={event => setCriterionEdit({ ...criterionEdit, hint: event.target.value })} onKeyDown={event => { if (event.key === "Enter") saveCriterionEdit(); if (event.key === "Escape") setCriterionEdit(null); }} aria-label={`คำอธิบายเกณฑ์ ${c.label}`} placeholder="คำอธิบาย / สิ่งที่ตรวจ" style={small} />
+                    <div style={{ display: "flex", gap: "0.4rem", justifyContent: "flex-end" }}>
+                      <button type="button" onClick={() => setCriterionEdit(null)} style={{ ...btnSecondary, flex: "none", padding: "0.3rem 0.7rem", fontSize: "0.8rem" }}>ยกเลิก</button>
+                      <button type="button" onClick={saveCriterionEdit} style={{ ...btnPrimary, flex: "none", padding: "0.3rem 0.8rem", fontSize: "0.8rem", background: "linear-gradient(90deg, #008CFF, #3EBFFB)", color: "#fff", cursor: "pointer" }}><Save size={13} /> บันทึกเกณฑ์</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                    <div style={{ display: "grid", gap: 0 }}>
+                      <button type="button" aria-label={`เลื่อนเกณฑ์ ${c.label} ขึ้น`} disabled={index === 0} onClick={() => moveCriterion(index, -1)} style={{ border: "none", background: "transparent", color: index === 0 ? "#cbd5e1" : "#596068", cursor: index === 0 ? "default" : "pointer", padding: 0, display: "inline-flex" }}><ChevronUp size={14} /></button>
+                      <button type="button" aria-label={`เลื่อนเกณฑ์ ${c.label} ลง`} disabled={index === criteria.length - 1} onClick={() => moveCriterion(index, 1)} style={{ border: "none", background: "transparent", color: index === criteria.length - 1 ? "#cbd5e1" : "#596068", cursor: index === criteria.length - 1 ? "default" : "pointer", padding: 0, display: "inline-flex", transform: "rotate(180deg)" }}><ChevronUp size={14} /></button>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 800, color: "#233862", fontSize: "0.9rem" }}>{index + 1}. {c.label}</div>
+                      <div style={{ fontSize: "0.76rem", color: c.hint ? "#596068" : "#94a3b8" }}>{c.hint || "ไม่มีคำอธิบาย"}</div>
+                    </div>
+                    <button type="button" aria-label={`แก้ไขเกณฑ์ ${c.label}`} onClick={() => setCriterionEdit({ key: c.key, label: c.label, hint: c.hint || "" })} style={{ border: "none", background: "#EAF5FF", color: "#0072D9", borderRadius: 8, padding: "0.25rem 0.55rem", cursor: "pointer", fontFamily: "inherit", fontSize: "0.78rem", fontWeight: 700, whiteSpace: "nowrap" }}><Pencil size={12} /> แก้ไข</button>
+                    <button type="button" aria-label={`ลบเกณฑ์ ${c.label}`} disabled={criteria.length <= 1} title={criteria.length <= 1 ? "ต้องมีเกณฑ์อย่างน้อย 1 ข้อ" : "ลบเกณฑ์"} onClick={() => removeCriterion(c)} style={{ border: "none", background: "#fee2e2", color: "#b91c1c", borderRadius: 8, padding: "0.25rem 0.55rem", cursor: criteria.length <= 1 ? "not-allowed" : "pointer", fontFamily: "inherit", fontSize: "0.78rem", fontWeight: 700, whiteSpace: "nowrap", opacity: criteria.length <= 1 ? 0.5 : 1 }}><Trash2 size={12} /> ลบ</button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: "0.45rem", marginTop: "0.7rem", flexWrap: "wrap" }}>
+            <input value={criterionDraft.label} onChange={event => setCriterionDraft(current => ({ ...current, label: event.target.value }))} placeholder="ชื่อเกณฑ์ใหม่ เช่น ห้องน้ำ/อ่างล้างมือ" aria-label="ชื่อเกณฑ์ใหม่" style={{ ...small, flex: "1 1 180px" }} />
+            <input value={criterionDraft.hint} onChange={event => setCriterionDraft(current => ({ ...current, hint: event.target.value }))} onKeyDown={event => { if (event.key === "Enter") addCriterion(); }} placeholder="คำอธิบาย (ไม่บังคับ)" aria-label="คำอธิบายเกณฑ์ใหม่" style={{ ...small, flex: "2 1 240px" }} />
+            <button type="button" onClick={addCriterion} disabled={criteria.length >= CLEANING_CRITERIA_LIMIT} style={{ ...btnPrimary, flex: "none", padding: "0.45rem 1rem", background: "linear-gradient(90deg, #008CFF, #3EBFFB)", color: "#fff", cursor: "pointer" }}><Plus size={15} /> เพิ่มเกณฑ์</button>
+          </div>
         </Card>
       )}
 
@@ -7985,7 +8088,90 @@ function StudentRollTeacher({ currentUser }) {
           )}
         </>
       )}
+      {!loading && <MilkRecordFormCard entries={[{ key: "mine", book, teacherName: currentUser?.name || "" }]} />}
     </div>
+  );
+}
+
+// ─── แบบบันทึกการแจกนมให้นักเรียนดื่ม (รายห้อง/รายเดือน) ───────────────────────────────
+// entries: [{ key, book, teacherName }] · มา = ขีดแดง 1 ขีด · ถูกเลือกดื่มแทน = 2 ขีด · ขาด/ลา = ไม่ขีด
+function MilkRecordFormCard({ entries }) {
+  const usable = (entries || []).filter(entry => (entry.book?.students || []).some(student => String(student?.name || "").trim()));
+  const [key, setKey] = useState("");
+  const [month, setMonth] = useState(() => todayISO().slice(0, 7));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const selected = usable.find(entry => entry.key === key) || usable[0] || null;
+  const record = selected ? buildMilkRecord(selected.book, month) : null;
+  const label = entry => entry.book.class_name || `ห้องของ ${entry.teacherName || "ครู"}`;
+  const fileBase = record ? `บันทึกดื่มนม_${(selected.book.class_name || "ห้อง").replace(/[\\/:*?"<>|]/g, "-")}_${month}` : "";
+
+  const downloadExcel = async () => {
+    if (!record) return;
+    setBusy(true);
+    setError("");
+    try {
+      const [{ default: ExcelJS }, { default: JSZip }] = await Promise.all([import("exceljs"), import("jszip")]);
+      const response = await fetch(MILK_RECORD_TEMPLATE_URL);
+      if (!response.ok) throw new Error("ไม่พบไฟล์แบบฟอร์มต้นฉบับ");
+      const output = await fillMilkRecordWorkbook(ExcelJS, JSZip, await response.arrayBuffer(), record, { teacherName: selected.teacherName });
+      const url = URL.createObjectURL(new Blob([output], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${fileBase}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    } catch (err) {
+      setError(err.message || "สร้างไฟล์ไม่สำเร็จ");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const openPrint = () => {
+    if (!record) return;
+    const win = window.open("", "_blank");
+    if (!win) { setError("เบราว์เซอร์บล็อกหน้าต่างพิมพ์ ให้อนุญาต pop-up ก่อน"); return; }
+    win.document.open();
+    win.document.write(milkRecordPrintHtml(record, { teacherName: selected.teacherName }));
+    win.document.close();
+  };
+
+  return (
+    <Card>
+      <div style={{ display: "grid", gap: "0.7rem", minWidth: 0 }}>
+        <div style={{ fontWeight: 800, color: "#233862", fontSize: "1.05rem" }}>🥛 แบบบันทึกการแจกนมให้นักเรียนดื่ม (รายเดือน)</div>
+        <div style={{ color: "#64748b", fontSize: "0.82rem" }}>ดึงจากการเช็คชื่อทุกวันของเดือน · มาเรียน = ขีดแดง <b style={{ color: "#dc2626" }}>/</b> · ถูกเลือกให้ดื่มนมแทนเพื่อน = <b style={{ color: "#dc2626" }}>//</b> · ขาด/ลา = ไม่ขีด · เสาร์–อาทิตย์ที่ไม่ได้เช็คชื่อ = เส้นทแยงแดงทั้งช่อง (แบบเดียวกับฟอร์มเดิม)</div>
+        {error && <ErrorBox>{error}</ErrorBox>}
+        {usable.length === 0 ? <div style={{ color: "#94a3b8", fontSize: "0.85rem" }}>ยังไม่มีห้องที่มีรายชื่อนักเรียน</div> : (
+          <>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "end" }}>
+              {usable.length > 1 && (
+                <Field label="ห้อง">
+                  <select aria-label="ห้องสำหรับแบบบันทึกดื่มนม" value={selected?.key || ""} onChange={event => setKey(event.target.value)} style={{ ...periodInput, maxWidth: 260 }}>
+                    {usable.map(entry => <option key={entry.key} value={entry.key}>{label(entry)}{entry.teacherName ? ` · ${entry.teacherName}` : ""}</option>)}
+                  </select>
+                </Field>
+              )}
+              <Field label="เดือน">
+                <input type="month" aria-label="เดือนของแบบบันทึกดื่มนม" value={month} max={todayISO().slice(0, 7)} onChange={event => event.target.value && setMonth(event.target.value)} style={{ ...periodInput, maxWidth: 200 }} />
+              </Field>
+              <button type="button" onClick={downloadExcel} disabled={busy} style={{ ...btnPrimary, flex: "none", minHeight: 44, background: "linear-gradient(135deg, #16a34a, #15803d)", color: "#fff", cursor: busy ? "wait" : "pointer" }}><Download size={16} /> {busy ? "กำลังสร้างไฟล์..." : "ดาวน์โหลด Excel (แบบบันทึกดื่มนม)"}</button>
+              <button type="button" onClick={openPrint} style={{ ...btnSecondary, flex: "none", minHeight: 44 }}><Printer size={16} /> พิมพ์ / บันทึก PDF</button>
+            </div>
+            {record && (
+              <div style={{ fontSize: "0.85rem", color: "#233862" }}>
+                {milkClassLine(record.className).replace(/\s+/g, " ")} · นักเรียน {record.students.length} คน{record.sheets > 1 ? ` (${record.sheets} แผ่น)` : ""} · เช็คชื่อแล้ว {record.checkedDays} วัน · นมที่ดื่มรวม {record.totalCartons} กล่อง (ดื่มแทน {record.totalSubstitutes})
+              </div>
+            )}
+            {record && !record.className && <div style={{ color: "#b45309", fontSize: "0.8rem" }}>⚠️ ห้องนี้ยังไม่ได้ตั้งชื่อห้อง บรรทัด "ชั้น" ในแบบฟอร์มจะว่าง</div>}
+            {record && record.unpicked.length > 0 && <div style={{ color: "#b45309", fontSize: "0.8rem" }}>⚠️ ยังไม่ได้เลือกผู้ดื่มนมแทน {record.unpicked.length} รายการ: {record.unpicked.slice(0, 6).map(item => `${Number(item.date.slice(8))} ${studentLabel(item.student)}`).join(", ")}{record.unpicked.length > 6 ? " ..." : ""}</div>}
+            {record && record.substituteIssues.length > 0 && <div style={{ color: "#b91c1c", fontSize: "0.8rem" }}>⚠️ เลือกผู้ดื่มแทนที่ไม่ได้มาเรียน (ไม่ถูกขีด) {record.substituteIssues.length} รายการ: {record.substituteIssues.slice(0, 6).map(item => `${Number(item.date.slice(8))} ${item.drinker ? studentLabel(item.drinker) : "?"}`).join(", ")}</div>}
+          </>
+        )}
+      </div>
+    </Card>
   );
 }
 
@@ -8300,6 +8486,7 @@ function StudentRollAdmin({ employees }) {
       ) : (
       <>
       <StudentStatsFormCard rows={rows} employees={employees} />
+      <MilkRecordFormCard entries={(rows || []).map(row => ({ key: String(row.id), book: parseRollBook(row.subject), teacherName: (employees || []).find(employee => employee.id === row.employee_id)?.name || "" }))} />
       <Card>
         <div style={{ display: "grid", gap: "0.8rem", minWidth: 0 }}>
           <div>

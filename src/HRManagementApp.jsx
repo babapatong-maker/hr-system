@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useRef, Fragment } from "react";
+import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 // lessonPlanCatalog.js (หน่วย/แผนสำเร็จรูป ภาษาไทย ป.2) ไม่ได้ใช้แล้ว ครูกรอกหน่วยการเรียนรู้เอง
 import { AcademicExtra, ACADEMIC_EXTRA_TABS, ACADEMIC_RECORD_ROOM, TEACHING_GRADE_GROUPS, loadAssignedPlanLevels, loadTeachingGrades, saveTeachingGrade } from "./academicRecords.jsx";
 import { read as readWorkbook, utils as xlsxUtils, writeFile as writeWorkbookFile } from "xlsx";
@@ -5471,13 +5471,17 @@ const EVAL_CATEGORIES = [
   { key: "dress", label: "การแต่งกาย", type: "deduct", points: 1 },
   { key: "duty", label: "ไม่เข้าเวร", type: "deduct", points: 2 },
   { key: "abandon", label: "ทิ้งงานที่ได้รับมอบหมาย", type: "deduct", points: 3 },
-  { key: "ethics", label: "ผิดวินัย/จรรยาบรรณ", type: "deduct", points: 5 },
+  { key: "complaint", label: "ถูกผู้ปกครองร้องเรียน", type: "deduct", points: 5 },
   { key: "supervision", label: "ผลนิเทศต่ำ", type: "deduct", points: 2 },
   { key: "activity", label: "จัดกิจกรรม", type: "add", points: 2 },
   { key: "award", label: "ผลงาน/รางวัล", type: "add", points: 5 },
-  { key: "substitute", label: "ช่วยสอนแทน", type: "add", points: 1 },
+  { key: "project_owner", label: "เจ้าของโครงการ", type: "add", points: 1, options: [1, 2, 3, 4, 5] },
+  { key: "training", label: "เข้ารับการอบรม", type: "add", points: 1, options: [1] },
   { key: "other", label: "อื่นๆ", type: "deduct", points: 1 },
+  // หมวดเดิม (เลิกใช้ 14 ต.ค. 2569) เก็บไว้ให้รายการเก่ายังแสดง/คิดคะแนนเหมือนเดิม แต่ไม่ให้เลือกใหม่
+  { key: "ethics", label: "ผิดวินัย/จรรยาบรรณ (หมวดเดิม)", type: "deduct", points: 5, legacy: true },
 ];
+const evalPointOptions = key => EVAL_CATEGORIES.find(item => item.key === key)?.options || EVAL_POINT_OPTIONS;
 const EVAL_AUTO_RULES = [
   { key: "late_checkin", label: "ลงเวลาสาย", points: 0.5 },
   { key: "no_checkin", label: "ไม่ลงเวลาเข้า (วันทำงาน ไม่นับวันลาที่อนุมัติ)", points: 1 },
@@ -5930,6 +5934,8 @@ function TeacherDeductPage({ employees, currentUser, initialSelected = "" }) {
     if (lock) return;
     if (form.category === "other" && !form.reason.trim()) { setError("หมวด อื่นๆ ต้องกรอกเหตุผล"); return; }
     if (form.date < range.start || form.date > range.end) { setError("วันที่ต้องอยู่ในภาคเรียนที่เลือก"); return; }
+    const allowed = evalPointOptions(form.category);
+    if (!allowed.includes(Number(form.points))) { setError(`หมวดนี้เลือกได้ ${allowed.join(", ")} คะแนน`); return; }
     const entry = cleanEvalEntry({ ...form, id: newSupervisionId(), by: currentUser.name, at: new Date().toISOString() });
     saveBook(selected, book => ({ ...book, entries: [...book.entries, entry] }), `${entry.type === "add" ? "เพิ่ม" : "หัก"} ${entry.points} คะแนนแล้ว`);
     setForm(current => ({ ...current, reason: "" }));
@@ -6052,7 +6058,7 @@ function TeacherDeductPage({ employees, currentUser, initialSelected = "" }) {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))", gap: "0.45rem", alignItems: "center" }}>
               <input type="date" aria-label="วันที่" value={form.date} min={range.start} max={range.end} onChange={event => setForm(current => ({ ...current, date: event.target.value }))} style={small} />
               <select aria-label="หมวด" value={form.category} onChange={event => pickCategory(event.target.value)} style={small}>
-                {EVAL_CATEGORIES.map(item => <option key={item.key} value={item.key}>{item.label}{item.type === "add" ? " (เพิ่ม)" : ""}</option>)}
+                {EVAL_CATEGORIES.filter(item => !item.legacy).map(item => <option key={item.key} value={item.key}>{item.label}{item.type === "add" ? " (เพิ่ม)" : ""}</option>)}
               </select>
               <div style={{ display: "flex", gap: "0.25rem" }}>
                 {[["deduct", "หัก", "#dc2626", "#fee2e2"], ["add", "เพิ่ม", "#16a34a", "#dcfce7"]].map(([value, label, color, bg]) => (
@@ -6060,7 +6066,7 @@ function TeacherDeductPage({ employees, currentUser, initialSelected = "" }) {
                 ))}
               </div>
               <select aria-label="คะแนน" value={form.points} onChange={event => setForm(current => ({ ...current, points: Number(event.target.value) }))} style={small}>
-                {EVAL_POINT_OPTIONS.map(value => <option key={value} value={value}>{value} คะแนน</option>)}
+                {evalPointOptions(form.category).map(value => <option key={value} value={value}>{value} คะแนน</option>)}
               </select>
             </div>
             <div style={{ display: "flex", gap: "0.45rem", marginTop: "0.45rem" }}>
@@ -6242,7 +6248,183 @@ function ExecSection({ title, icon: Icon, right, children }) {
   );
 }
 
-function ExecPlanModal({ teacher, weekStart, onClose }) {
+// ─── ตารางสอนรายคาบ (หน้าผู้บริหาร) ─────────────────────────────────────────
+const EXEC_SPECIAL_ROOMS = new Set([SUPERVISION_SCHEDULE_ROOM, STUDENT_ROLL_ROOM, ACADEMIC_RECORD_ROOM, ACTIVITY_PLAN_ROOM, "__TEACHER_EVAL__"]);
+const EXEC_DEFAULT_PERIOD_TIMES = [["08:30", "09:20"], ["09:20", "10:10"], ["10:20", "11:10"], ["11:10", "12:00"], ["13:00", "13:50"], ["13:50", "14:40"]];
+
+function execNowMinutes() {
+  const [h, m] = new Date().toLocaleTimeString("en-GB", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit", hour12: false }).split(":").map(Number);
+  return h * 60 + m;
+}
+const execMin = t => { const [h, m] = String(t || "").slice(0, 5).split(":").map(Number); return Number.isFinite(h) ? h * 60 + (m || 0) : null; };
+
+function ExecPeriodSection({ employees, leaves, onOpenPlan }) {
+  const todayDow = new Date(`${todayISO()}T00:00:00`).getDay();
+  const [rows, setRows] = useState(null);
+  const [plans, setPlans] = useState(new Map());
+  const [presentToday, setPresentToday] = useState(new Set());
+  const [day, setDay] = useState(todayDow >= 1 && todayDow <= 5 ? todayDow : 1);
+  const [period, setPeriod] = useState(null);
+  const [grid, setGrid] = useState(false);
+  const [error, setError] = useState("");
+  const weekStart = mondayOf(todayISO());
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const [sched, sup, att] = await Promise.all([
+        supabase.from("teaching_schedule").select("id, employee_id, day_of_week, period, subject, class_room, start_time, end_time").order("day_of_week").order("period"),
+        supabase.from("teaching_schedule").select("employee_id, subject, created_at").eq("class_room", SUPERVISION_SCHEDULE_ROOM).eq("day_of_week", 0).eq("period", weekPeriodKey(weekStart)),
+        supabase.from("attendance").select("employee_id").gte("check_in", `${todayISO()}T00:00:00+07:00`).lte("check_in", `${todayISO()}T23:59:59+07:00`),
+      ]);
+      if (!active) return;
+      if (sched.error) setError(`ตารางสอน: ${sched.error.message}`);
+      const list = (sched.data || []).filter(row => !EXEC_SPECIAL_ROOMS.has(row.class_room) && row.day_of_week >= 1 && row.day_of_week <= 5);
+      const latest = new Map();
+      (sup.data || []).forEach(row => {
+        const key = String(row.employee_id);
+        if (!latest.has(key) || String(row.created_at || "") > String(latest.get(key).created_at || "")) latest.set(key, row);
+      });
+      const parsed = new Map();
+      latest.forEach((row, key) => parsed.set(key, parseSupervisionPlan(row.subject, weekStart)));
+      setPlans(parsed);
+      setPresentToday(new Set((att.data || []).map(row => String(row.employee_id))));
+      setRows(list);
+    })().catch(err => { if (active) { setRows([]); setError(err.message || "โหลดตารางสอนไม่สำเร็จ"); } });
+    return () => { active = false; };
+  }, [weekStart]);
+
+  const maxPeriod = Math.max(6, ...(rows || []).map(row => Number(row.period) || 0));
+  const periods = Array.from({ length: maxPeriod }, (_, index) => index + 1);
+  // คาบปัจจุบันจากเวลาในตารางสอน (หรือเวลามาตรฐาน) ไม่ตรงคาบใด → คาบ 1
+  useEffect(() => {
+    if (!rows || period !== null) return;
+    const now = execNowMinutes();
+    let found = 1;
+    periods.forEach(no => {
+      const sample = rows.find(row => Number(row.period) === no && row.start_time && row.end_time);
+      const [start, end] = sample ? [execMin(sample.start_time), execMin(sample.end_time)] : (EXEC_DEFAULT_PERIOD_TIMES[no - 1] || []).map(execMin);
+      if (start !== null && end !== null && now >= start && now < end) found = no;
+    });
+    setPeriod(found);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows]);
+
+  const people = employees || [];
+  const nameOf = id => people.find(emp => String(emp.id) === String(id))?.name || "-";
+  const teacherIds = new Set([...people.filter(emp => !isExecutiveUser(emp) && emp.role !== "admin").map(emp => String(emp.id)), ...(rows || []).map(row => String(row.employee_id))]);
+  const teachers = people.filter(emp => teacherIds.has(String(emp.id))).sort((a, b) => String(a.name).localeCompare(String(b.name), "th"));
+  const dateOfDay = shiftDateKey(weekStart, day - 1);
+  const isToday = dateOfDay === todayISO();
+  const onLeaveToday = new Set((leaves || []).filter(row => row.status === "approved" && row.start_date <= todayISO() && (row.end_date || row.start_date) >= todayISO()).map(row => String(row.employee_id)));
+  const cur = period || 1;
+  const slotRows = (rows || []).filter(row => row.day_of_week === day && Number(row.period) === cur);
+  const step = delta => {
+    let d = day; let p = cur + delta;
+    if (p < 1) { d = d === 1 ? 5 : d - 1; p = maxPeriod; }
+    if (p > maxPeriod) { d = d === 5 ? 1 : d + 1; p = 1; }
+    setDay(d); setPeriod(p);
+  };
+  const planPeriodOf = (id, date, no) => (plans.get(String(id))?.periods || []).find(item => item.teach_date === date && Number(item.period_no) === no);
+  const planState = id => {
+    const plan = plans.get(String(id));
+    return plan?.status === "submitted" ? (plan.late ? "late" : "submitted") : "missing";
+  };
+  const small = { ...inputStyle, width: "auto", padding: "0.35rem 0.5rem", fontSize: "0.85rem" };
+  const navBtn = { ...btnSecondary, flex: "none", padding: "0.35rem 0.6rem", fontSize: "0.82rem" };
+  const cell = { padding: "0.4rem 0.45rem", borderTop: "1px solid #f1f5f9", fontSize: "0.83rem", verticalAlign: "top" };
+  const th = { padding: "0.35rem 0.45rem", fontSize: "0.75rem", color: "#596068", textAlign: "left", fontWeight: 800, whiteSpace: "nowrap" };
+
+  return (
+    <ExecSection title="ตารางสอนรายคาบ" icon={Calendar} right={
+      <button type="button" aria-pressed={grid} onClick={() => setGrid(value => !value)} style={{ ...navBtn, background: grid ? "#EAF5FF" : "#f8fafc", color: "#0072D9" }}>{grid ? "ดูทีละคาบ" : "ดูทั้งสัปดาห์"}</button>
+    }>
+      {error && <ErrorBox>{error}</ErrorBox>}
+      {!rows ? <div style={{ color: "#64748b" }}>กำลังโหลดตารางสอน...</div> : rows.length === 0 ? (
+        <div style={{ background: "#FFF4EA", border: "1px solid #FFD2AD", borderRadius: 12, padding: "0.8rem 1rem", color: "#9a4a00", fontWeight: 700, fontSize: "0.88rem" }}>
+          ยังไม่มีข้อมูลตารางสอนในระบบ — ให้ครูหรือฝ่ายวิชาการกรอกที่เมนู "ตารางสอน" (เพิ่มคาบ: ครู · วัน · คาบ · วิชา · ห้อง) แล้วหน้านี้จะแสดงครูที่สอนในแต่ละคาบให้อัตโนมัติ
+        </div>
+      ) : grid ? (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
+            <thead><tr><th style={th}>คาบ</th>{[1, 2, 3, 4, 5].map(d => <th key={d} style={{ ...th, color: d === todayDow ? "#008CFF" : th.color }}>{DAY_NAMES[d]}</th>)}</tr></thead>
+            <tbody>
+              {periods.map(no => (
+                <tr key={no}>
+                  <td style={{ ...cell, fontWeight: 800, color: "#233862" }}>{no}</td>
+                  {[1, 2, 3, 4, 5].map(d => {
+                    const items = rows.filter(row => row.day_of_week === d && Number(row.period) === no);
+                    return (
+                      <td key={d} style={{ ...cell, background: d === day && no === cur ? "#EAF5FF" : "transparent", cursor: "pointer" }} onClick={() => { setDay(d); setPeriod(no); setGrid(false); }}>
+                        {items.length === 0 ? <span style={{ color: "#cbd5e1" }}>–</span> : items.map(row => <div key={row.id} style={{ fontSize: "0.76rem", lineHeight: 1.35 }}><strong style={{ color: "#233862" }}>{nameOf(row.employee_id)}</strong> · {row.subject || "-"}{row.class_room ? ` · ${row.class_room}` : ""}</div>)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: "0.4rem" }}>กดช่องในตารางเพื่อไปดูคาบนั้น</div>
+        </div>
+      ) : (
+        <div style={{ display: "grid", gap: "0.6rem" }}>
+          <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap" }}>
+            <button type="button" aria-label="คาบก่อนหน้า" onClick={() => step(-1)} style={navBtn}><ChevronLeft size={15} /> คาบก่อน</button>
+            <select aria-label="วัน" value={day} onChange={event => setDay(Number(event.target.value))} style={small}>
+              {[1, 2, 3, 4, 5].map(d => <option key={d} value={d}>{DAY_NAMES[d]}{d === todayDow ? " (วันนี้)" : ""}</option>)}
+            </select>
+            <select aria-label="คาบ" value={cur} onChange={event => setPeriod(Number(event.target.value))} style={small}>
+              {periods.map(no => <option key={no} value={no}>คาบ {no}</option>)}
+            </select>
+            <button type="button" aria-label="คาบถัดไป" onClick={() => step(1)} style={navBtn}>คาบถัดไป <ChevronRight size={15} /></button>
+            <span style={{ fontSize: "0.8rem", color: "#596068" }}>{formatThaiDateKey(dateOfDay)} · สอน {slotRows.length} · ว่าง {Math.max(0, teachers.length - new Set(slotRows.map(row => String(row.employee_id))).size)}</span>
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
+              <thead><tr>{["ครู", "วิชา", "ห้อง/ชั้น", "หน่วย/เรื่อง", "สถานะแผน", isToday ? "วันนี้" : ""].map(label => <th key={label} style={th}>{label}</th>)}</tr></thead>
+              <tbody>
+                {teachers.map(emp => {
+                  const mine = slotRows.filter(row => String(row.employee_id) === String(emp.id));
+                  const state = EXEC_PLAN_STATUS[planState(emp.id)];
+                  const status = (
+                    <>
+                      <td style={cell}><ExecPill color={state.color} bg={state.bg}>{planState(emp.id) === "missing" ? "ยังไม่ส่ง" : "ส่งแล้ว"}</ExecPill></td>
+                      <td style={cell}>{isToday && (onLeaveToday.has(String(emp.id)) ? <ExecPill color="#0072D9" bg="#DCEFFF">ลา</ExecPill> : presentToday.has(String(emp.id)) ? <ExecPill color="#166534" bg="#dcfce7">เข้างานแล้ว</ExecPill> : <ExecPill color="#b91c1c" bg="#fee2e2">ยังไม่เข้างาน</ExecPill>)}</td>
+                    </>
+                  );
+                  if (mine.length === 0) {
+                    return (
+                      <tr key={emp.id} style={{ background: "#fafcff" }}>
+                        <td style={{ ...cell, fontWeight: 700, color: "#233862" }}>{emp.name}</td>
+                        <td style={{ ...cell, color: "#94a3b8", fontWeight: 700 }} colSpan={3}>ว่าง</td>
+                        {status}
+                      </tr>
+                    );
+                  }
+                  return mine.map(row => {
+                    const pp = planPeriodOf(emp.id, dateOfDay, cur);
+                    const topic = [pp?.plan_unit, pp?.plan_title || pp?.subject].filter(text => String(text || "").trim()).join(" · ");
+                    return (
+                      <tr key={row.id} onClick={() => onOpenPlan(emp, weekStart, { date: dateOfDay, period: cur })} style={{ cursor: "pointer" }} title="ดูแผนคาบนี้">
+                        <td style={{ ...cell, fontWeight: 700, color: "#233862" }}>{emp.name}</td>
+                        <td style={cell}>{row.subject || "-"}</td>
+                        <td style={cell}>{row.class_room || "-"}</td>
+                        <td style={{ ...cell, color: topic ? "#334155" : "#94a3b8" }}>{topic || "-"}</td>
+                        {status}
+                      </tr>
+                    );
+                  });
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </ExecSection>
+  );
+}
+
+function ExecPlanModal({ teacher, weekStart, onClose, focus = null }) {
   const [state, setState] = useState({ loading: true, plan: null, error: "" });
   useEffect(() => {
     let active = true;
@@ -6275,7 +6457,10 @@ function ExecPlanModal({ teacher, weekStart, onClose }) {
                 <FullText value={item.note} />
               </div>
             ))}
-            {plan.kind === "kindergarten" ? <KindergartenWeekView plan={plan} weekStart={weekStart} /> : <SupervisionWeekView periods={plan.periods} weekStart={weekStart} />}
+            {focus && plan.kind !== "kindergarten" ? (() => {
+              const target = (plan.periods || []).find(item => item.teach_date === focus.date && Number(item.period_no) === Number(focus.period));
+              return target ? <SupervisionPeriodRead period={target} defaultOpen /> : <div style={{ color: "#64748b" }}>ยังไม่มีแผนของคาบที่ {focus.period} วันที่ {formatThaiDateKey(focus.date)}</div>;
+            })() : plan.kind === "kindergarten" ? <KindergartenWeekView plan={plan} weekStart={weekStart} /> : <SupervisionWeekView periods={plan.periods} weekStart={weekStart} />}
           </>
         )}
       </div>
@@ -6292,6 +6477,7 @@ function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEv
   const [plans, setPlans] = useState(null);
   const [planWeek, setPlanWeek] = useState(() => mondayOf(todayISO()));
   const [planTeacher, setPlanTeacher] = useState(null);
+  const [periodPlan, setPeriodPlan] = useState(null);
   const [error, setError] = useState("");
   const people = (employees || []);
   const teachers = people.filter(emp => !isExecutiveUser(emp));
@@ -6496,7 +6682,9 @@ function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEv
           )}
         </ExecSection>
       </div>
+      <ExecPeriodSection employees={employees} leaves={leaves} onOpenPlan={(emp, week, focus) => setPeriodPlan({ emp, week, focus })} />
       {planTeacher && <ExecPlanModal teacher={planTeacher} weekStart={planWeek} onClose={() => setPlanTeacher(null)} />}
+      {periodPlan && <ExecPlanModal teacher={periodPlan.emp} weekStart={periodPlan.week} focus={periodPlan.focus} onClose={() => setPeriodPlan(null)} />}
     </div>
   );
 }
@@ -6623,7 +6811,6 @@ function SubstitutePlanView({ employees, currentUser }) {
 
 const ACADEMIC_TABS = [
   { key: "plan", label: "ส่งแผนรายสัปดาห์" },
-  { key: "substitute", label: "ดูแผนสำหรับสอนแทน" },
   { key: "roll", label: "เช็คชื่อนักเรียน/สถิติ" },
   ...ACADEMIC_EXTRA_TABS,
 ];

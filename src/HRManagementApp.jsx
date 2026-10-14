@@ -672,7 +672,7 @@ function isExecutiveUser(user) {
 
 function canAccessNavItem(item, user) {
   if (!item || !user) return false;
-  if (item.key === "teacherEval") return isExecutiveUser(user);
+  if (item.key === "teacherEval" || item.key === "execDash") return isExecutiveUser(user);
   return item.roles.includes(user.role === "admin" ? "admin" : "employee");
 }
 
@@ -681,6 +681,7 @@ function NoAccessCard() {
 }
 
 const navItems = [
+  { icon: Shield, label: "หน้าผู้บริหาร", key: "execDash", roles: ["admin"], executiveOnly: true },
   { icon: Home, label: "หน้าหลัก", key: "dashboard", roles: ["admin", "employee"] },
   { icon: Users, label: "ข้อมูลพนักงาน", key: "employee", roles: ["admin"] },
   { icon: Clock, label: "ลงเวลาเข้า-ออก", key: "attendance", roles: ["admin", "employee"] },
@@ -695,7 +696,7 @@ const navItems = [
   { icon: Settings, label: "ตั้งค่าเวลาทำงาน", key: "settings", roles: ["admin"] },
 ];
 
-const inputStyle = { width: "100%", padding: "0.65rem 0.75rem", border: "1.5px solid #e2e8f0", borderRadius: "10px", fontSize: "0.9rem", fontFamily: "inherit", color: "#0f172a", outline: "none", background: "#fff" };
+const inputStyle = { width: "100%", padding: "0.65rem 0.75rem", border: "1.5px solid #e2e8f0", borderRadius: "10px", fontSize: "0.9rem", fontFamily: "inherit", color: "#233862", outline: "none", background: "#fff" };
 const selectStyle = { ...inputStyle };
 const btnSecondary = { flex: 1, padding: "0.75rem", borderRadius: "10px", border: "1.5px solid #e2e8f0", background: "#f8fafc", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem", color: "#475569", fontSize: "0.9rem", fontWeight: 600, fontFamily: "inherit" };
 const btnPrimary = { flex: 2, padding: "0.75rem", borderRadius: "10px", border: "none", fontWeight: 700, fontSize: "0.95rem", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem" };
@@ -706,7 +707,7 @@ function Avatar({ name, index = 0 }) {
 }
 
 function Card({ children, padding = "1.25rem", style = {} }) {
-  return <div style={{ background: "#fff", borderRadius: "1rem", padding, boxShadow: "0 2px 12px rgba(0,0,0,0.06)", border: "1px solid #f1f5f9", ...style }}>{children}</div>;
+  return <div style={{ background: "#fff", borderRadius: "18px", padding, boxShadow: "0 4px 24px rgba(0,140,255,0.08)", border: "1px solid #E4EEF8", ...style }}>{children}</div>;
 }
 
 function Field({ label, children }) {
@@ -730,7 +731,7 @@ function ButtonRow({ onCancel, onSave, saving, label = "บันทึก" }) {
   return (
     <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.5rem" }}>
       <button onClick={onCancel} style={btnSecondary}>ยกเลิก</button>
-      <button onClick={onSave} disabled={saving} style={{ ...btnPrimary, background: "linear-gradient(135deg, #2563eb, #1d4ed8)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}>
+      <button onClick={onSave} disabled={saving} style={{ ...btnPrimary, background: "linear-gradient(135deg, #008CFF, #0072D9)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}>
         {saving ? <RefreshCw size={16} style={{ animation: "spin 1s linear infinite" }} /> : <Save size={16} />}
         {saving ? "กำลังบันทึก..." : label}
       </button>
@@ -742,11 +743,11 @@ function PageHeader({ title, count, onAdd, addLabel }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem", flexWrap: "wrap", gap: "0.75rem" }}>
       <div>
-        <h1 style={{ fontSize: "1.4rem", fontWeight: 800, color: "#0f172a" }}>{title}</h1>
+        <h1 style={{ fontSize: "1.4rem", fontWeight: 800, color: "#233862" }}>{title}</h1>
         {count !== undefined && <p style={{ color: "#64748b", fontSize: "0.85rem" }}>ทั้งหมด {count} รายการ</p>}
       </div>
       {onAdd && (
-        <button onClick={onAdd} style={{ background: "linear-gradient(135deg, #2563eb, #1d4ed8)", border: "none", borderRadius: "12px", padding: "0.65rem 1.25rem", color: "#fff", fontWeight: 700, fontSize: "0.875rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.5rem", fontFamily: "inherit", boxShadow: "0 4px 14px rgba(37,99,235,0.3)" }}>
+        <button onClick={onAdd} style={{ background: "linear-gradient(135deg, #008CFF, #0072D9)", border: "none", borderRadius: "12px", padding: "0.65rem 1.25rem", color: "#fff", fontWeight: 700, fontSize: "0.875rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.5rem", fontFamily: "inherit", boxShadow: "0 4px 14px rgba(0,140,255,0.3)" }}>
           <Plus size={16} /> {addLabel}
         </button>
       )}
@@ -754,10 +755,10 @@ function PageHeader({ title, count, onAdd, addLabel }) {
   );
 }
 
-function Modal({ title, subtitle, onClose, icon: Icon, color = "#1d4ed8", children }) {
+function Modal({ title, subtitle, onClose, icon: Icon, color = "#0072D9", children }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.7)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "1rem" }}>
-      <div style={{ background: "#fff", borderRadius: "1.5rem", width: "100%", maxWidth: "480px", boxShadow: "0 32px 80px rgba(0,0,0,0.25)", overflow: "hidden", fontFamily: "'Sarabun', sans-serif", maxHeight: "90vh", display: "flex", flexDirection: "column" }}>
+      <div style={{ background: "#fff", borderRadius: "1.5rem", width: "100%", maxWidth: "480px", boxShadow: "0 32px 80px rgba(0,0,0,0.25)", overflow: "hidden", fontFamily: "'Anuphan', 'Sarabun', sans-serif", maxHeight: "90vh", display: "flex", flexDirection: "column" }}>
         <div style={{ background: `linear-gradient(135deg, ${color}, ${color}dd)`, padding: "1.5rem", position: "relative", flexShrink: 0 }}>
           <button onClick={onClose} style={{ position: "absolute", top: "1rem", right: "1rem", background: "rgba(255,255,255,0.2)", border: "none", borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#fff" }}><X size={16} /></button>
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", color: "#fff" }}>
@@ -859,17 +860,17 @@ function LoginPage({ onLogin }) {
   };
 
   return (
-    <div style={{ fontFamily: "'Sarabun', sans-serif", minHeight: "100vh", background: "linear-gradient(135deg, #1d4ed8 0%, #2563eb 50%, #3b82f6 100%)", display: "flex", flexDirection: "column" }}>
+    <div style={{ fontFamily: "'Anuphan', 'Sarabun', sans-serif", minHeight: "100vh", background: "linear-gradient(135deg, #0072D9 0%, #008CFF 55%, #3EBFFB 100%)", display: "flex", flexDirection: "column" }}>
       <PreviewBanner />
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap'); * { box-sizing: border-box; margin: 0; padding: 0; } @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600;700&family=Sarabun:wght@400;600;700&display=swap'); * { box-sizing: border-box; margin: 0; padding: 0; } @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
 
       <div style={{ background: "#fff", borderRadius: "1.5rem", padding: "2.5rem 2rem", width: "100%", maxWidth: 400, boxShadow: "0 32px 80px rgba(0,0,0,0.3)" }}>
         <div style={{ textAlign: "center", marginBottom: "2rem" }}>
-          <div style={{ width: 72, height: 72, borderRadius: "20px", background: "linear-gradient(135deg, #2563eb, #1d4ed8)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1rem", boxShadow: "0 8px 24px rgba(37,99,235,0.4)" }}>
+          <div style={{ width: 72, height: 72, borderRadius: "20px", background: "linear-gradient(135deg, #008CFF, #0072D9)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1rem", boxShadow: "0 8px 24px rgba(0,140,255,0.4)" }}>
             <Shield size={36} color="#fff" />
           </div>
-          <h1 style={{ fontSize: "1.4rem", fontWeight: 800, color: "#0f172a" }}>HR System</h1>
+          <h1 style={{ fontSize: "1.4rem", fontWeight: 800, color: "#233862" }}>HR System</h1>
           <p style={{ color: "#64748b", fontSize: "0.85rem", marginTop: "0.25rem" }}>โรงเรียนนิมิตศึกษา</p>
         </div>
 
@@ -891,13 +892,13 @@ function LoginPage({ onLogin }) {
               </button>
             </div>
           </Field>
-          <button onClick={handleLogin} disabled={loading} style={{ padding: "0.85rem", borderRadius: "10px", border: "none", background: "linear-gradient(135deg, #2563eb, #1d4ed8)", color: "#fff", fontWeight: 700, fontSize: "0.95rem", cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem", boxShadow: "0 4px 14px rgba(37,99,235,0.3)" }}>
+          <button onClick={handleLogin} disabled={loading} style={{ padding: "0.85rem", borderRadius: "10px", border: "none", background: "linear-gradient(135deg, #008CFF, #0072D9)", color: "#fff", fontWeight: 700, fontSize: "0.95rem", cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem", boxShadow: "0 4px 14px rgba(0,140,255,0.3)" }}>
             {loading ? <RefreshCw size={18} style={{ animation: "spin 1s linear infinite" }} /> : <LogIn size={18} />}
             {loading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
           </button>
         </div>
 
-        <div style={{ marginTop: "1.5rem", padding: "0.75rem", background: "#eff6ff", borderRadius: "10px", fontSize: "0.78rem", color: "#1d4ed8", textAlign: "center" }}>
+        <div style={{ marginTop: "1.5rem", padding: "0.75rem", background: "#EAF5FF", borderRadius: "10px", fontSize: "0.78rem", color: "#0072D9", textAlign: "center" }}>
           💡 ทดสอบ: username <strong>admin1</strong> / password <strong>admin123</strong>
           {isLocalPreview() && <div style={{ marginTop: "0.35rem" }}>ครูทดลอง: <strong>teacher.try</strong> / <strong>try1234</strong></div>}
         </div>
@@ -989,7 +990,7 @@ function EmployeeModal({ employee, onClose, onSave }) {
           </select>
         </Field>
         <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.9rem", display: "grid", gap: "0.85rem" }}>
-          <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "#0f172a" }}>ข้อมูลเงินเดือนและการสอนแทน</div>
+          <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "#233862" }}>ข้อมูลเงินเดือนและการสอนแทน</div>
           <Field label="ระดับครู *">
             <select value={payrollConfig.teacher_level || ""} onChange={e => setPayrollConfig(f => ({ ...f, teacher_level: e.target.value }))} style={selectStyle}>
               <option value="">-- เลือกระดับครู --</option>
@@ -1146,7 +1147,7 @@ function LeaveModal({ employees, currentUser, onClose, onSave }) {
     <Modal title="ขอลา" onClose={onClose} icon={Umbrella} color="#059669">
       <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
         {error && <ErrorBox>{error}</ErrorBox>}
-        <div style={{ ...inputStyle, background: "#eff6ff", color: "#1d4ed8", textAlign: "center", fontWeight: 700, border: "1.5px solid #bfdbfe" }}>
+        <div style={{ ...inputStyle, background: "#EAF5FF", color: "#0072D9", textAlign: "center", fontWeight: 700, border: "1.5px solid #B8E0FF" }}>
           👤 {currentUser?.name}
         </div>
         <Field label="ประเภทการลา">
@@ -1230,13 +1231,13 @@ function LeaveModal({ employees, currentUser, onClose, onSave }) {
               {leavePayType === "monthly" ? " รายเดือนที่มีหลักฐานจะไม่ถูกหักค่าลา" : " รายวันจะไม่ได้ค่าจ้างในวันที่ไม่ได้มาทำงานตามเดิม"}
             </div>
             {uploading && (
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#1d4ed8", fontSize: "0.82rem", fontWeight: 600 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#0072D9", fontSize: "0.82rem", fontWeight: 600 }}>
                 <RefreshCw size={15} style={{ animation: "spin 1s linear infinite" }} />
                 กำลังเตรียมรูปภาพ...
               </div>
             )}
             {form.document_url && (
-              <div style={{ border: "1px solid #dbeafe", borderRadius: "12px", padding: "0.75rem", background: "#eff6ff" }}>
+              <div style={{ border: "1px solid #DCEFFF", borderRadius: "12px", padding: "0.75rem", background: "#EAF5FF" }}>
                 <img src={form.document_url} alt="เอกสารลา" style={{ width: "100%", borderRadius: "10px", maxHeight: 220, objectFit: "cover", marginBottom: "0.75rem" }} />
                 <div style={{ color: "#166534", fontSize: "0.78rem", fontWeight: 800, marginBottom: "0.65rem" }}>
                   แนบหลักฐานแล้ว{leavePayType === "monthly" ? " รายการนี้ไม่หักค่าลา" : ""}
@@ -1278,7 +1279,7 @@ function OutingModal({ employees, currentUser, onClose, onSave }) {
     <Modal title="ขอออกนอกสถานที่" onClose={onClose} icon={ArrowRightLeft} color="#d97706">
       <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
         {error && <ErrorBox>{error}</ErrorBox>}
-        <div style={{ ...inputStyle, background: "#eff6ff", color: "#1d4ed8", textAlign: "center", fontWeight: 700, border: "1.5px solid #bfdbfe" }}>
+        <div style={{ ...inputStyle, background: "#EAF5FF", color: "#0072D9", textAlign: "center", fontWeight: 700, border: "1.5px solid #B8E0FF" }}>
           👤 {currentUser?.name}
         </div>
         <Field label="สถานที่ปลายทาง">
@@ -1484,8 +1485,8 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
   const canSubmit = isInZone && !done && !savingAttendance && gpsState === "success" && selectedEmp && (mode === "in" ? !openAttendance : openAttendance);
 
   return (
-    <Modal title={mode === "in" ? "ลงเวลาเข้างาน" : "ลงเวลากลับบ้าน"} subtitle={`📍 รัศมี ${GEOFENCE_RADIUS} เมตรจากโรงเรียน`} onClose={onClose} icon={mode === "in" ? LogIn : LogOut} color={mode === "in" ? "#1d4ed8" : "#d97706"}>
-      <div style={{ ...inputStyle, background: "#eff6ff", color: "#1d4ed8", marginBottom: "1rem", textAlign: "center", fontWeight: 700, border: "1.5px solid #bfdbfe" }}>
+    <Modal title={mode === "in" ? "ลงเวลาเข้างาน" : "ลงเวลากลับบ้าน"} subtitle={`📍 รัศมี ${GEOFENCE_RADIUS} เมตรจากโรงเรียน`} onClose={onClose} icon={mode === "in" ? LogIn : LogOut} color={mode === "in" ? "#0072D9" : "#d97706"}>
+      <div style={{ ...inputStyle, background: "#EAF5FF", color: "#0072D9", marginBottom: "1rem", textAlign: "center", fontWeight: 700, border: "1.5px solid #B8E0FF" }}>
         👤 {currentUser?.name}
       </div>
 
@@ -1533,7 +1534,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
       )}
 
       {mode === "in" && openAttendance && (
-        <div style={{ background: "#eff6ff", border: "1.5px solid #93c5fd", borderRadius: "12px", padding: "0.75rem", marginBottom: "1.25rem", textAlign: "center", color: "#1d4ed8", fontSize: "0.85rem", fontWeight: 700 }}>
+        <div style={{ background: "#EAF5FF", border: "1.5px solid #8FD0FF", borderRadius: "12px", padding: "0.75rem", marginBottom: "1.25rem", textAlign: "center", color: "#0072D9", fontSize: "0.85rem", fontWeight: 700 }}>
           ลงเวลาเข้างานวันนี้แล้ว เวลา {fmtTime(openAttendance.check_in)} น. ถ้าจะกลับบ้านให้กดเมนูกลับบ้าน
         </div>
       )}
@@ -1543,7 +1544,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
       )}
 
       {mode === "out" && openAttendance && (
-        <div style={{ background: "#eff6ff", border: "1.5px solid #93c5fd", borderRadius: "12px", padding: "0.75rem", marginBottom: "1.25rem", textAlign: "center", color: "#1d4ed8", fontSize: "0.85rem", fontWeight: 600 }}>🕐 เข้างานเมื่อ {fmtTime(openAttendance.check_in)} น.</div>
+        <div style={{ background: "#EAF5FF", border: "1.5px solid #8FD0FF", borderRadius: "12px", padding: "0.75rem", marginBottom: "1.25rem", textAlign: "center", color: "#0072D9", fontSize: "0.85rem", fontWeight: 600 }}>🕐 เข้างานเมื่อ {fmtTime(openAttendance.check_in)} น.</div>
       )}
 
       <div style={{ display: "flex", justifyContent: "center", marginBottom: "1.25rem" }}>
@@ -1553,7 +1554,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
             <circle cx={70} cy={70} r={54} fill="none" stroke={ringColor} strokeWidth={10} strokeDasharray={circumference} strokeDashoffset={gpsState === "success" ? circumference * (1 - pct) : circumference} strokeLinecap="round" style={{ transition: "stroke-dashoffset 0.8s ease, stroke 0.4s ease" }} />
           </svg>
           <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-            {gpsState === "loading" && <RefreshCw size={28} color="#2563eb" style={{ animation: "spin 1s linear infinite" }} />}
+            {gpsState === "loading" && <RefreshCw size={28} color="#008CFF" style={{ animation: "spin 1s linear infinite" }} />}
             {gpsState === "success" && <><Navigation size={20} color={ringColor} /><div style={{ fontSize: "1.5rem", fontWeight: 800, color: ringColor, lineHeight: 1.1 }}>{distance}</div><div style={{ fontSize: "0.7rem", color: "#64748b" }}>เมตร</div></>}
             {gpsState === "error" && <WifiOff size={28} color="#ef4444" />}
           </div>
@@ -1576,7 +1577,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
             {mode === "in" && doneStatus && (() => {
               let badge;
               if (doneStatus.type === "late") badge = <div style={{ marginTop: "0.5rem", background: "#fef2f2", border: "1px solid #fca5a5", color: "#dc2626", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>⚠️ มาสาย {formatMinutes(doneStatus.minutes)}</div>;
-              else if (doneStatus.type === "early") badge = <div style={{ marginTop: "0.5rem", background: "#eff6ff", border: "1px solid #93c5fd", color: "#2563eb", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>⏰ เข้าก่อนเวลา {formatMinutes(doneStatus.minutes)}</div>;
+              else if (doneStatus.type === "early") badge = <div style={{ marginTop: "0.5rem", background: "#EAF5FF", border: "1px solid #8FD0FF", color: "#008CFF", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>⏰ เข้าก่อนเวลา {formatMinutes(doneStatus.minutes)}</div>;
               else badge = <div style={{ marginTop: "0.5rem", color: "#16a34a", fontSize: "0.8rem", fontWeight: 600 }}>✓ มาตรงเวลา</div>;
               return (
                 <>
@@ -1619,9 +1620,9 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
                 <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#7c3aed" }}>{myStats.leaves}</div>
                 <div style={{ fontSize: "0.65rem", color: "#7c3aed", fontWeight: 600 }}>ลา</div>
               </div>
-              <div style={{ background: "#eff6ff", borderRadius: "8px", padding: "0.4rem", textAlign: "center" }}>
-                <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#2563eb" }}>{myStats.outings}</div>
-                <div style={{ fontSize: "0.65rem", color: "#2563eb", fontWeight: 600 }}>ออกนอก</div>
+              <div style={{ background: "#EAF5FF", borderRadius: "8px", padding: "0.4rem", textAlign: "center" }}>
+                <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#008CFF" }}>{myStats.outings}</div>
+                <div style={{ fontSize: "0.65rem", color: "#008CFF", fontWeight: 600 }}>ออกนอก</div>
               </div>
             </div>
           </div>
@@ -1630,7 +1631,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
 
       <div style={{ display: "flex", gap: "0.75rem" }}>
         <button onClick={fetchLocation} style={btnSecondary}><RefreshCw size={16} /> อัปเดต GPS</button>
-        <button onClick={handleSubmit} disabled={!canSubmit} style={{ ...btnPrimary, background: done ? "#dcfce7" : canSubmit ? (mode === "in" ? "linear-gradient(135deg, #2563eb, #1d4ed8)" : "linear-gradient(135deg, #f59e0b, #d97706)") : "#e2e8f0", color: done ? "#16a34a" : canSubmit ? "#fff" : "#94a3b8", cursor: canSubmit ? "pointer" : "not-allowed" }}>
+        <button onClick={handleSubmit} disabled={!canSubmit} style={{ ...btnPrimary, background: done ? "#dcfce7" : canSubmit ? (mode === "in" ? "linear-gradient(135deg, #008CFF, #0072D9)" : "linear-gradient(135deg, #f59e0b, #d97706)") : "#e2e8f0", color: done ? "#16a34a" : canSubmit ? "#fff" : "#94a3b8", cursor: canSubmit ? "pointer" : "not-allowed" }}>
           {mode === "in" ? <LogIn size={18} /> : <LogOut size={18} />}
           {done ? "บันทึกแล้ว" : mode === "in" ? "ลงเวลาเข้างาน" : "ลงเวลากลับบ้าน"}
         </button>
@@ -1743,7 +1744,7 @@ function EmployeePage({ employees, currentUser, onRefresh }) {
                     <td style={{ padding: "0.75rem 1rem", minWidth: "11rem" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
                         <Avatar name={emp.name} index={i} />
-                        <span style={{ fontWeight: 600, color: "#0f172a" }}>{emp.name}</span>
+                        <span style={{ fontWeight: 600, color: "#233862" }}>{emp.name}</span>
                       </div>
                       <label style={{ display: "grid", gap: "0.15rem", marginTop: "0.4rem" }}>
                         <span style={{ fontSize: "0.68rem", color: "#64748b", fontWeight: 700 }}>ชั้นที่สอน</span>
@@ -1758,13 +1759,13 @@ function EmployeePage({ employees, currentUser, onRefresh }) {
                       </label>
                     </td>
                     <td style={{ padding: "0.75rem 1rem", color: "#475569", fontFamily: "monospace", fontSize: "0.8rem" }}>{emp.username || "-"}</td>
-                    <td style={{ padding: "0.75rem 1rem" }}><span style={{ background: "#eff6ff", color: "#2563eb", fontSize: "0.75rem", fontWeight: 600, padding: "0.2rem 0.6rem", borderRadius: "20px" }}>{emp.department || "-"}</span></td>
+                    <td style={{ padding: "0.75rem 1rem" }}><span style={{ background: "#EAF5FF", color: "#008CFF", fontSize: "0.75rem", fontWeight: 600, padding: "0.2rem 0.6rem", borderRadius: "20px" }}>{emp.department || "-"}</span></td>
                     <td style={{ padding: "0.75rem 1rem", color: "#475569", whiteSpace: "nowrap" }}>{salaryMeta.teacher_level ? `ครู${salaryMeta.teacher_level}` : "-"}</td>
                     <td style={{ padding: "0.75rem 1rem", whiteSpace: "nowrap" }}>
-                      <div style={{ color: "#0f172a", fontWeight: 800 }}>{formatMoney(salaryRow?.daily_rate || 0)}</div>
+                      <div style={{ color: "#233862", fontWeight: 800 }}>{formatMoney(salaryRow?.daily_rate || 0)}</div>
                       <div style={{ color: "#64748b", fontSize: "0.7rem" }}>{salaryMeta.pay_type === "monthly" ? "รายเดือน" : "รายวัน"}</div>
                     </td>
-                    <td style={{ padding: "0.75rem 1rem", color: "#0f172a", fontWeight: 800, whiteSpace: "nowrap" }}>{formatMoney(salaryMeta.bank_deposit || 0)}</td>
+                    <td style={{ padding: "0.75rem 1rem", color: "#233862", fontWeight: 800, whiteSpace: "nowrap" }}>{formatMoney(salaryMeta.bank_deposit || 0)}</td>
                     <td style={{ padding: "0.75rem 1rem" }}>
                       {emp.role === "admin"
                         ? <span style={{ background: "#fef3c7", color: "#d97706", fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>Admin</span>
@@ -1785,7 +1786,7 @@ function EmployeePage({ employees, currentUser, onRefresh }) {
                         {device && emp.role !== "admin" && (
                           <button onClick={() => handleUnlock(emp.id, emp.name)} title="ปลดล็อกเครื่อง" style={iconBtn("#fef3c7", "#d97706")}><Key size={15} /></button>
                         )}
-                        <button onClick={() => { setEditEmp(emp); setShowModal(true); }} style={iconBtn("#eff6ff", "#2563eb")}><Edit size={15} /></button>
+                        <button onClick={() => { setEditEmp(emp); setShowModal(true); }} style={iconBtn("#EAF5FF", "#008CFF")}><Edit size={15} /></button>
                         <button onClick={() => handleDelete(emp.id)} disabled={deleting === emp.id} style={iconBtn("#fef2f2", "#dc2626")}>
                           {deleting === emp.id ? <RefreshCw size={15} style={{ animation: "spin 1s linear infinite" }} /> : <Trash2 size={15} />}
                         </button>
@@ -1812,7 +1813,7 @@ function AttendancePage({ employees, activityLog, currentUser, settings, onRefre
     <div>
       <PageHeader title="ลงเวลาเข้า-ออก" count={filtered.length} />
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
-        <button onClick={() => setShowIn(true)} style={{ background: "linear-gradient(135deg, #2563eb, #1d4ed8)", border: "none", borderRadius: "1rem", padding: "1.5rem", color: "#fff", cursor: "pointer", fontFamily: "inherit", boxShadow: "0 8px 24px rgba(37,99,235,0.3)", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
+        <button onClick={() => setShowIn(true)} style={{ background: "linear-gradient(135deg, #008CFF, #0072D9)", border: "none", borderRadius: "1rem", padding: "1.5rem", color: "#fff", cursor: "pointer", fontFamily: "inherit", boxShadow: "0 8px 24px rgba(0,140,255,0.3)", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
           <LogIn size={32} /><div style={{ fontSize: "1.1rem", fontWeight: 800 }}>ลงเวลาเข้างาน</div>
           <div style={{ fontSize: "0.75rem", opacity: 0.9 }}>เวลาทำงาน: {settings?.work_start?.slice(0,5)} น.</div>
         </button>
@@ -1845,13 +1846,13 @@ function AttendancePage({ employees, activityLog, currentUser, settings, onRefre
                     <td style={{ padding: "0.65rem 0.75rem" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                         <Avatar name={row.employees?.name} index={i} />
-                        <span style={{ fontWeight: 600, color: "#0f172a" }}>{row.employees?.name || "-"}</span>
+                        <span style={{ fontWeight: 600, color: "#233862" }}>{row.employees?.name || "-"}</span>
                       </div>
                     </td>
                     <td style={{ padding: "0.65rem 0.75rem", color: "#475569" }}>{fmtDate(row.check_in)}</td>
                     <td style={{ padding: "0.65rem 0.75rem" }}>
                       <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", minWidth: 150 }}>
-                        <span style={{ background: isTraining ? "#dbeafe" : "#f1f5f9", color: isTraining ? "#1d4ed8" : "#475569", fontSize: "0.7rem", fontWeight: 800, padding: "0.2rem 0.5rem", borderRadius: "20px", width: "fit-content" }}>
+                        <span style={{ background: isTraining ? "#DCEFFF" : "#f1f5f9", color: isTraining ? "#0072D9" : "#475569", fontSize: "0.7rem", fontWeight: 800, padding: "0.2rem 0.5rem", borderRadius: "20px", width: "fit-content" }}>
                           {isTraining ? `อบรม: ${row.training_location || "-"}` : (row.duty || "ไม่มีเวร")}
                         </span>
                         {isTraining && (
@@ -1872,7 +1873,7 @@ function AttendancePage({ employees, activityLog, currentUser, settings, onRefre
                           <span style={{ background: "#fef2f2", color: "#dc2626", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>⚠️ สาย {formatMinutes(lateInfo.minutes)}</span>
                         )}
                         {lateInfo?.early && (
-                          <span style={{ background: "#eff6ff", color: "#2563eb", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>⏰ เข้าก่อน {formatMinutes(lateInfo.minutes)}</span>
+                          <span style={{ background: "#EAF5FF", color: "#008CFF", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>⏰ เข้าก่อน {formatMinutes(lateInfo.minutes)}</span>
                         )}
                         {!lateInfo?.late && !lateInfo?.early && lateInfo && (
                           <span style={{ background: "#dcfce7", color: "#16a34a", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>✓ ตรงเวลา</span>
@@ -1936,7 +1937,7 @@ function LeavePage({ employees, leaves, currentUser, onRefresh }) {
                   <td style={{ padding: "0.65rem 0.75rem" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                       <Avatar name={row.employees?.name} index={i} />
-                      <span style={{ fontWeight: 600, color: "#0f172a" }}>{row.employees?.name || "-"}</span>
+                      <span style={{ fontWeight: 600, color: "#233862" }}>{row.employees?.name || "-"}</span>
                     </div>
                   </td>
                   <td style={{ padding: "0.65rem 0.75rem", color: "#475569" }}>{row.leave_type}</td>
@@ -1974,7 +1975,7 @@ function LeavePage({ employees, leaves, currentUser, onRefresh }) {
                   <td style={{ padding: "0.65rem 0.75rem" }}>
                     {row.document_url
                       ? (
-                        <a href={row.document_url} target="_blank" rel="noreferrer" style={{ background: "#eff6ff", color: "#1d4ed8", fontSize: "0.72rem", fontWeight: 700, padding: "0.28rem 0.6rem", borderRadius: "20px", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
+                        <a href={row.document_url} target="_blank" rel="noreferrer" style={{ background: "#EAF5FF", color: "#0072D9", fontSize: "0.72rem", fontWeight: 700, padding: "0.28rem 0.6rem", borderRadius: "20px", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
                           <FileText size={13} /> ใบนัดหมอ · ไม่หักลา
                         </a>
                       ) : <span style={{ color: "#94a3b8", fontSize: "0.78rem" }}>—</span>}
@@ -2030,7 +2031,7 @@ function OutingPage({ employees, outings, currentUser, onRefresh }) {
                   <td style={{ padding: "0.65rem 0.75rem" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                       <Avatar name={row.employees?.name} index={i} />
-                      <span style={{ fontWeight: 600, color: "#0f172a" }}>{row.employees?.name || "-"}</span>
+                      <span style={{ fontWeight: 600, color: "#233862" }}>{row.employees?.name || "-"}</span>
                     </div>
                   </td>
                   <td style={{ padding: "0.65rem 0.75rem", color: "#475569" }}>{fmtDate(row.out_time)}</td>
@@ -2205,7 +2206,7 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
   };
 
   const reportTabs = [
-    { key: "summary", label: "สรุปภาพรวม", icon: BarChart3, color: "#2563eb" },
+    { key: "summary", label: "สรุปภาพรวม", icon: BarChart3, color: "#008CFF" },
     { key: "attendance", label: "การเข้า-ออก", icon: Clock, color: "#059669" },
     { key: "dailySummary", label: "รายวันครบคน", icon: Calendar, color: "#0f766e" },
     { key: "late", label: "มาสาย", icon: AlertCircle, color: "#dc2626" },
@@ -2218,7 +2219,7 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.75rem" }}>
         <div>
-          <h1 style={{ fontSize: "1.4rem", fontWeight: 800, color: "#0f172a" }}>รายงาน</h1>
+          <h1 style={{ fontSize: "1.4rem", fontWeight: 800, color: "#233862" }}>รายงาน</h1>
           <p style={{ color: "#64748b", fontSize: "0.85rem" }}>เดือน {new Date(month + "-01").toLocaleDateString("th-TH", { month: "long", year: "numeric" })}</p>
         </div>
         <button onClick={exportCSV} style={{ background: "linear-gradient(135deg, #059669, #047857)", border: "none", borderRadius: "12px", padding: "0.65rem 1.25rem", color: "#fff", fontWeight: 700, fontSize: "0.875rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.5rem", fontFamily: "inherit", boxShadow: "0 4px 14px rgba(5,150,105,0.3)" }}>
@@ -2235,9 +2236,9 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
               {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
             </select>
           </Field>
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "1rem", padding: "0.65rem 1rem", background: "#eff6ff", borderRadius: "10px" }}>
-            <Calendar size={16} color="#2563eb" />
-            <div><div style={{ fontSize: "0.72rem", color: "#64748b" }}>วันทำงาน</div><div style={{ fontWeight: 800, color: "#1d4ed8" }}>{workDays} วัน</div></div>
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "1rem", padding: "0.65rem 1rem", background: "#EAF5FF", borderRadius: "10px" }}>
+            <Calendar size={16} color="#008CFF" />
+            <div><div style={{ fontSize: "0.72rem", color: "#64748b" }}>วันทำงาน</div><div style={{ fontWeight: 800, color: "#0072D9" }}>{workDays} วัน</div></div>
           </div>
         </div>
       </Card>
@@ -2289,19 +2290,19 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
                       <td style={{ padding: "0.6rem 0.75rem" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                           <Avatar name={r.emp.name} index={i} />
-                          <span style={{ fontWeight: 600, color: "#0f172a", whiteSpace: "nowrap" }}>{r.emp.name}</span>
+                          <span style={{ fontWeight: 600, color: "#233862", whiteSpace: "nowrap" }}>{r.emp.name}</span>
                         </div>
                       </td>
                       <td style={{ padding: "0.6rem 0.75rem", color: "#64748b" }}>{r.emp.department || "-"}</td>
                       <td style={{ padding: "0.6rem 0.75rem" }}><span style={{ color: "#16a34a", fontWeight: 700 }}>{r.attended}</span></td>
                       <td style={{ padding: "0.6rem 0.75rem", color: r.lateCount > 0 ? "#dc2626" : "#94a3b8", fontWeight: 700 }}>{r.lateCount}</td>
-                      <td style={{ padding: "0.6rem 0.75rem", color: "#2563eb", fontWeight: 600 }}>{r.earlyArrival}</td>
+                      <td style={{ padding: "0.6rem 0.75rem", color: "#008CFF", fontWeight: 600 }}>{r.earlyArrival}</td>
                       <td style={{ padding: "0.6rem 0.75rem", color: r.earlyDeparture > 0 ? "#dc2626" : "#94a3b8", fontWeight: 600 }}>{r.earlyDeparture}</td>
                       <td style={{ padding: "0.6rem 0.75rem", color: "#16a34a", fontWeight: 600 }}>{r.overtime}</td>
                       <td style={{ padding: "0.6rem 0.75rem", color: "#7c3aed", fontWeight: 600 }}>{r.leaveDays}</td>
                       <td style={{ padding: "0.6rem 0.75rem", color: r.absent > 0 ? "#dc2626" : "#94a3b8", fontWeight: 700 }}>{r.absent}</td>
                       <td style={{ padding: "0.6rem 0.75rem", color: "#d97706", fontWeight: 600 }}>{r.outingCount}</td>
-                      <td style={{ padding: "0.6rem 0.75rem", color: "#1d4ed8", fontWeight: 700 }}>{r.totalHours}</td>
+                      <td style={{ padding: "0.6rem 0.75rem", color: "#0072D9", fontWeight: 700 }}>{r.totalHours}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -2324,14 +2325,14 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
                     const hours = a.check_out ? ((new Date(a.check_out) - new Date(a.check_in)) / 3600000).toFixed(1) : "-";
                     return (
                       <tr key={a.id} style={{ borderBottom: "1px solid #f8fafc", background: i % 2 === 0 ? "#fff" : "#fafafa" }}>
-                        <td style={{ padding: "0.6rem 0.75rem", fontWeight: 600, color: "#0f172a" }}>{a.employees?.name || "-"}</td>
+                        <td style={{ padding: "0.6rem 0.75rem", fontWeight: 600, color: "#233862" }}>{a.employees?.name || "-"}</td>
                         <td style={{ padding: "0.6rem 0.75rem", color: "#475569" }}>{fmtDate(a.check_in)}</td>
                         <td style={{ padding: "0.6rem 0.75rem", color: "#16a34a", fontWeight: 600 }}>{fmtTime(a.check_in)}</td>
                         <td style={{ padding: "0.6rem 0.75rem", color: "#d97706", fontWeight: 600 }}>{a.check_out ? fmtTime(a.check_out) : "-"}</td>
                         <td style={{ padding: "0.6rem 0.75rem", fontWeight: 600 }}>{hours} ชม.</td>
                         <td style={{ padding: "0.6rem 0.75rem" }}>
                           {li?.late ? <span style={{ background: "#fef2f2", color: "#dc2626", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>สาย {formatMinutes(li.minutes)}</span>
-                          : li?.early ? <span style={{ background: "#eff6ff", color: "#2563eb", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>เข้าก่อน {formatMinutes(li.minutes)}</span>
+                          : li?.early ? <span style={{ background: "#EAF5FF", color: "#008CFF", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>เข้าก่อน {formatMinutes(li.minutes)}</span>
                           : <span style={{ background: "#dcfce7", color: "#16a34a", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>ตรงเวลา</span>}
                         </td>
                         <td style={{ padding: "0.6rem 0.75rem" }}>
@@ -2349,7 +2350,7 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
 
             {reportType === "dailySummary" && (
               <div style={{ minWidth: "760px", padding: "1rem" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "120px 100px", justifyContent: "center", gap: "0.25rem 1rem", color: "#0f172a", fontSize: "0.9rem", fontWeight: 800, marginBottom: "1rem" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "120px 100px", justifyContent: "center", gap: "0.25rem 1rem", color: "#233862", fontSize: "0.9rem", fontWeight: 800, marginBottom: "1rem" }}>
                   <div style={{ textAlign: "right" }}>เวลาเริ่มงาน</div>
                   <div>{settings?.work_start?.slice(0, 5) || "-"} น.</div>
                   <div style={{ textAlign: "right" }}>เวลาเลิกงาน</div>
@@ -2360,33 +2361,33 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
                   return (
                     <div key={date.key} style={{ marginBottom: "1.25rem" }}>
                       <div style={{ background: "#0f766e", color: "#fff", fontWeight: 900, padding: "0.45rem 0.75rem", border: "1px solid #0f766e", borderBottom: "none" }}>{date.label}</div>
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem", border: "2px solid #0f172a" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem", border: "2px solid #233862" }}>
                         <thead>
                           <tr>
-                            <th rowSpan={2} style={{ background: "#dbeafe", border: "1px solid #0f172a", padding: "0.5rem", textAlign: "center", width: 64 }}>ลำดับ</th>
-                            <th rowSpan={2} style={{ background: "#dbeafe", border: "1px solid #0f172a", padding: "0.5rem", textAlign: "center", minWidth: 220 }}>ชื่อ - นามสกุล</th>
-                            <th rowSpan={2} style={{ background: "#dbeafe", border: "1px solid #0f172a", padding: "0.5rem", textAlign: "center", width: 110 }}>ลงเวลาเข้า</th>
-                            <th rowSpan={2} style={{ background: "#dbeafe", border: "1px solid #0f172a", padding: "0.5rem", textAlign: "center", width: 110 }}>ลงเวลาออก</th>
-                            <th colSpan={2} style={{ background: "#fed7aa", border: "1px solid #0f172a", padding: "0.5rem", textAlign: "center" }}>มาสาย</th>
-                            <th colSpan={2} style={{ background: "#fed7aa", border: "1px solid #0f172a", padding: "0.5rem", textAlign: "center" }}>เลิกก่อน</th>
+                            <th rowSpan={2} style={{ background: "#DCEFFF", border: "1px solid #233862", padding: "0.5rem", textAlign: "center", width: 64 }}>ลำดับ</th>
+                            <th rowSpan={2} style={{ background: "#DCEFFF", border: "1px solid #233862", padding: "0.5rem", textAlign: "center", minWidth: 220 }}>ชื่อ - นามสกุล</th>
+                            <th rowSpan={2} style={{ background: "#DCEFFF", border: "1px solid #233862", padding: "0.5rem", textAlign: "center", width: 110 }}>ลงเวลาเข้า</th>
+                            <th rowSpan={2} style={{ background: "#DCEFFF", border: "1px solid #233862", padding: "0.5rem", textAlign: "center", width: 110 }}>ลงเวลาออก</th>
+                            <th colSpan={2} style={{ background: "#fed7aa", border: "1px solid #233862", padding: "0.5rem", textAlign: "center" }}>มาสาย</th>
+                            <th colSpan={2} style={{ background: "#fed7aa", border: "1px solid #233862", padding: "0.5rem", textAlign: "center" }}>เลิกก่อน</th>
                           </tr>
                           <tr>
                             {["ช.ม.", "นาที", "ช.ม.", "นาที"].map((h, index) => (
-                              <th key={`${h}-${index}`} style={{ background: "#fed7aa", border: "1px solid #0f172a", padding: "0.45rem", textAlign: "center", width: 78 }}>{h}</th>
+                              <th key={`${h}-${index}`} style={{ background: "#fed7aa", border: "1px solid #233862", padding: "0.45rem", textAlign: "center", width: 78 }}>{h}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
                           {rows.map((row, index) => (
                             <tr key={`${date.key}-${row.emp.id}`} style={{ background: index % 2 === 0 ? "#fff" : "#f8fafc" }}>
-                              <td style={{ border: "1px solid #0f172a", padding: "0.45rem", textAlign: "center", fontWeight: 800 }}>{index + 1}</td>
-                              <td style={{ border: "1px solid #0f172a", padding: "0.45rem 0.6rem", fontWeight: 700, color: "#0f172a" }}>{row.emp.name}</td>
-                              <td style={{ border: "1px solid #0f172a", padding: "0.45rem", textAlign: "center", fontWeight: 800, color: row.checkInText === "-" ? "#94a3b8" : "#0f172a" }}>{row.checkInText === "-" ? "-" : `${row.checkInText} น.`}</td>
-                              <td style={{ border: "1px solid #0f172a", padding: "0.45rem", textAlign: "center", fontWeight: 800, color: row.checkOutText.includes("ยังไม่กลับ") ? "#dc2626" : "#0f172a" }}>{row.checkOutText === "-" ? "-" : `${row.checkOutText} น.`}</td>
-                              <td style={{ border: "1px solid #0f172a", padding: "0.45rem", textAlign: "center", color: row.lateHours !== "" ? "#dc2626" : "#0f172a", fontWeight: row.lateHours !== "" ? 900 : 500 }}>{row.lateHours}</td>
-                              <td style={{ border: "1px solid #0f172a", padding: "0.45rem", textAlign: "center", color: row.lateMinutes !== "" ? "#dc2626" : "#0f172a", fontWeight: row.lateMinutes !== "" ? 900 : 500 }}>{row.lateMinutes}</td>
-                              <td style={{ border: "1px solid #0f172a", padding: "0.45rem", textAlign: "center", color: row.earlyHours !== "" ? "#dc2626" : "#0f172a", fontWeight: row.earlyHours !== "" ? 900 : 500 }}>{row.earlyHours}</td>
-                              <td style={{ border: "1px solid #0f172a", padding: "0.45rem", textAlign: "center", color: row.earlyMinutes !== "" ? "#dc2626" : "#0f172a", fontWeight: row.earlyMinutes !== "" ? 900 : 500 }}>{row.earlyMinutes}</td>
+                              <td style={{ border: "1px solid #233862", padding: "0.45rem", textAlign: "center", fontWeight: 800 }}>{index + 1}</td>
+                              <td style={{ border: "1px solid #233862", padding: "0.45rem 0.6rem", fontWeight: 700, color: "#233862" }}>{row.emp.name}</td>
+                              <td style={{ border: "1px solid #233862", padding: "0.45rem", textAlign: "center", fontWeight: 800, color: row.checkInText === "-" ? "#94a3b8" : "#233862" }}>{row.checkInText === "-" ? "-" : `${row.checkInText} น.`}</td>
+                              <td style={{ border: "1px solid #233862", padding: "0.45rem", textAlign: "center", fontWeight: 800, color: row.checkOutText.includes("ยังไม่กลับ") ? "#dc2626" : "#233862" }}>{row.checkOutText === "-" ? "-" : `${row.checkOutText} น.`}</td>
+                              <td style={{ border: "1px solid #233862", padding: "0.45rem", textAlign: "center", color: row.lateHours !== "" ? "#dc2626" : "#233862", fontWeight: row.lateHours !== "" ? 900 : 500 }}>{row.lateHours}</td>
+                              <td style={{ border: "1px solid #233862", padding: "0.45rem", textAlign: "center", color: row.lateMinutes !== "" ? "#dc2626" : "#233862", fontWeight: row.lateMinutes !== "" ? 900 : 500 }}>{row.lateMinutes}</td>
+                              <td style={{ border: "1px solid #233862", padding: "0.45rem", textAlign: "center", color: row.earlyHours !== "" ? "#dc2626" : "#233862", fontWeight: row.earlyHours !== "" ? 900 : 500 }}>{row.earlyHours}</td>
+                              <td style={{ border: "1px solid #233862", padding: "0.45rem", textAlign: "center", color: row.earlyMinutes !== "" ? "#dc2626" : "#233862", fontWeight: row.earlyMinutes !== "" ? 900 : 500 }}>{row.earlyMinutes}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -2825,7 +2826,7 @@ function SchedulePage({ employees, currentUser, onRefresh }) {
             </select>
           </Field>
           {today >= 1 && today <= 5 && (
-            <div style={{ marginLeft: "auto", padding: "0.65rem 1rem", background: "#eff6ff", borderRadius: "10px", fontSize: "0.85rem", color: "#1d4ed8", fontWeight: 600 }}>
+            <div style={{ marginLeft: "auto", padding: "0.65rem 1rem", background: "#EAF5FF", borderRadius: "10px", fontSize: "0.85rem", color: "#0072D9", fontWeight: 600 }}>
               📅 วันนี้: {DAY_NAMES[today]}
             </div>
           )}
@@ -2841,16 +2842,16 @@ function SchedulePage({ employees, currentUser, onRefresh }) {
           return (
             <Card key={day} padding="1rem" >
               <div style={{ marginBottom: "0.75rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <div style={{ fontSize: "1rem", fontWeight: 800, color: isToday ? "#2563eb" : "#0f172a" }}>
+                <div style={{ fontSize: "1rem", fontWeight: 800, color: isToday ? "#008CFF" : "#233862" }}>
                   {isToday && "📍 "}วัน{DAY_NAMES[day]}
                 </div>
                 {isToday && <span style={{ background: "#dcfce7", color: "#16a34a", fontSize: "0.7rem", fontWeight: 700, padding: "0.15rem 0.5rem", borderRadius: "20px" }}>วันนี้</span>}
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "0.6rem" }}>
                 {daySchedules.map(s => (
-                  <div key={s.id} style={{ background: isToday ? "#eff6ff" : "#f8fafc", border: `1.5px solid ${isToday ? "#bfdbfe" : "#e2e8f0"}`, borderRadius: "10px", padding: "0.75rem", position: "relative" }}>
+                  <div key={s.id} style={{ background: isToday ? "#EAF5FF" : "#f8fafc", border: `1.5px solid ${isToday ? "#B8E0FF" : "#e2e8f0"}`, borderRadius: "10px", padding: "0.75rem", position: "relative" }}>
                     <div style={{ fontSize: "0.7rem", color: "#64748b", fontWeight: 600 }}>คาบที่ {s.period}</div>
-                    <div style={{ fontSize: "0.95rem", fontWeight: 700, color: "#0f172a", marginTop: "0.25rem" }}>{s.subject}</div>
+                    <div style={{ fontSize: "0.95rem", fontWeight: 700, color: "#233862", marginTop: "0.25rem" }}>{s.subject}</div>
                     {s.class_room && <div style={{ fontSize: "0.75rem", color: "#475569", marginTop: "0.15rem" }}>🏫 {s.class_room}</div>}
                     {s.start_time && <div style={{ fontSize: "0.72rem", color: "#94a3b8", marginTop: "0.15rem" }}>⏰ {s.start_time?.slice(0,5)} - {s.end_time?.slice(0,5)}</div>}
                     {!empView && <div style={{ fontSize: "0.72rem", color: "#7c3aed", marginTop: "0.15rem", fontWeight: 600 }}>👤 {s.employees?.name}</div>}
@@ -2938,7 +2939,7 @@ function SupervisionStatusBadge({ status }) {
     missing: { bg: "#fee2e2", color: "#b91c1c", label: "ยังไม่ส่ง" },
     pending: { bg: "#fff7ed", color: "#c2410c", label: "รอท้ายคาบ" },
     recorded: { bg: "#dcfce7", color: "#166534", label: "บันทึกแล้ว" },
-    approved: { bg: "#dbeafe", color: "#1d4ed8", label: "รับทราบแล้ว" },
+    approved: { bg: "#DCEFFF", color: "#0072D9", label: "รับทราบแล้ว" },
   };
   const item = map[status] || map.missing;
   return <span style={{ background: item.bg, color: item.color, fontSize: "0.72rem", fontWeight: 800, padding: "0.2rem 0.6rem", borderRadius: "20px", whiteSpace: "nowrap" }}>{item.label}</span>;
@@ -2964,7 +2965,7 @@ function WeekSwitcher({ weekStart, onChange, disabled = false }) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
         <button type="button" disabled={disabled} onClick={() => onChange(shiftDateKey(weekStart, -7))} style={buttonStyle}><ChevronLeft size={16} /> สัปดาห์ก่อน</button>
         <div style={{ textAlign: "center", minWidth: 200 }}>
-          <div style={{ fontWeight: 800, color: "#0f172a" }}>{formatWeekLabel(weekStart)}</div>
+          <div style={{ fontWeight: 800, color: "#233862" }}>{formatWeekLabel(weekStart)}</div>
           <div style={{ fontSize: "0.75rem", color: "#64748b" }}>จันทร์–ศุกร์</div>
         </div>
         <button type="button" disabled={disabled} onClick={() => onChange(shiftDateKey(weekStart, 7))} style={buttonStyle}>สัปดาห์ถัดไป <ChevronRight size={16} /></button>
@@ -2983,7 +2984,7 @@ function SupervisionFileBlock({ file }) {
   return (
     <div style={{ display: "grid", gap: "0.75rem" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-        <div style={{ fontWeight: 800, color: "#0f172a", wordBreak: "break-word" }}>{file.name || "ไฟล์"}</div>
+        <div style={{ fontWeight: 800, color: "#233862", wordBreak: "break-word" }}>{file.name || "ไฟล์"}</div>
         <a href={file.dataUrl} download={file.name || "ไฟล์"} style={{ ...btnSecondary, flex: "none", textDecoration: "none" }}>ดาวน์โหลด</a>
       </div>
       {isImage && <img src={file.dataUrl} alt={file.name || "ไฟล์แผน"} style={{ width: "100%", maxHeight: 320, objectFit: "contain", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }} />}
@@ -2994,7 +2995,7 @@ function SupervisionFileBlock({ file }) {
 
 function FullText({ value }) {
   const text = String(value || "").trim();
-  return <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", color: text ? "#0f172a" : "#94a3b8", lineHeight: 1.65, fontSize: "0.95rem" }}>{text || "ไม่มีข้อมูล"}</div>;
+  return <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", color: text ? "#233862" : "#94a3b8", lineHeight: 1.65, fontSize: "0.95rem" }}>{text || "ไม่มีข้อมูล"}</div>;
 }
 
 function LinkLines({ value }) {
@@ -3004,8 +3005,8 @@ function LinkLines({ value }) {
     <div style={{ display: "grid", gap: "0.35rem" }}>
       {lines.map((line, index) => (
         /^https?:\/\//i.test(line)
-          ? <a key={`${line}-${index}`} href={line} target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", wordBreak: "break-all" }}>{line}</a>
-          : <div key={`${line}-${index}`} style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", color: "#0f172a" }}>{line}</div>
+          ? <a key={`${line}-${index}`} href={line} target="_blank" rel="noreferrer" style={{ color: "#0072D9", wordBreak: "break-all" }}>{line}</a>
+          : <div key={`${line}-${index}`} style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", color: "#233862" }}>{line}</div>
       ))}
     </div>
   );
@@ -3129,7 +3130,7 @@ function WorksheetLink({ file }) {
   return (
     <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
       <FileText size={18} color="#dc2626" />
-      <span style={{ fontWeight: 700, color: "#0f172a", wordBreak: "break-word" }}>{file.name || "ใบงาน.pdf"}</span>
+      <span style={{ fontWeight: 700, color: "#233862", wordBreak: "break-word" }}>{file.name || "ใบงาน.pdf"}</span>
       <a href={href} target="_blank" rel="noreferrer" style={{ ...btnSecondary, flex: "none", textDecoration: "none" }}>เปิดดู</a>
       <a href={href} download={file.name || "ใบงาน.pdf"} style={{ ...btnSecondary, flex: "none", textDecoration: "none" }}>ดาวน์โหลด</a>
       {file.storage === "inline" && <span style={{ fontSize: "0.75rem", color: "#b45309" }}>(เก็บในแผน ยังไม่ได้ใช้ Storage)</span>}
@@ -3140,7 +3141,7 @@ function WorksheetLink({ file }) {
 function YoutubePreview({ url }) {
   const [play, setPlay] = useState(false);
   const id = youtubeId(url);
-  if (!id) return <a href={url} target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", wordBreak: "break-all" }}>{url}</a>;
+  if (!id) return <a href={url} target="_blank" rel="noreferrer" style={{ color: "#0072D9", wordBreak: "break-all" }}>{url}</a>;
   return (
     <div style={{ display: "grid", gap: "0.35rem", minWidth: 0 }}>
       {play ? (
@@ -3151,7 +3152,7 @@ function YoutubePreview({ url }) {
           <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2.4rem", color: "#fff", textShadow: "0 2px 8px rgba(0,0,0,0.6)" }}>▶</span>
         </button>
       )}
-      <a href={url} target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", fontSize: "0.8rem", wordBreak: "break-all" }}>{url}</a>
+      <a href={url} target="_blank" rel="noreferrer" style={{ color: "#0072D9", fontSize: "0.8rem", wordBreak: "break-all" }}>{url}</a>
     </div>
   );
 }
@@ -3189,7 +3190,7 @@ function PostNoteEditor({ note, disabled, teacherName, onChange }) {
   const setDomain = (key, field, raw) => set({ [key]: { ...value[key], [field]: countText(raw) } });
   return (
     <div style={{ display: "grid", gap: "0.75rem" }}>
-      <div style={{ fontWeight: 800, color: "#0f172a" }}>1. ผลการจัดการเรียนรู้</div>
+      <div style={{ fontWeight: 800, color: "#233862" }}>1. ผลการจัดการเรียนรู้</div>
       <Field label="จำนวนนักเรียนทั้งหมด (คน)">
         <input inputMode="numeric" value={value.total} disabled={disabled} onChange={event => set({ total: countText(event.target.value) })} style={{ ...periodInput, maxWidth: 160 }} />
       </Field>
@@ -3226,8 +3227,8 @@ function PostNoteEditor({ note, disabled, teacherName, onChange }) {
 
 function PostNoteAdminRead({ note }) {
   return (
-    <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "12px", padding: "0.6rem 0.75rem" }}>
-      <div style={{ fontWeight: 800, color: "#1d4ed8" }}>5. ความเห็นผู้บริหาร/หัวหน้างานวิชาการ</div>
+    <div style={{ background: "#EAF5FF", border: "1px solid #B8E0FF", borderRadius: "12px", padding: "0.6rem 0.75rem" }}>
+      <div style={{ fontWeight: 800, color: "#0072D9" }}>5. ความเห็นผู้บริหาร/หัวหน้างานวิชาการ</div>
       <FullText value={note?.admin_comment} />
       {(note?.admin_sign || note?.admin_date) && <div style={{ fontSize: "0.85rem", color: "#334155", marginTop: "0.3rem" }}>ลงชื่อ {note.admin_sign || "-"} {note.admin_date ? `· ${formatThaiDateKey(note.admin_date)}` : ""}</div>}
     </div>
@@ -3239,14 +3240,14 @@ function PostNoteRead({ note }) {
   if (!postNoteHasData(value)) return <div style={{ color: "#94a3b8" }}>ยังไม่ได้บันทึกหลังสอน</div>;
   return (
     <div style={{ display: "grid", gap: "0.45rem" }}>
-      <div style={{ fontWeight: 800, color: "#0f172a" }}>1. ผลการจัดการเรียนรู้ {value.total ? `(นักเรียน ${value.total} คน)` : ""}</div>
+      <div style={{ fontWeight: 800, color: "#233862" }}>1. ผลการจัดการเรียนรู้ {value.total ? `(นักเรียน ${value.total} คน)` : ""}</div>
       {POST_NOTE_DOMAINS.map(({ key, label }) => (
-        <div key={key} style={{ color: "#0f172a", fontSize: "0.92rem" }}>
+        <div key={key} style={{ color: "#233862", fontSize: "0.92rem" }}>
           {label}: ผ่าน {value[key].pass || "-"} คน {postNotePercent(value[key].pass, value.total) && `(${postNotePercent(value[key].pass, value.total)})`} · ไม่ผ่าน {value[key].fail || "-"} คน {postNotePercent(value[key].fail, value.total) && `(${postNotePercent(value[key].fail, value.total)})`}
         </div>
       ))}
       {POST_NOTE_TEXTS.map(({ key, label }) => (
-        <div key={key}><div style={{ fontWeight: 800, color: "#0f172a" }}>{label}</div><FullText value={value[key]} /></div>
+        <div key={key}><div style={{ fontWeight: 800, color: "#233862" }}>{label}</div><FullText value={value[key]} /></div>
       ))}
       <div style={{ color: "#334155", fontSize: "0.9rem" }}>ลงชื่อผู้สอน {value.teacher_sign || "-"} {value.teacher_date ? `· ${formatThaiDateKey(value.teacher_date)}` : ""}</div>
       <PostNoteAdminRead note={value} />
@@ -3333,7 +3334,7 @@ function QuietFold({ title, children }) {
   return (
     <div style={{ borderTop: "1px solid #f1f5f9", minWidth: 0 }}>
       <button type="button" aria-expanded={open} onClick={() => setOpen(value => !value)} style={{ width: "100%", minHeight: 44, display: "flex", alignItems: "center", gap: "0.4rem", border: "none", background: "transparent", fontFamily: "inherit", textAlign: "left", cursor: "pointer", padding: "0.2rem 0" }}>
-        <span style={{ fontWeight: 800, color: "#0f172a", flex: 1 }}>{title}</span>
+        <span style={{ fontWeight: 800, color: "#233862", flex: 1 }}>{title}</span>
         {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
       </button>
       {open && <div style={{ display: "grid", gap: "0.75rem", minWidth: 0, paddingBottom: "0.35rem" }}>{children}</div>}
@@ -3346,7 +3347,7 @@ function DayCard({ title, summary, children }) {
   return (
     <Card>
       <button type="button" aria-expanded={open} onClick={() => setOpen(value => !value)} style={{ width: "100%", minHeight: 48, display: "flex", alignItems: "center", gap: "0.55rem", border: "none", background: "transparent", fontFamily: "inherit", textAlign: "left", cursor: "pointer", padding: 0 }}>
-        <span style={{ fontWeight: 800, fontSize: "1.05rem", color: "#0f172a", flex: "0 0 auto" }}>{title}</span>
+        <span style={{ fontWeight: 800, fontSize: "1.05rem", color: "#233862", flex: "0 0 auto" }}>{title}</span>
         <span style={{ color: "#64748b", fontSize: "0.8rem", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summary}</span>
         {open ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
       </button>
@@ -3363,11 +3364,11 @@ function WeekPeriodEditor({ period, disabled, onChange, onPickFile, onPickWorksh
   return (
     <div style={{ border: "1px solid #e2e8f0", borderRadius: "12px", padding: open ? "0.75rem" : "0.35rem 0.5rem", display: "grid", gap: "0.75rem", minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", minWidth: 0 }}>
-        <button type="button" aria-expanded={open} aria-label={open ? `หุบคาบที่ ${period.period_no}` : `เปิดคาบที่ ${period.period_no}`} onClick={() => setOpen(value => !value)} style={{ width: 44, height: 44, flex: "none", border: "1px solid #e2e8f0", borderRadius: "10px", background: "#fff", color: "#1d4ed8", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+        <button type="button" aria-expanded={open} aria-label={open ? `หุบคาบที่ ${period.period_no}` : `เปิดคาบที่ ${period.period_no}`} onClick={() => setOpen(value => !value)} style={{ width: 44, height: 44, flex: "none", border: "1px solid #e2e8f0", borderRadius: "10px", background: "#fff", color: "#0072D9", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
           {open ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
         </button>
         <button type="button" onClick={() => setOpen(value => !value)} style={{ flex: 1, minWidth: 0, textAlign: "left", background: "transparent", border: "none", padding: "0.25rem 0", fontFamily: "inherit", cursor: "pointer" }}>
-          <div style={{ fontWeight: 800, color: "#0f172a" }}>คาบที่ {period.period_no}</div>
+          <div style={{ fontWeight: 800, color: "#233862" }}>คาบที่ {period.period_no}</div>
           {!open && <div style={{ fontSize: "0.8rem", color: period.free ? "#64748b" : "#475569", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{summary}</div>}
         </button>
         <label style={{ display: "flex", alignItems: "center", gap: "0.35rem", minHeight: 44, flex: "none", fontWeight: 700, color: "#475569", cursor: disabled ? "not-allowed" : "pointer" }}>
@@ -3500,25 +3501,25 @@ function SupervisionPeriodRead({ period, defaultOpen = false, adminSlot = null }
   return (
     <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "0.55rem 0.7rem", display: "grid", gap: "0.45rem", minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", minWidth: 0 }}>
-        <button type="button" aria-expanded={open} aria-label={open ? `หุบคาบที่ ${period.period_no}` : `เปิดคาบที่ ${period.period_no}`} onClick={() => setOpen(value => !value)} style={{ width: 44, height: 44, flex: "none", border: "1px solid #e2e8f0", borderRadius: "10px", background: "#fff", color: "#1d4ed8", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+        <button type="button" aria-expanded={open} aria-label={open ? `หุบคาบที่ ${period.period_no}` : `เปิดคาบที่ ${period.period_no}`} onClick={() => setOpen(value => !value)} style={{ width: 44, height: 44, flex: "none", border: "1px solid #e2e8f0", borderRadius: "10px", background: "#fff", color: "#0072D9", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
           {open ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
         </button>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 800, color: "#0f172a" }}>คาบที่ {period.period_no} · {clockLabel(period.start_time)} - {clockLabel(period.end_time)}</div>
+          <div style={{ fontWeight: 800, color: "#233862" }}>คาบที่ {period.period_no} · {clockLabel(period.start_time)} - {clockLabel(period.end_time)}</div>
           {!open && <div style={{ fontSize: "0.8rem", color: "#475569", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{summary}</div>}
         </div>
       </div>
       {open && (
         <div style={{ display: "grid", gap: "0.45rem", minWidth: 0 }}>
           {(choice.unit || planLabel || topicLabel || period.lesson_page) && (
-            <div style={{ color: "#0f172a", lineHeight: 1.55 }}>
+            <div style={{ color: "#233862", lineHeight: 1.55 }}>
               {choice.unit && <div><strong>หน่วย: </strong>{choice.unit.name}</div>}
               {planLabel && <div><strong>แผน: </strong>{planLabel}</div>}
               {topicLabel && <div><strong>เรื่อง: </strong>{topicLabel}</div>}
               {period.lesson_page && <div style={{ overflowWrap: "anywhere" }}><strong>หน้า: </strong>{period.lesson_page}</div>}
             </div>
           )}
-          {String(period.subject || "").trim() && <div style={{ color: "#0f172a" }}><strong>วิชา: </strong>{period.subject}</div>}
+          {String(period.subject || "").trim() && <div style={{ color: "#233862" }}><strong>วิชา: </strong>{period.subject}</div>}
           {[
             ["1. ขั้นนำเข้าสู่บทเรียน", period.lesson_intro],
             ["2. ขั้นจัดกิจกรรมการเรียนรู้", period.lesson_activity],
@@ -3526,7 +3527,7 @@ function SupervisionPeriodRead({ period, defaultOpen = false, adminSlot = null }
             ["4. ขั้นสรุป", period.lesson_summary],
           ].filter(([, value]) => String(value || "").trim()).length > 0 && (
             <div style={{ display: "grid", gap: "0.45rem" }}>
-              <div style={{ fontWeight: 800, color: "#0f172a" }}>รายละเอียดการสอน</div>
+              <div style={{ fontWeight: 800, color: "#233862" }}>รายละเอียดการสอน</div>
               {[
                 ["1. ขั้นนำเข้าสู่บทเรียน", period.lesson_intro],
                 ["2. ขั้นจัดกิจกรรมการเรียนรู้", period.lesson_activity],
@@ -3534,7 +3535,7 @@ function SupervisionPeriodRead({ period, defaultOpen = false, adminSlot = null }
                 ["4. ขั้นสรุป", period.lesson_summary],
               ].filter(([, value]) => String(value || "").trim()).map(([label, value]) => (
                 <div key={label}>
-                  <div style={{ fontWeight: 800, color: "#0f172a" }}>{label}</div>
+                  <div style={{ fontWeight: 800, color: "#233862" }}>{label}</div>
                   <FullText value={value} />
                 </div>
               ))}
@@ -3542,31 +3543,31 @@ function SupervisionPeriodRead({ period, defaultOpen = false, adminSlot = null }
           )}
           {String(period.media_links || "").trim() && (
             <div>
-              <div style={{ fontWeight: 800, color: "#0f172a" }}>ลิงก์สื่อ</div>
+              <div style={{ fontWeight: 800, color: "#233862" }}>ลิงก์สื่อ</div>
               <LinkLines value={period.media_links} />
             </div>
           )}
           {String(period.media_detail || "").trim() && (
             <div>
-              <div style={{ fontWeight: 800, color: "#0f172a" }}>สื่อโดยละเอียด</div>
+              <div style={{ fontWeight: 800, color: "#233862" }}>สื่อโดยละเอียด</div>
               <FullText value={period.media_detail} />
             </div>
           )}
           {lessonFileHref(period.worksheet_file) && (
             <div>
-              <div style={{ fontWeight: 800, color: "#0f172a" }}>ใบงาน (PDF)</div>
+              <div style={{ fontWeight: 800, color: "#233862" }}>ใบงาน (PDF)</div>
               <WorksheetLink file={period.worksheet_file} />
             </div>
           )}
           {cleanYoutubeLinks(period.youtube_links).length > 0 && (
             <div>
-              <div style={{ fontWeight: 800, color: "#0f172a" }}>YouTube ที่ใช้สอน</div>
+              <div style={{ fontWeight: 800, color: "#233862" }}>YouTube ที่ใช้สอน</div>
               <YoutubeGrid links={period.youtube_links} />
             </div>
           )}
           {postNoteHasData(period.post_note) && (
             <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: "0.45rem" }}>
-              <div style={{ fontWeight: 800, color: "#0f172a", marginBottom: "0.3rem" }}>บันทึกหลังสอน</div>
+              <div style={{ fontWeight: 800, color: "#233862", marginBottom: "0.3rem" }}>บันทึกหลังสอน</div>
               <PostNoteRead note={period.post_note} />
             </div>
           )}
@@ -3574,12 +3575,12 @@ function SupervisionPeriodRead({ period, defaultOpen = false, adminSlot = null }
           {period.homework === "yes" && (
             <>
               <div>
-                <div style={{ fontWeight: 800, color: "#0f172a" }}>คืองานอะไร</div>
+                <div style={{ fontWeight: 800, color: "#233862" }}>คืองานอะไร</div>
                 <FullText value={period.homework_what} />
               </div>
-              <div style={{ color: "#0f172a" }}><strong>หน้า: </strong>{period.homework_page || "-"}</div>
+              <div style={{ color: "#233862" }}><strong>หน้า: </strong>{period.homework_page || "-"}</div>
               <div>
-                <div style={{ fontWeight: 800, color: "#0f172a" }}>ใบงาน</div>
+                <div style={{ fontWeight: 800, color: "#233862" }}>ใบงาน</div>
                 {period.homework_file?.dataUrl ? <SupervisionFileBlock file={period.homework_file} /> : <div style={{ color: "#94a3b8" }}>ไม่ได้แนบใบงาน</div>}
               </div>
             </>
@@ -3619,11 +3620,11 @@ function KindergartenDayEditor({ day, dayName, disabled, onChange }) {
   return (
     <div style={{ border: "1px solid #e2e8f0", borderRadius: "12px", padding: open ? "0.75rem" : "0.35rem 0.5rem", display: "grid", gap: "0.75rem", minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", minWidth: 0, flexWrap: "wrap" }}>
-        <button type="button" aria-expanded={open} aria-label={open ? `หุบวัน${dayName}` : `เปิดวัน${dayName}`} onClick={() => setOpen(value => !value)} style={{ width: 44, height: 44, flex: "none", border: "1px solid #e2e8f0", borderRadius: "10px", background: "#fff", color: "#1d4ed8", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+        <button type="button" aria-expanded={open} aria-label={open ? `หุบวัน${dayName}` : `เปิดวัน${dayName}`} onClick={() => setOpen(value => !value)} style={{ width: 44, height: 44, flex: "none", border: "1px solid #e2e8f0", borderRadius: "10px", background: "#fff", color: "#0072D9", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
           {open ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
         </button>
         <button type="button" onClick={() => setOpen(value => !value)} style={{ flex: "1 1 120px", minWidth: 0, textAlign: "left", background: "transparent", border: "none", padding: "0.25rem 0", fontFamily: "inherit", cursor: "pointer" }}>
-          <div style={{ fontWeight: 800, color: "#0f172a" }}>วัน{dayName}</div>
+          <div style={{ fontWeight: 800, color: "#233862" }}>วัน{dayName}</div>
           {!open && <div style={{ fontSize: "0.8rem", color: day.off ? "#64748b" : "#475569", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{summary}</div>}
         </button>
         <label style={{ display: "flex", alignItems: "center", gap: "0.35rem", minHeight: 44, flex: "none", fontWeight: 700, color: "#475569", cursor: disabled ? "not-allowed" : "pointer" }}>
@@ -3648,7 +3649,7 @@ function KindergartenWeekView({ plan, weekStart }) {
   const days = kinderDaysForEditor(plan, weekStart);
   return (
     <div style={{ display: "grid", gap: "0.75rem", minWidth: 0 }}>
-      <div style={{ fontWeight: 800, color: "#0f172a" }}>หน่วย {plan.unit || "-"} · ห้อง {plan.room || "-"}</div>
+      <div style={{ fontWeight: 800, color: "#233862" }}>หน่วย {plan.unit || "-"} · ห้อง {plan.room || "-"}</div>
       {days.map((day, index) => (
         <KindergartenDayRead key={day.date} day={day} dayName={DAY_NAMES[index + 1]} dateLabel={formatThaiDateKey(day.date)} />
       ))}
@@ -3662,11 +3663,11 @@ function KindergartenDayRead({ day, dayName, dateLabel }) {
   return (
     <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "0.55rem 0.7rem", display: "grid", gap: "0.45rem", minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", minWidth: 0 }}>
-        <button type="button" aria-expanded={open} aria-label={open ? `หุบวัน${dayName}` : `เปิดวัน${dayName}`} onClick={() => setOpen(value => !value)} style={{ width: 44, height: 44, flex: "none", border: "1px solid #e2e8f0", borderRadius: "10px", background: "#fff", color: "#1d4ed8", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+        <button type="button" aria-expanded={open} aria-label={open ? `หุบวัน${dayName}` : `เปิดวัน${dayName}`} onClick={() => setOpen(value => !value)} style={{ width: 44, height: 44, flex: "none", border: "1px solid #e2e8f0", borderRadius: "10px", background: "#fff", color: "#0072D9", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
           {open ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
         </button>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 800, color: "#0f172a" }}>วัน{dayName} · {dateLabel}</div>
+          <div style={{ fontWeight: 800, color: "#233862" }}>วัน{dayName} · {dateLabel}</div>
           {!open && <div style={{ fontSize: "0.8rem", color: "#475569", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{summary}</div>}
         </div>
       </div>
@@ -3675,7 +3676,7 @@ function KindergartenDayRead({ day, dayName, dateLabel }) {
           {day.off && <div style={{ fontWeight: 800, color: "#64748b" }}>วันนี้ไม่มีแผนสอน</div>}
           {KINDER_ACTIVITIES.filter(item => String(day.activities?.[item.key] || "").trim()).map(item => (
             <div key={item.key}>
-              <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.label}</div>
+              <div style={{ fontWeight: 800, color: "#233862" }}>{item.label}</div>
               <FullText value={day.activities[item.key]} />
             </div>
           ))}
@@ -3879,7 +3880,7 @@ function KindergartenSupervisionTeacher({ currentUser }) {
           <Card>
             <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center", flexWrap: "wrap", marginBottom: "0.9rem" }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0f172a" }}>แผนอนุบาลของ {currentUser.name}</div>
+                <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#233862" }}>แผนอนุบาลของ {currentUser.name}</div>
                 <div style={{ fontSize: "0.8rem", color: "#b45309", fontWeight: 700, marginTop: "0.25rem" }}>ส่งไม่เกิน {formatThaiDateKey(shiftDateKey(weekStart, -1))} เวลา 15:00</div>
               </div>
               <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
@@ -3896,8 +3897,8 @@ function KindergartenSupervisionTeacher({ currentUser }) {
               </Field>
             </div>
             {signoff?.at && (
-              <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "12px", padding: "0.8rem", marginBottom: "0.9rem" }}>
-                <div style={{ fontWeight: 800, color: "#1d4ed8" }}>ฝ่ายวิชาการรับทราบแล้ว · {signoff.by || "ผู้บริหาร"} · {fmtDate(signoff.at)} {fmtTime(signoff.at)}</div>
+              <div style={{ background: "#EAF5FF", border: "1px solid #B8E0FF", borderRadius: "12px", padding: "0.8rem", marginBottom: "0.9rem" }}>
+                <div style={{ fontWeight: 800, color: "#0072D9" }}>ฝ่ายวิชาการรับทราบแล้ว · {signoff.by || "ผู้บริหาร"} · {fmtDate(signoff.at)} {fmtTime(signoff.at)}</div>
                 <FullText value={signoff.comment} />
               </div>
             )}
@@ -3905,7 +3906,7 @@ function KindergartenSupervisionTeacher({ currentUser }) {
               <div style={{ display: "grid", gap: "0.45rem", marginBottom: "0.9rem" }}>
                 {observations.map(item => (
                   <div key={item.id} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.75rem" }}>
-                    <div style={{ fontWeight: 800, color: "#0f172a" }}>นิเทศในห้อง {formatThaiDateKey(item.date)} · {labelOf(OBSERVATION_MATCH, item.match) || "-"}</div>
+                    <div style={{ fontWeight: 800, color: "#233862" }}>นิเทศในห้อง {formatThaiDateKey(item.date)} · {labelOf(OBSERVATION_MATCH, item.match) || "-"}</div>
                     <FullText value={item.note} />
                   </div>
                 ))}
@@ -4204,7 +4205,7 @@ function SupervisionTeacher({ currentUser }) {
           <Card>
             <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center", flexWrap: "wrap", marginBottom: "0.9rem" }}>
               <div>
-                <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0f172a" }}>แผนสัปดาห์ของ {currentUser.name}</div>
+                <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#233862" }}>แผนสัปดาห์ของ {currentUser.name}</div>
                 <div style={{ fontSize: "0.8rem", color: "#b45309", fontWeight: 700, marginTop: "0.25rem" }}>ส่งไม่เกิน {formatThaiDateKey(shiftDateKey(weekStart, -1))} เวลา 15:00</div>
               </div>
               <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
@@ -4213,8 +4214,8 @@ function SupervisionTeacher({ currentUser }) {
               </div>
             </div>
             {signoff?.at && (
-              <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "12px", padding: "0.8rem", marginBottom: "0.9rem" }}>
-                <div style={{ fontWeight: 800, color: "#1d4ed8" }}>ฝ่ายวิชาการรับทราบแล้ว · {signoff.by || "ผู้บริหาร"} · {fmtDate(signoff.at)} {fmtTime(signoff.at)}</div>
+              <div style={{ background: "#EAF5FF", border: "1px solid #B8E0FF", borderRadius: "12px", padding: "0.8rem", marginBottom: "0.9rem" }}>
+                <div style={{ fontWeight: 800, color: "#0072D9" }}>ฝ่ายวิชาการรับทราบแล้ว · {signoff.by || "ผู้บริหาร"} · {fmtDate(signoff.at)} {fmtTime(signoff.at)}</div>
                 <FullText value={signoff.comment} />
               </div>
             )}
@@ -4222,7 +4223,7 @@ function SupervisionTeacher({ currentUser }) {
               <div style={{ display: "grid", gap: "0.45rem", marginBottom: "0.9rem" }}>
                 {observations.map(item => (
                   <div key={item.id} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.75rem" }}>
-                    <div style={{ fontWeight: 800, color: "#0f172a" }}>นิเทศในห้อง {formatThaiDateKey(item.date)} · {labelOf(OBSERVATION_MATCH, item.match) || "-"}</div>
+                    <div style={{ fontWeight: 800, color: "#233862" }}>นิเทศในห้อง {formatThaiDateKey(item.date)} · {labelOf(OBSERVATION_MATCH, item.match) || "-"}</div>
                     <FullText value={item.note} />
                   </div>
                 ))}
@@ -4443,7 +4444,7 @@ function SupervisionAdmin({ employees, currentUser }) {
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
               <Avatar name={selectedTeacher.name} />
               <div>
-                <div style={{ fontSize: "1.15rem", fontWeight: 800, color: "#0f172a" }}>{selectedTeacher.name}</div>
+                <div style={{ fontSize: "1.15rem", fontWeight: 800, color: "#233862" }}>{selectedTeacher.name}</div>
                 <div style={{ fontSize: "0.8rem", color: "#64748b" }}>{selectedTeacher.department || "-"} · {selectedTeacher.position || "พนักงาน"}{levels[selectedTeacher.id] === "อนุบาล" ? " · อนุบาล" : ""}</div>
               </div>
             </div>
@@ -4458,8 +4459,8 @@ function SupervisionAdmin({ employees, currentUser }) {
             <div style={{ display: "grid", gap: "1rem" }}>
               {plan.submitted_at && <div style={{ fontSize: "0.8rem", color: "#64748b" }}>ส่งล่าสุด {fmtDate(plan.submitted_at)} {fmtTime(plan.submitted_at)}</div>}
               {plan.signoff?.at && (
-                <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "12px", padding: "0.8rem" }}>
-                  <div style={{ fontWeight: 800, color: "#1d4ed8" }}>รับทราบแล้ว · {plan.signoff.by || "ฝ่ายวิชาการ"} · {fmtDate(plan.signoff.at)} {fmtTime(plan.signoff.at)}</div>
+                <div style={{ background: "#EAF5FF", border: "1px solid #B8E0FF", borderRadius: "12px", padding: "0.8rem" }}>
+                  <div style={{ fontWeight: 800, color: "#0072D9" }}>รับทราบแล้ว · {plan.signoff.by || "ฝ่ายวิชาการ"} · {fmtDate(plan.signoff.at)} {fmtTime(plan.signoff.at)}</div>
                   <FullText value={plan.signoff.comment} />
                 </div>
               )}
@@ -4467,30 +4468,30 @@ function SupervisionAdmin({ employees, currentUser }) {
                 <div style={{ display: "grid", gap: "0.45rem" }}>
                   {plan.observations.map((item, index) => (
                     <div key={item.id || index} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.75rem" }}>
-                      <div style={{ fontWeight: 800, color: "#0f172a" }}>นิเทศในห้อง {formatThaiDateKey(item.date)} · {labelOf(OBSERVATION_MATCH, item.match) || "-"} · {item.by || "ฝ่ายวิชาการ"}</div>
+                      <div style={{ fontWeight: 800, color: "#233862" }}>นิเทศในห้อง {formatThaiDateKey(item.date)} · {labelOf(OBSERVATION_MATCH, item.match) || "-"} · {item.by || "ฝ่ายวิชาการ"}</div>
                       <FullText value={item.note} />
                     </div>
                   ))}
                 </div>
               )}
               <div>
-                <div style={{ fontWeight: 800, color: "#0f172a", marginBottom: "0.75rem" }}>{plan.kind === "kindergarten" ? "แผนอนุบาลรายสัปดาห์" : "แผนรายสัปดาห์"}</div>
+                <div style={{ fontWeight: 800, color: "#233862", marginBottom: "0.75rem" }}>{plan.kind === "kindergarten" ? "แผนอนุบาลรายสัปดาห์" : "แผนรายสัปดาห์"}</div>
                 {plan.kind === "kindergarten"
                   ? <KindergartenWeekView plan={plan} weekStart={weekStart} />
                   : <SupervisionWeekView periods={plan.periods} weekStart={weekStart} />}
               </div>
               <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: "1rem", display: "grid", gap: "0.75rem" }}>
-                <div style={{ fontWeight: 800, color: "#0f172a" }}>รับทราบ/อนุมัติ</div>
+                <div style={{ fontWeight: 800, color: "#233862" }}>รับทราบ/อนุมัติ</div>
                 <div style={{ fontSize: "0.8rem", color: "#64748b" }}>ครูเห็นข้อเสนอแนะนี้ในแผนสัปดาห์ และแก้เนื้อหาแผนเองจากบัญชีครู</div>
                 <Field label="ข้อเสนอแนะถึงครู">
                   <textarea value={signoffComment} onChange={event => setSignoffComment(event.target.value)} style={supervisionTextArea} placeholder="พิมพ์คำแนะนำสั้นๆ แล้วกดรับทราบ" />
                 </Field>
-                <button type="button" onClick={() => saveReview("signoff")} disabled={savingReview} style={{ ...btnPrimary, flex: "none", background: "linear-gradient(135deg, #2563eb, #1d4ed8)", color: "#fff", cursor: savingReview ? "not-allowed" : "pointer" }}>
+                <button type="button" onClick={() => saveReview("signoff")} disabled={savingReview} style={{ ...btnPrimary, flex: "none", background: "linear-gradient(135deg, #008CFF, #0072D9)", color: "#fff", cursor: savingReview ? "not-allowed" : "pointer" }}>
                   <CheckCircle size={16} /> รับทราบ/อนุมัติ
                 </button>
               </div>
               <div style={{ display: "grid", gap: "0.75rem" }}>
-                <div style={{ fontWeight: 800, color: "#0f172a" }}>นิเทศในห้อง</div>
+                <div style={{ fontWeight: 800, color: "#233862" }}>นิเทศในห้อง</div>
                 <div style={{ fontSize: "0.8rem", color: "#64748b" }}>เทียบสิ่งที่เห็นในห้องกับแผนที่ครูเขียนไว้</div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.75rem" }}>
                   <Field label="วันที่นิเทศ">
@@ -4527,7 +4528,7 @@ function SupervisionAdmin({ employees, currentUser }) {
               return (
                 <div key={group.key} style={{ marginTop: "1rem" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
-                    <div style={{ fontWeight: 800, color: "#0f172a" }}>{group.label}</div>
+                    <div style={{ fontWeight: 800, color: "#233862" }}>{group.label}</div>
                     <SupervisionStatusBadge status={group.key} />
                     <span style={{ color: "#94a3b8", fontSize: "0.8rem" }}>{people.length} คน</span>
                   </div>
@@ -4542,7 +4543,7 @@ function SupervisionAdmin({ employees, currentUser }) {
                           <button key={teacher.id} onClick={() => openTeacher(teacher)} style={{ display: "flex", alignItems: "center", gap: "0.75rem", width: "100%", textAlign: "left", background: "#fff", border: "1px solid #e2e8f0", borderLeft: `4px solid ${tone}`, borderRadius: "12px", padding: "0.7rem 0.8rem", cursor: "pointer", fontFamily: "inherit" }}>
                             <Avatar name={teacher.name} index={index} />
                             <span style={{ flex: 1, minWidth: 0 }}>
-                              <span style={{ display: "block", fontWeight: 800, color: "#0f172a" }}>{teacher.name || "-"}</span>
+                              <span style={{ display: "block", fontWeight: 800, color: "#233862" }}>{teacher.name || "-"}</span>
                               <span style={{ display: "block", fontSize: "0.75rem", color: "#64748b" }}>{teacher.department || "-"}{levels[teacher.id] === "อนุบาล" ? " · อนุบาล" : ""}</span>
                             </span>
                             <SupervisionStatusBadge status={status} />
@@ -4566,7 +4567,7 @@ function SupervisionAdmin({ employees, currentUser }) {
 const ROLL_STATUSES = [
   { value: "present", label: "มา", color: "#166534", bg: "#dcfce7", border: "#86efac" },
   { value: "personal", label: "ลากิจ", color: "#b45309", bg: "#fef3c7", border: "#fcd34d" },
-  { value: "sick", label: "ลาป่วย", color: "#1d4ed8", bg: "#dbeafe", border: "#93c5fd" },
+  { value: "sick", label: "ลาป่วย", color: "#0072D9", bg: "#DCEFFF", border: "#8FD0FF" },
 ];
 // "absent" เก็บไว้อ่านข้อมูลเก่าเท่านั้น หน้าเช็คชื่อใช้แค่ มา / ลา (ลากิจ หรือ ป่วย)
 const ROLL_STATUS_VALUES = new Set([...ROLL_STATUSES.map(item => item.value), "absent"]);
@@ -4610,12 +4611,12 @@ function SickScreening({ value, disabled, onChange }) {
   const tiny = { ...periodInput, minHeight: 30, padding: "0.2rem 0.4rem", fontSize: "0.8rem" };
   const highTemp = Number(health.temp) >= 37.5;
   return (
-    <div style={{ gridColumn: "1 / -1", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, padding: "0.4rem", display: "grid", gap: "0.35rem", fontSize: "0.78rem" }}>
-      <div style={{ fontWeight: 800, color: "#1d4ed8" }}>คัดกรองอาการป่วย</div>
+    <div style={{ gridColumn: "1 / -1", background: "#EAF5FF", border: "1px solid #B8E0FF", borderRadius: 8, padding: "0.4rem", display: "grid", gap: "0.35rem", fontSize: "0.78rem" }}>
+      <div style={{ fontWeight: 800, color: "#0072D9" }}>คัดกรองอาการป่วย</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem" }}>
         {SICK_SYMPTOMS.map(item => {
           const on = health.symptoms.includes(item.key) || (item.key === "fever" && highTemp);
-          return <button key={item.key} type="button" disabled={disabled} aria-pressed={on} onClick={() => toggle(item.key)} style={{ border: `1px solid ${on ? "#1d4ed8" : "#cbd5e1"}`, background: on ? "#1d4ed8" : "#fff", color: on ? "#fff" : "#475569", borderRadius: 14, padding: "0.12rem 0.5rem", fontSize: "0.74rem", fontFamily: "inherit", cursor: "pointer" }}>{item.label}</button>;
+          return <button key={item.key} type="button" disabled={disabled} aria-pressed={on} onClick={() => toggle(item.key)} style={{ border: `1px solid ${on ? "#0072D9" : "#cbd5e1"}`, background: on ? "#0072D9" : "#fff", color: on ? "#fff" : "#475569", borderRadius: 14, padding: "0.12rem 0.5rem", fontSize: "0.74rem", fontFamily: "inherit", cursor: "pointer" }}>{item.label}</button>;
         })}
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", alignItems: "center" }}>
@@ -5024,7 +5025,7 @@ function RollModeSwitch({ mode, onChange }) {
       {items.map(item => {
         const active = mode === item.key;
         return (
-          <button key={item.key} type="button" onClick={() => onChange(item.key)} style={{ minHeight: 44, border: "none", borderRadius: 10, background: active ? "#eff6ff" : "transparent", color: active ? "#1d4ed8" : "#64748b", fontWeight: 800, fontFamily: "inherit", fontSize: "0.92rem", cursor: "pointer" }}>
+          <button key={item.key} type="button" onClick={() => onChange(item.key)} style={{ minHeight: 44, border: "none", borderRadius: 10, background: active ? "#EAF5FF" : "transparent", color: active ? "#0072D9" : "#64748b", fontWeight: 800, fontFamily: "inherit", fontSize: "0.92rem", cursor: "pointer" }}>
             {item.label}
           </button>
         );
@@ -5041,7 +5042,7 @@ function RollMarkRow({ student, value, disabled, onChange, health, onHealth }) {
     <div style={{ display: "grid", width: "100%", boxSizing: "border-box", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "0.25rem 0.4rem", alignItems: "center", padding: "0.2rem 0", borderTop: "1px solid #f1f5f9", minWidth: 0 }}>
       <div style={{ minWidth: 0, display: "flex", gap: "0.3rem", alignItems: "center", fontSize: "0.82rem" }}>
         <span style={{ fontWeight: 700, color: "#94a3b8", flex: "0 0 auto" }}>{student.number}</span>
-        <span title={label} style={{ minWidth: 0, fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
+        <span title={label} style={{ minWidth: 0, fontWeight: 700, color: "#233862", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
       </div>
       <div style={{ display: "flex", gap: "0.2rem", alignItems: "center" }}>
         <button type="button" aria-pressed={value === "present"} aria-label={`${label} มา`} disabled={disabled} onClick={() => onChange?.("present")} style={btn(value === "present", "#166534", "#dcfce7")}>มา</button>
@@ -5113,12 +5114,12 @@ function SickCasesPanel({ book, month, title }) {
   return (
     <div style={{ display: "grid", gap: "0.45rem", minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-        <span style={{ fontWeight: 800, color: "#1d4ed8", flex: 1 }}>นักเรียนลาป่วย {cases.length} ครั้ง</span>
+        <span style={{ fontWeight: 800, color: "#0072D9", flex: 1 }}>นักเรียนลาป่วย {cases.length} ครั้ง</span>
         {cases.length > 0 && <button type="button" onClick={() => exportSickCases(cases, month, title)} style={{ ...btnSecondary, flex: "none", padding: "0.25rem 0.6rem", fontSize: "0.78rem" }}><FileText size={14} /> Excel</button>}
       </div>
       {symptomCounts.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem" }}>
-          {symptomCounts.map(item => <span key={item.label} style={{ background: "#dbeafe", color: "#1d4ed8", borderRadius: 14, padding: "0.1rem 0.5rem", fontSize: "0.74rem", fontWeight: 700 }}>{item.label} {item.count}</span>)}
+          {symptomCounts.map(item => <span key={item.label} style={{ background: "#DCEFFF", color: "#0072D9", borderRadius: 14, padding: "0.1rem 0.5rem", fontSize: "0.74rem", fontWeight: 700 }}>{item.label} {item.count}</span>)}
         </div>
       )}
       {cases.length > 0 && (
@@ -5150,13 +5151,13 @@ function RollStatsPanel({ book, month, onMonth, title }) {
     <Card>
       <div style={{ display: "grid", gap: "0.8rem", minWidth: 0 }}>
         <div>
-          <div style={{ fontWeight: 800, color: "#0f172a", fontSize: "1.05rem" }}>{title || "สถิติการเช็คชื่อ"}</div>
+          <div style={{ fontWeight: 800, color: "#233862", fontSize: "1.05rem" }}>{title || "สถิติการเช็คชื่อ"}</div>
           <div style={{ color: "#64748b", fontSize: "0.82rem" }}>นับจากวันที่บันทึกการเช็คชื่อแล้ว</div>
         </div>
         <Field label="เดือน">
           <input type="month" value={month} max={todayISO().slice(0, 7)} onChange={event => onMonth(event.target.value)} style={{ ...periodInput, width: "100%", maxWidth: 240 }} />
         </Field>
-        <div style={{ fontWeight: 800, color: "#0f172a" }}>เช็คชื่อแล้ว {summary.totals.days} วัน</div>
+        <div style={{ fontWeight: 800, color: "#233862" }}>เช็คชื่อแล้ว {summary.totals.days} วัน</div>
         <RollCountChips counts={summary.totals} />
         {summary.totals.sick > 0 && <SickCasesPanel book={book} month={month} title={title} />}
         {book.students.length === 0 ? (
@@ -5169,7 +5170,7 @@ function RollStatsPanel({ book, month, onMonth, title }) {
               <div key={student.id} style={{ display: "grid", gap: "0.4rem", padding: "0.7rem 0", borderTop: "1px solid #f1f5f9", minWidth: 0 }}>
                 <div style={{ display: "flex", gap: "0.55rem", minWidth: 0 }}>
                   <span style={{ fontWeight: 800, color: "#64748b", minWidth: "1.6rem" }}>{student.number}</span>
-                  <span style={{ fontWeight: 800, color: "#0f172a", wordBreak: "break-word" }}>{studentLabel(student)}</span>
+                  <span style={{ fontWeight: 800, color: "#233862", wordBreak: "break-word" }}>{studentLabel(student)}</span>
                 </div>
                 <RollCountChips counts={counts} />
               </div>
@@ -5389,7 +5390,7 @@ function ActivityPlanPage({ employees, currentUser }) {
         {error && <ErrorBox>{error}</ErrorBox>}
         <Card padding="0.85rem">
           <div style={{ display: "grid", gap: "0.7rem" }}>
-            <div style={{ fontWeight: 800, fontSize: "1.05rem", color: "#0f172a" }}>{editing.row_id || plans.some(item => item.id === editing.id) ? "แก้ไขแผนกิจกรรม" : "เพิ่มแผนกิจกรรม"}</div>
+            <div style={{ fontWeight: 800, fontSize: "1.05rem", color: "#233862" }}>{editing.row_id || plans.some(item => item.id === editing.id) ? "แก้ไขแผนกิจกรรม" : "เพิ่มแผนกิจกรรม"}</div>
             <div style={{ fontWeight: 800, fontSize: "0.85rem", color: "#334155" }}>1. กิจกรรมที่จัด</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))", gap: "0.5rem" }}>
               <input value={editing.title} placeholder="ชื่อกิจกรรม" onChange={event => set({ title: event.target.value })} style={small} />
@@ -5403,13 +5404,13 @@ function ActivityPlanPage({ employees, currentUser }) {
               <div style={{ display: "flex", flexWrap: "wrap", gap: "0.3rem", maxHeight: 180, overflowY: "auto" }}>
                 {(employees || []).map(emp => {
                   const on = editing.organizers.includes(String(emp.id));
-                  return <button key={emp.id} type="button" aria-pressed={on} onClick={() => toggleOrganizer(String(emp.id))} style={{ border: `1px solid ${on ? "#1d4ed8" : "#cbd5e1"}`, background: on ? "#1d4ed8" : "#fff", color: on ? "#fff" : "#475569", borderRadius: 14, padding: "0.15rem 0.6rem", fontSize: "0.8rem", fontFamily: "inherit", cursor: "pointer" }}>{emp.name}</button>;
+                  return <button key={emp.id} type="button" aria-pressed={on} onClick={() => toggleOrganizer(String(emp.id))} style={{ border: `1px solid ${on ? "#0072D9" : "#cbd5e1"}`, background: on ? "#0072D9" : "#fff", color: on ? "#fff" : "#475569", borderRadius: 14, padding: "0.15rem 0.6rem", fontSize: "0.8rem", fontFamily: "inherit", cursor: "pointer" }}>{emp.name}</button>;
                 })}
               </div>
             </div>
             <div style={{ display: "flex", gap: "0.5rem" }}>
               <button type="button" onClick={() => { setEditing(null); setError(""); }} disabled={saving} style={{ ...btnSecondary, padding: "0.55rem" }}>ยกเลิก</button>
-              <button type="button" onClick={save} disabled={saving} style={{ ...btnPrimary, padding: "0.55rem", background: "linear-gradient(135deg, #2563eb, #1d4ed8)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}><Save size={16} /> {saving ? "กำลังบันทึก..." : "บันทึก"}</button>
+              <button type="button" onClick={save} disabled={saving} style={{ ...btnPrimary, padding: "0.55rem", background: "linear-gradient(135deg, #008CFF, #0072D9)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}><Save size={16} /> {saving ? "กำลังบันทึก..." : "บันทึก"}</button>
             </div>
           </div>
         </Card>
@@ -5420,9 +5421,9 @@ function ActivityPlanPage({ employees, currentUser }) {
   return (
     <div style={{ display: "grid", gap: "0.75rem", maxWidth: 900 }}>
       <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-        <div style={{ fontWeight: 800, fontSize: "1.15rem", color: "#0f172a", flex: 1 }}>แผนการจัดกิจกรรม <span style={{ color: "#64748b", fontSize: "0.85rem" }}>({plans.length})</span></div>
+        <div style={{ fontWeight: 800, fontSize: "1.15rem", color: "#233862", flex: 1 }}>แผนการจัดกิจกรรม <span style={{ color: "#64748b", fontSize: "0.85rem" }}>({plans.length})</span></div>
         <input value={query} placeholder="ค้นหากิจกรรม/ครู" onChange={event => setQuery(event.target.value)} style={{ ...small, width: "auto", flex: "1 1 160px", maxWidth: 260 }} />
-        <button type="button" onClick={() => { setEditing(emptyActivityPlan(currentUser)); setMessage(""); setError(""); }} style={{ ...btnPrimary, flex: "none", padding: "0.5rem 0.8rem", background: "linear-gradient(135deg, #2563eb, #1d4ed8)", color: "#fff", cursor: "pointer" }}><Plus size={16} /> เพิ่มแผน</button>
+        <button type="button" onClick={() => { setEditing(emptyActivityPlan(currentUser)); setMessage(""); setError(""); }} style={{ ...btnPrimary, flex: "none", padding: "0.5rem 0.8rem", background: "linear-gradient(135deg, #008CFF, #0072D9)", color: "#fff", cursor: "pointer" }}><Plus size={16} /> เพิ่มแผน</button>
       </div>
       {error && <ErrorBox>{error}</ErrorBox>}
       {message && <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", borderRadius: 10, padding: "0.5rem 0.8rem", color: "#166534", fontWeight: 700, fontSize: "0.88rem" }}>{message}</div>}
@@ -5435,8 +5436,8 @@ function ActivityPlanPage({ employees, currentUser }) {
         return (
           <Card key={plan.id} padding="0.6rem 0.8rem">
             <button type="button" onClick={() => setOpenId(open ? "" : plan.id)} aria-expanded={open} style={{ width: "100%", display: "flex", gap: "0.5rem", alignItems: "center", border: "none", background: "transparent", padding: 0, fontFamily: "inherit", textAlign: "left", cursor: "pointer" }}>
-              <span style={{ fontSize: "0.78rem", color: "#1d4ed8", fontWeight: 800, flex: "none" }}>{plan.date ? formatThaiDateKey(plan.date) : "-"}</span>
-              <span style={{ fontWeight: 800, color: "#0f172a", flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{plan.title}</span>
+              <span style={{ fontSize: "0.78rem", color: "#0072D9", fontWeight: 800, flex: "none" }}>{plan.date ? formatThaiDateKey(plan.date) : "-"}</span>
+              <span style={{ fontWeight: 800, color: "#233862", flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{plan.title}</span>
               {plan.pending && <span style={{ fontSize: "0.7rem", color: "#b45309", flex: "none" }}>รอซิงก์</span>}
               {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
@@ -5482,35 +5483,106 @@ function ActivityPlanPage({ employees, currentUser }) {
   );
 }
 
-// ─── ประเมินครู ───────────────────────────────────────────────────────────────
-// คะแนนผู้บริหารเก็บใน teaching_schedule (class_room = TEACHER_EVAL_ROOM, period = ปีการศึกษา*10+ภาค)
-// สำรองใน localStorage "hr_teacher_eval" และรวมด้วย updated_at แบบเดียวกับรายชื่อนักเรียน
+// ─── ประเมินครู (ระบบหัก/เพิ่มคะแนนรายภาคเรียน) ─────────────────────────────────
+// เริ่ม 100 คะแนน/ภาคเรียน หักอัตโนมัติจากข้อมูลในระบบ + ผู้บริหารหัก/เพิ่มเอง
+// เก็บใน teaching_schedule (class_room = TEACHER_EVAL_ROOM) แถวละ 1 ครู/ภาค (kind "deduct")
+// + แถวตั้งค่า (kind "deduct_settings", period 2) + แถวล็อกคะแนน (kind "deduct_lock")
+// ข้อมูลเดิมแบบ 60/40 (kind "eval"/"settings") ยังอยู่ในฐานข้อมูลแต่ไม่ถูกใช้
 const TEACHER_EVAL_ROOM = "__TEACHER_EVAL__";
-const EVAL_LOCAL_KEY = "hr_teacher_eval";
-const EVAL_SETTINGS_PERIOD = 1;
-const EVAL_AUTO_ITEMS = [
-  { key: "plan", label: "ส่งแผนตรงเวลา", max: 15 },
-  { key: "post", label: "บันทึกหลังสอนครบ", max: 10 },
-  { key: "roll", label: "เช็คชื่อนักเรียนครบ", max: 10 },
-  { key: "kpa", label: "ผล K/P/A ผ่าน", max: 10 },
-  { key: "training", label: "อบรม/พัฒนาตนเอง", max: 10 },
-  { key: "activity", label: "จัด/ร่วมกิจกรรม", max: 5 },
-];
-const EVAL_ADMIN_ITEMS = [
-  { key: "supervision", label: "ผลนิเทศ", max: 15 },
-  { key: "media", label: "คุณภาพสื่อ/ใบงาน", max: 5 },
-  { key: "discipline", label: "วินัย/ตรงเวลา", max: 5 },
-  { key: "teamwork", label: "ทำงานร่วมกัน/งานที่ได้รับมอบหมาย", max: 10 },
-  { key: "ethics", label: "จรรยาบรรณ", max: 5 },
-];
+const EVAL2_LOCAL_KEY = "hr_teacher_eval_v2";
+const EVAL2_SETTINGS_PERIOD = 2;
 const EVAL_LEVELS = [
   { min: 90, label: "ดีเยี่ยม", color: "#166534", bg: "#dcfce7" },
-  { min: 80, label: "ดีมาก", color: "#1d4ed8", bg: "#dbeafe" },
+  { min: 80, label: "ดีมาก", color: "#0072D9", bg: "#DCEFFF" },
   { min: 70, label: "ดี", color: "#0f766e", bg: "#ccfbf1" },
   { min: 60, label: "พอใช้", color: "#b45309", bg: "#fef3c7" },
   { min: -1, label: "ต้องปรับปรุง", color: "#b91c1c", bg: "#fee2e2" },
 ];
-const EVAL_DEFAULT_SETTINGS = { training_target_days: 5, activity_target: 2, ranges: {} };
+const EVAL_POINT_OPTIONS = [0.5, 1, 2, 3, 5, 10];
+const EVAL_CATEGORIES = [
+  { key: "dress", label: "การแต่งกาย", type: "deduct", points: 1 },
+  { key: "duty", label: "ไม่เข้าเวร", type: "deduct", points: 2 },
+  { key: "abandon", label: "ทิ้งงานที่ได้รับมอบหมาย", type: "deduct", points: 3 },
+  { key: "ethics", label: "ผิดวินัย/จรรยาบรรณ", type: "deduct", points: 5 },
+  { key: "supervision", label: "ผลนิเทศต่ำ", type: "deduct", points: 2 },
+  { key: "activity", label: "จัดกิจกรรม", type: "add", points: 2 },
+  { key: "award", label: "ผลงาน/รางวัล", type: "add", points: 5 },
+  { key: "substitute", label: "ช่วยสอนแทน", type: "add", points: 1 },
+  { key: "other", label: "อื่นๆ", type: "deduct", points: 1 },
+];
+const EVAL_AUTO_RULES = [
+  { key: "late_checkin", label: "ลงเวลาสาย", points: 0.5 },
+  { key: "no_checkin", label: "ไม่ลงเวลาเข้า (วันทำงาน ไม่นับวันลาที่อนุมัติ)", points: 1 },
+  { key: "plan_late", label: "ส่งแผนรายสัปดาห์สาย", points: 1 },
+  { key: "plan_missing", label: "ไม่ส่งแผนรายสัปดาห์", points: 2 },
+  { key: "post_missing", label: "ไม่มีบันทึกหลังสอน (ต่อคาบ)", points: 0.5 },
+  { key: "roll_missing", label: "ไม่เช็คชื่อนักเรียน (ต่อวัน)", points: 0.5 },
+];
+
+function defaultEval2Settings(workStart) {
+  const rules = {};
+  EVAL_AUTO_RULES.forEach(rule => { rules[rule.key] = { on: true, points: rule.points }; });
+  return { kind: "deduct_settings", work_start: String(workStart || "08:00").slice(0, 5), rules, holidays: [], ranges: {}, updated_at: "" };
+}
+
+function cleanEval2Settings(raw, workStart) {
+  const base = defaultEval2Settings(workStart);
+  if (!raw || typeof raw !== "object") return base;
+  const rules = {};
+  EVAL_AUTO_RULES.forEach(rule => {
+    const saved = raw.rules?.[rule.key];
+    const points = Number(saved?.points);
+    rules[rule.key] = { on: saved?.on !== false, points: points >= 0 && points <= 100 ? points : rule.points };
+  });
+  return {
+    kind: "deduct_settings",
+    work_start: /^\d{2}:\d{2}/.test(raw.work_start || "") ? raw.work_start.slice(0, 5) : base.work_start,
+    rules,
+    holidays: Array.isArray(raw.holidays) ? raw.holidays.filter(date => /^\d{4}-\d{2}-\d{2}$/.test(date)).slice(0, 200) : [],
+    ranges: raw.ranges && typeof raw.ranges === "object" ? raw.ranges : {},
+    updated_at: String(raw.updated_at || ""),
+    row_id: raw.row_id ?? null,
+    pending: !!raw.pending,
+  };
+}
+
+function cleanEvalEntry(raw) {
+  const category = EVAL_CATEGORIES.find(item => item.key === raw?.category) || EVAL_CATEGORIES[EVAL_CATEGORIES.length - 1];
+  const points = Number(raw?.points);
+  return {
+    id: String(raw?.id || newSupervisionId()),
+    date: /^\d{4}-\d{2}-\d{2}$/.test(raw?.date || "") ? raw.date : todayISO(),
+    category: category.key,
+    type: raw?.type === "add" ? "add" : "deduct",
+    points: points > 0 && points <= 100 ? points : category.points,
+    reason: String(raw?.reason || "").slice(0, 500),
+    by: String(raw?.by || "").slice(0, 120),
+    at: String(raw?.at || ""),
+  };
+}
+
+function cleanEvalBook(raw) {
+  return {
+    kind: "deduct",
+    teacher_id: String(raw?.teacher_id || ""),
+    sem: Number(raw?.sem) || 0,
+    entries: (Array.isArray(raw?.entries) ? raw.entries : []).map(cleanEvalEntry).slice(0, 500),
+    deleted: Array.isArray(raw?.deleted) ? raw.deleted.map(String).slice(-500) : [],
+    updated_at: String(raw?.updated_at || ""),
+    row_id: raw?.row_id ?? null,
+    pending: !!raw?.pending,
+  };
+}
+
+function mergeEvalBooks(left, right) {
+  if (!left) return right;
+  if (!right) return left;
+  const deleted = [...new Set([...left.deleted, ...right.deleted])];
+  const byId = new Map();
+  [...left.entries, ...right.entries].forEach(entry => { if (!deleted.includes(entry.id)) byId.set(entry.id, entry); });
+  const newer = left.updated_at >= right.updated_at ? left : right;
+  return { ...newer, entries: [...byId.values()], deleted, row_id: left.row_id || right.row_id };
+}
 
 function evalLevel(score) {
   return EVAL_LEVELS.find(level => score >= level.min) || EVAL_LEVELS[EVAL_LEVELS.length - 1];
@@ -5521,8 +5593,11 @@ function EvalLevelBadge({ score }) {
   return <span style={{ background: level.bg, color: level.color, fontWeight: 800, fontSize: "0.72rem", borderRadius: 20, padding: "0.12rem 0.5rem", whiteSpace: "nowrap" }}>{level.label}</span>;
 }
 
+// ภาคเรียน 1/2569 ปิดแล้ว (รีเซ็ตคะแนน 13 ต.ค. 2569) — เริ่มนับใหม่ที่ 2/2569
+const EVAL_FRESH_START = { term: 2, year: 2569 };
 function currentSemester() {
   const today = todayISO();
+  if (today < "2027-04-01") return { ...EVAL_FRESH_START };
   const year = Number(today.slice(0, 4));
   const month = Number(today.slice(5, 7));
   if (month >= 5 && month <= 10) return { term: 1, year: year + 543 };
@@ -5534,76 +5609,56 @@ function semesterKey(sem) {
   return sem.year * 10 + sem.term;
 }
 
-function defaultSemesterRange(sem) {
-  const ce = sem.year - 543;
-  return sem.term === 1 ? { start: `${ce}-05-16`, end: `${ce}-10-10` } : { start: `${ce}-11-01`, end: `${ce + 1}-03-31` };
-}
-
 function semesterRange(sem, settings) {
+  const ce = sem.year - 543;
+  const base = sem.term === 1 ? { start: `${ce}-05-16`, end: `${ce}-10-10` } : { start: `${ce}-11-01`, end: `${ce + 1}-03-31` };
   const saved = settings?.ranges?.[semesterKey(sem)];
-  const base = defaultSemesterRange(sem);
   return {
     start: /^\d{4}-\d{2}-\d{2}$/.test(saved?.start || "") ? saved.start : base.start,
     end: /^\d{4}-\d{2}-\d{2}$/.test(saved?.end || "") ? saved.end : base.end,
   };
 }
 
-function schoolDaysBetween(start, end) {
+function schoolDaysBetween(start, end, holidays = []) {
+  const skip = new Set(holidays);
   const days = [];
   let cursor = start;
   let guard = 0;
   while (cursor <= end && guard < 400) {
     const dow = new Date(`${cursor}T00:00:00`).getDay();
-    if (dow >= 1 && dow <= 5) days.push(cursor);
+    if (dow >= 1 && dow <= 5 && !skip.has(cursor)) days.push(cursor);
     cursor = shiftDateKey(cursor, 1);
     guard += 1;
   }
   return days;
 }
 
-function cleanEvalRecord(raw) {
-  const ratings = {};
-  EVAL_ADMIN_ITEMS.forEach(item => {
-    const value = Number(raw?.ratings?.[item.key]);
-    if (value >= 1 && value <= 5) ratings[item.key] = Math.round(value);
-  });
-  return {
-    kind: "eval",
-    teacher_id: String(raw?.teacher_id || ""),
-    sem: Number(raw?.sem) || 0,
-    ratings,
-    comment: String(raw?.comment || "").slice(0, 3000),
-    published: !!raw?.published,
-    rated_by: String(raw?.rated_by || "").slice(0, 120),
-    updated_at: String(raw?.updated_at || ""),
-    row_id: raw?.row_id ?? null,
-    pending: !!raw?.pending,
-  };
-}
-
-function cleanEvalSettings(raw) {
-  return {
-    kind: "settings",
-    training_target_days: Math.max(1, Number(raw?.training_target_days) || EVAL_DEFAULT_SETTINGS.training_target_days),
-    activity_target: Math.max(1, Number(raw?.activity_target) || EVAL_DEFAULT_SETTINGS.activity_target),
-    ranges: raw?.ranges && typeof raw.ranges === "object" ? raw.ranges : {},
-    updated_at: String(raw?.updated_at || ""),
-    row_id: raw?.row_id ?? null,
-    pending: !!raw?.pending,
-  };
-}
-
-function readEvalLocal() {
+const EVAL_RESET_FLAG_KEY = "hr_teacher_eval_reset_version";
+const EVAL_RESET_VERSION = "20261013";
+function applyEvalLocalReset() {
   try {
-    const parsed = JSON.parse(localStorage.getItem(EVAL_LOCAL_KEY) || "{}");
-    const records = {};
-    Object.entries(parsed.records || {}).forEach(([key, value]) => { records[key] = cleanEvalRecord(value); });
-    return { records, settings: parsed.settings ? cleanEvalSettings(parsed.settings) : null };
-  } catch { return { records: {}, settings: null }; }
+    if (localStorage.getItem(EVAL_RESET_FLAG_KEY) === EVAL_RESET_VERSION) return;
+    let keepSettings = null;
+    try { keepSettings = JSON.parse(localStorage.getItem(EVAL2_LOCAL_KEY) || "{}").settings || null; } catch { /* ignore */ }
+    localStorage.removeItem("hr_teacher_eval");
+    localStorage.removeItem(EVAL2_LOCAL_KEY);
+    if (keepSettings) localStorage.setItem(EVAL2_LOCAL_KEY, JSON.stringify({ books: {}, settings: keepSettings, locks: {} }));
+    localStorage.setItem(EVAL_RESET_FLAG_KEY, EVAL_RESET_VERSION);
+  } catch { /* ignore */ }
 }
 
-function writeEvalLocal(records, settings) {
-  try { localStorage.setItem(EVAL_LOCAL_KEY, JSON.stringify({ records, settings, saved_local_at: new Date().toISOString() })); } catch { /* ignore */ }
+function readEval2Local() {
+  applyEvalLocalReset();
+  try {
+    const parsed = JSON.parse(localStorage.getItem(EVAL2_LOCAL_KEY) || "{}");
+    const books = {};
+    Object.entries(parsed.books || {}).forEach(([key, value]) => { books[key] = cleanEvalBook(value); });
+    return { books, settings: parsed.settings || null, locks: parsed.locks || {} };
+  } catch { return { books: {}, settings: null, locks: {} }; }
+}
+
+function writeEval2Local(store) {
+  try { localStorage.setItem(EVAL2_LOCAL_KEY, JSON.stringify({ books: store.books, settings: store.settings, locks: store.locks, saved_local_at: new Date().toISOString() })); } catch { /* ignore */ }
 }
 
 async function writeEvalRow(employeeId, period, body, rowId) {
@@ -5618,9 +5673,15 @@ async function writeEvalRow(employeeId, period, body, rowId) {
   return result.data.id;
 }
 
-async function loadEvalStore(currentUser) {
-  const local = readEvalLocal();
-  let remoteRecords = {};
+async function loadEval2Store(currentUser) {
+  const local = readEval2Local();
+  let workStart = "08:00";
+  try {
+    const { data } = await supabase.from("settings").select("work_start").eq("id", 1).single();
+    if (data?.work_start) workStart = String(data.work_start).slice(0, 5);
+  } catch { /* ใช้ 08:00 */ }
+  const books = {};
+  const locks = {};
   let remoteSettings = null;
   let loadError = "";
   try {
@@ -5629,174 +5690,174 @@ async function loadEvalStore(currentUser) {
     (data || []).forEach(row => {
       let parsed = {};
       try { parsed = JSON.parse(row.subject || "{}"); } catch { return; }
-      if (parsed.kind === "settings") {
-        const settings = cleanEvalSettings({ ...parsed, row_id: row.id });
+      if (parsed.kind === "deduct_settings") {
+        const settings = cleanEval2Settings({ ...parsed, row_id: row.id }, workStart);
         if (!remoteSettings || settings.updated_at > remoteSettings.updated_at) remoteSettings = settings;
-      } else {
-        const record = cleanEvalRecord({ ...parsed, teacher_id: parsed.teacher_id || row.employee_id, sem: parsed.sem || row.period, row_id: row.id });
-        const key = `${record.sem}:${record.teacher_id}`;
-        if (!remoteRecords[key] || record.updated_at > remoteRecords[key].updated_at) remoteRecords[key] = record;
+      } else if (parsed.kind === "deduct_lock") {
+        locks[parsed.sem] = { ...parsed, row_id: row.id };
+      } else if (parsed.kind === "deduct") {
+        const book = cleanEvalBook({ ...parsed, row_id: row.id });
+        const key = `${book.sem}:${book.teacher_id}`;
+        books[key] = mergeEvalBooks(books[key], book);
       }
     });
   } catch (err) {
     loadError = err.message || "เชื่อมต่อไม่สำเร็จ";
   }
-  const records = { ...remoteRecords };
-  const isAdmin = isExecutiveUser(currentUser);
-  for (const [key, record] of Object.entries(local.records)) {
-    const remote = remoteRecords[key];
-    if (!remote || record.updated_at > remote.updated_at) {
-      records[key] = { ...record, row_id: remote?.row_id || record.row_id };
-      if (record.pending && isAdmin && !loadError) {
-        try {
-          records[key].row_id = await writeEvalRow(record.teacher_id, record.sem, record, records[key].row_id);
-          records[key].pending = false;
-        } catch { /* ยังเก็บในเครื่อง */ }
-      }
+  const canWrite = isExecutiveUser(currentUser) && !loadError;
+  for (const [key, book] of Object.entries(local.books)) {
+    const merged = mergeEvalBooks(books[key], book);
+    const remoteSame = books[key] && JSON.stringify(books[key].entries.map(e => e.id).sort()) === JSON.stringify(merged.entries.map(e => e.id).sort());
+    books[key] = merged;
+    if (canWrite && (book.pending || !remoteSame)) {
+      try { books[key].row_id = await writeEvalRow(merged.teacher_id, merged.sem, merged, merged.row_id); books[key].pending = false; } catch { books[key].pending = true; }
     }
   }
-  let settings = remoteSettings || cleanEvalSettings(EVAL_DEFAULT_SETTINGS);
-  if (local.settings && (!remoteSettings || local.settings.updated_at > remoteSettings.updated_at)) {
-    settings = { ...local.settings, row_id: remoteSettings?.row_id || local.settings.row_id };
-    if (local.settings.pending && isAdmin && !loadError) {
-      try { settings.row_id = await writeEvalRow(currentUser.id, EVAL_SETTINGS_PERIOD, settings, settings.row_id); settings.pending = false; } catch { /* ignore */ }
+  Object.entries(local.locks || {}).forEach(([sem, lock]) => { if (!locks[sem]) locks[sem] = lock; });
+  let settings = remoteSettings || cleanEval2Settings(null, workStart);
+  if (local.settings && (!remoteSettings || String(local.settings.updated_at) > remoteSettings.updated_at)) {
+    settings = cleanEval2Settings({ ...local.settings, row_id: remoteSettings?.row_id || local.settings.row_id }, workStart);
+    if (local.settings.pending && canWrite) {
+      try { settings.row_id = await writeEvalRow(currentUser.id, EVAL2_SETTINGS_PERIOD, settings, settings.row_id); settings.pending = false; } catch { /* ignore */ }
     }
   }
-  writeEvalLocal(records, settings);
-  return { records, settings, loadError };
+  const store = { books, settings, locks, loadError, systemWorkStart: workStart };
+  writeEval2Local(store);
+  return store;
 }
 
-async function loadEvalSources(range, teacherId) {
+async function loadEval2Sources(range) {
   const errors = [];
   const safe = async (label, fn) => { try { return await fn(); } catch (err) { errors.push(`${label}: ${err.message || "โหลดไม่สำเร็จ"}`); return []; } };
   const firstWeek = weekPeriodKey(mondayOf(range.start));
   const lastWeek = weekPeriodKey(mondayOf(range.end));
-  const [plans, rolls, training, activities] = await Promise.all([
+  const [attendance, leaves, plans, rolls] = await Promise.all([
+    safe("ลงเวลา", async () => {
+      const { data, error } = await supabase.from("attendance").select("employee_id, check_in, work_activity, training_start_date, training_end_date").gte("check_in", `${shiftDateKey(range.start, -60)}T00:00:00+07:00`).lte("check_in", `${range.end}T23:59:59+07:00`).limit(20000);
+      if (error) throw new Error(error.message);
+      return data || [];
+    }),
+    safe("การลา", async () => {
+      const { data, error } = await supabase.from("leaves").select("employee_id, start_date, end_date, status, duration_type").eq("status", "approved").lte("start_date", range.end);
+      if (error) throw new Error(error.message);
+      return data || [];
+    }),
     safe("แผนรายสัปดาห์", async () => {
-      let query = supabase.from("teaching_schedule").select("id, employee_id, period, start_time, subject, created_at").eq("class_room", SUPERVISION_SCHEDULE_ROOM).eq("day_of_week", 0).gte("period", firstWeek).lte("period", lastWeek);
-      if (teacherId) query = query.eq("employee_id", teacherId);
-      const { data, error } = await query;
+      const { data, error } = await supabase.from("teaching_schedule").select("id, employee_id, period, start_time, subject, created_at").eq("class_room", SUPERVISION_SCHEDULE_ROOM).eq("day_of_week", 0).gte("period", firstWeek).lte("period", lastWeek);
       if (error) throw new Error(error.message);
       return data || [];
     }),
-    safe("เช็คชื่อนักเรียน", async () => dedupeRollRows(await fetchRollRows(teacherId || null))),
-    safe("อบรม", async () => {
-      let query = supabase.from("attendance").select("employee_id, check_in, work_activity, training_start_date, training_end_date").eq("work_activity", "training").gte("check_in", `${shiftDateKey(range.start, -60)}T00:00:00`).lte("check_in", `${range.end}T23:59:59`);
-      if (teacherId) query = query.eq("employee_id", teacherId);
-      const { data, error } = await query;
-      if (error) throw new Error(error.message);
-      return data || [];
-    }),
-    safe("แผนกิจกรรม", async () => fetchActivityRows()),
+    safe("เช็คชื่อนักเรียน", async () => dedupeRollRows(await fetchRollRows(null))),
   ]);
-  return { plans, rolls, training, activities, errors };
+  return { attendance, leaves, plans, rolls, errors };
 }
 
-function computeAutoScores(teacherId, sources, range, settings) {
-  const today = todayISO();
-  const end = range.end < today ? range.end : today;
+function computeAutoEntries(teacherId, sources, range, settings) {
   const id = String(teacherId);
-  const result = {};
-  const hints = {};
-  const details = {};
-  // แผนรายสัปดาห์: ตรงเวลา = 1, สาย = 0.5
-  const weeks = [];
-  for (let monday = mondayOf(range.start); monday <= end; monday = shiftDateKey(monday, 7)) weeks.push(monday);
+  const today = todayISO();
+  const lastDay = shiftDateKey(today, -1) < range.end ? shiftDateKey(today, -1) : range.end;
+  if (lastDay < range.start) return []; // ยังไม่เริ่มเทอม
+  const rules = settings.rules;
+  const entries = [];
+  const add = (key, date, reason) => {
+    if (!rules[key]?.on || !(rules[key].points > 0)) return;
+    entries.push({ id: `auto-${key}-${date}-${entries.length}`, auto: true, date, type: "deduct", points: rules[key].points, category: key, reason });
+  };
+  const workDays = schoolDaysBetween(range.start, lastDay, settings.holidays);
+  // ลงเวลา: แถวแรกของวัน
+  const firstCheckIn = new Map();
+  const presentDays = new Set();
+  sources.attendance.filter(row => String(row.employee_id) === id).forEach(row => {
+    getAttendanceWorkDateKeys(row).forEach(key => presentDays.add(key));
+    if (!row.check_in || row.work_activity === "training") return;
+    const key = getDateKey(row.check_in);
+    if (!firstCheckIn.has(key) || row.check_in < firstCheckIn.get(key)) firstCheckIn.set(key, row.check_in);
+  });
+  const leaveDays = new Set();
+  sources.leaves.filter(row => String(row.employee_id) === id).forEach(row => {
+    let cursor = row.start_date;
+    const end = row.end_date && row.end_date >= row.start_date ? row.end_date : row.start_date;
+    let guard = 0;
+    while (cursor && cursor <= end && guard < 200) { leaveDays.add(cursor); cursor = shiftDateKey(cursor, 1); guard += 1; }
+  });
+  workDays.forEach(date => {
+    const checkIn = firstCheckIn.get(date);
+    if (checkIn) {
+      const late = checkLate(checkIn, settings.work_start);
+      if (late?.late) add("late_checkin", date, `เข้า ${fmtTime(checkIn)} เกินเวลา ${settings.work_start} ไป ${late.minutes} นาที`);
+    } else if (!presentDays.has(date) && !leaveDays.has(date)) {
+      add("no_checkin", date, "ไม่ลงเวลาเข้า (ไม่มีวันลาที่อนุมัติ)");
+    }
+  });
+  // แผนรายสัปดาห์ (ครบกำหนดวันอาทิตย์ก่อนสัปดาห์)
   const latest = new Map();
   sources.plans.filter(row => String(row.employee_id) === id).forEach(row => {
     const current = latest.get(row.period);
     if (!current || String(row.created_at || "") > String(current.created_at || "")) latest.set(row.period, row);
   });
-  let planPoints = 0;
-  let onTime = 0;
-  let lateCount = 0;
   const taught = [];
-  const supervision = [];
-  weeks.forEach(monday => {
+  for (let monday = mondayOf(range.start); monday <= range.end && shiftDateKey(monday, -1) < today; monday = shiftDateKey(monday, 7)) {
     const row = latest.get(weekPeriodKey(monday));
-    if (!row) return;
-    const plan = parseSupervisionPlan(row.subject, monday);
-    const status = supervisionStatusFromStartTime(row.start_time);
-    if (status === "submitted" || (status === "missing" && plan.status === "submitted" && !plan.late)) { planPoints += 1; onTime += 1; }
-    else if (status === "late" || (plan.status === "submitted" && plan.late)) { planPoints += 0.5; lateCount += 1; }
-    (plan.periods || []).forEach(period => {
-      if (!period.free && periodHasDetail(period) && period.teach_date >= range.start && period.teach_date <= end) taught.push(period);
+    const plan = row ? parseSupervisionPlan(row.subject, monday) : null;
+    const status = row ? supervisionStatusFromStartTime(row.start_time) : "missing";
+    const sent = status === "submitted" || status === "late" || plan?.status === "submitted";
+    const late = status === "late" || (plan?.status === "submitted" && plan?.late);
+    if (!sent) add("plan_missing", monday, `ไม่ส่งแผนสัปดาห์ ${formatThaiDateKey(monday)} – ${formatThaiDateKey(shiftDateKey(monday, 4))}`);
+    else if (late) add("plan_late", monday, `ส่งแผนสัปดาห์ ${formatThaiDateKey(monday)} – ${formatThaiDateKey(shiftDateKey(monday, 4))} สาย${plan?.submitted_at ? ` (ส่ง ${fmtDate(plan.submitted_at)} ${fmtTime(plan.submitted_at)})` : ""}`);
+    (plan?.periods || []).forEach(period => {
+      if (!period.free && periodHasDetail(period) && period.teach_date >= range.start && period.teach_date <= lastDay) taught.push(period);
     });
-    (plan.observations || []).forEach(item => supervision.push({ date: item.date, match: labelOf(OBSERVATION_MATCH, item.match), note: item.note, kind: "นิเทศในห้อง" }));
-    if (plan.signoff?.at) supervision.push({ date: bangkokDateKey(plan.signoff.at), match: "", note: plan.signoff.comment, kind: `รับทราบแผนสัปดาห์ ${formatThaiDateKey(monday)}` });
-  });
-  result.plan = weeks.length ? (planPoints / weeks.length) * 15 : 0;
-  details.plan = `ตรงเวลา ${onTime} · สาย ${lateCount} · จาก ${weeks.length} สัปดาห์`;
-  if (!weeks.length) hints.plan = "ภาคเรียนนี้ยังไม่เริ่ม";
-  else if (!latest.size) hints.plan = "ยังไม่มีแผนรายสัปดาห์ในระบบ";
-  // บันทึกหลังสอน
-  const withNote = taught.filter(period => postNoteHasData(period.post_note));
-  result.post = taught.length ? (withNote.length / taught.length) * 10 : 0;
-  details.post = `บันทึกแล้ว ${withNote.length}/${taught.length} คาบ`;
-  if (!taught.length) hints.post = "ยังไม่มีคาบสอนในแผน";
-  // K/P/A
-  const rates = [];
+  }
   taught.forEach(period => {
-    const note = cleanPostNote(period.post_note);
-    const total = Number(note.total);
-    if (!total) return;
-    POST_NOTE_DOMAINS.forEach(({ key }) => { if (String(note[key].pass).trim()) rates.push(Math.min(1, Number(note[key].pass) / total)); });
+    if (!postNoteHasData(period.post_note)) add("post_missing", period.teach_date, `ไม่มีบันทึกหลังสอน วันที่ ${formatThaiDateKey(period.teach_date)} คาบที่ ${period.period_no}${period.subject ? ` (${period.subject})` : ""}`);
   });
-  const kpaAvg = rates.length ? rates.reduce((sum, value) => sum + value, 0) / rates.length : 0;
-  result.kpa = kpaAvg * 10;
-  details.kpa = rates.length ? `ผ่านเฉลี่ย ${(kpaAvg * 100).toFixed(1)}%` : "-";
-  if (!rates.length) hints.kpa = "ยังไม่มีผล K/P/A ในบันทึกหลังสอน";
-  // เช็คชื่อ
-  const schoolDays = schoolDaysBetween(range.start, end);
+  // เช็คชื่อนักเรียน: เฉพาะครูที่มีรายชื่อนักเรียน
   const rollRow = sources.rolls.find(row => String(row.employee_id) === id);
   const book = rollRow ? parseRollBook(rollRow.subject) : null;
-  const savedDays = book ? Object.entries(book.days).filter(([date, day]) => day?.saved_at && date >= range.start && date <= end).length : 0;
-  result.roll = schoolDays.length ? Math.min(1, savedDays / schoolDays.length) * 10 : 0;
-  details.roll = `เช็คชื่อ ${savedDays}/${schoolDays.length} วันเรียน`;
-  if (!book || !book.students.length) hints.roll = "ยังไม่มีรายชื่อนักเรียน/การเช็คชื่อ";
-  // อบรม
-  const trainingDays = new Set();
-  sources.training.filter(row => String(row.employee_id) === id).forEach(row => {
-    getAttendanceWorkDateKeys(row).forEach(key => { if (key >= range.start && key <= range.end) trainingDays.add(key); });
-  });
-  const trainingTarget = settings.training_target_days;
-  result.training = Math.min(1, trainingDays.size / trainingTarget) * 10;
-  details.training = `อบรม ${trainingDays.size}/${trainingTarget} วัน (เป้า)`;
-  if (!trainingDays.size) hints.training = "ยังไม่มีการลงเวลา \"ไปอบรม\" ในภาคเรียนนี้";
-  // กิจกรรม
-  const activityCount = sources.activities.filter(plan => plan.organizers.map(String).includes(id) && plan.date >= range.start && plan.date <= range.end).length;
-  result.activity = Math.min(1, activityCount / settings.activity_target) * 5;
-  details.activity = `${activityCount}/${settings.activity_target} กิจกรรม (เป้า)`;
-  if (!activityCount) hints.activity = "ยังไม่มีแผนกิจกรรมที่เป็นผู้จัด";
-  Object.keys(result).forEach(key => { result[key] = Math.round(result[key] * 10) / 10; });
-  const total = Math.round(Object.values(result).reduce((sum, value) => sum + value, 0) * 10) / 10;
-  supervision.sort((a, b) => String(b.date).localeCompare(String(a.date)));
-  return { items: result, hints, details, total, supervision };
+  if (book && book.students.length) {
+    workDays.forEach(date => {
+      if (leaveDays.has(date)) return;
+      if (!book.days[date]?.saved_at) add("roll_missing", date, "ไม่ได้บันทึกเช็คชื่อนักเรียน");
+    });
+  }
+  return entries;
 }
 
-function adminScores(record) {
-  const items = {};
-  EVAL_ADMIN_ITEMS.forEach(item => {
-    const rating = record?.ratings?.[item.key];
-    items[item.key] = rating ? Math.round((rating / 5) * item.max * 10) / 10 : 0;
-  });
-  const total = Math.round(Object.values(items).reduce((sum, value) => sum + value, 0) * 10) / 10;
-  const rated = EVAL_ADMIN_ITEMS.filter(item => record?.ratings?.[item.key]).length;
-  return { items, total, rated };
+function evalSummary(entries) {
+  const deduct = entries.filter(entry => entry.type === "deduct").reduce((sum, entry) => sum + entry.points, 0);
+  const bonus = entries.filter(entry => entry.type === "add").reduce((sum, entry) => sum + entry.points, 0);
+  const score = Math.max(0, Math.min(100, 100 - deduct + bonus));
+  return { deduct: Math.round(deduct * 10) / 10, bonus: Math.round(bonus * 10) / 10, score: Math.round(score * 10) / 10 };
 }
 
-function EvalBar({ label, value, max, hint, detail }) {
-  const pct = max ? Math.min(100, (value / max) * 100) : 0;
-  const color = pct >= 80 ? "#16a34a" : pct >= 60 ? "#2563eb" : pct >= 40 ? "#d97706" : "#dc2626";
+function evalEntryLabel(entry) {
+  if (entry.auto) return EVAL_AUTO_RULES.find(rule => rule.key === entry.category)?.label || "อัตโนมัติ";
+  return EVAL_CATEGORIES.find(item => item.key === entry.category)?.label || "อื่นๆ";
+}
+
+function EvalScoreChart({ entries, range }) {
+  const width = 320;
+  const height = 90;
+  const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date));
+  const start = new Date(`${range.start}T00:00:00`).getTime();
+  const endKey = range.end < todayISO() ? range.end : todayISO();
+  const end = Math.max(start + 86400000, new Date(`${endKey}T00:00:00`).getTime());
+  const x = date => 4 + ((new Date(`${date}T00:00:00`).getTime() - start) / (end - start)) * (width - 8);
+  const y = score => 6 + (1 - score / 100) * (height - 12);
+  let score = 100;
+  const points = [[x(range.start), y(100)]];
+  sorted.forEach(entry => {
+    score = Math.max(0, Math.min(100, score + (entry.type === "add" ? entry.points : -entry.points)));
+    points.push([x(entry.date), y(score)]);
+  });
+  points.push([x(endKey), y(score)]);
+  const path = points.map(([px, py], index) => `${index ? "L" : "M"}${Math.max(0, Math.min(width, px)).toFixed(1)},${py.toFixed(1)}`).join(" ");
   return (
-    <div style={{ display: "grid", gap: "0.15rem" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", fontSize: "0.82rem" }}>
-        <span style={{ fontWeight: 700, color: "#0f172a" }}>{label}</span>
-        <span style={{ fontWeight: 800, color: "#0f172a", whiteSpace: "nowrap" }}>{value.toFixed(1)}/{max}</span>
-      </div>
-      <div style={{ height: 6, background: "#f1f5f9", borderRadius: 4, overflow: "hidden" }}><div style={{ width: `${pct}%`, height: "100%", background: color }} /></div>
-      {(detail || hint) && <div style={{ fontSize: "0.72rem", color: hint ? "#b45309" : "#64748b" }}>{detail}{hint ? ` · ${hint}` : ""}</div>}
-    </div>
+    <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", maxWidth: 480, height: "auto", background: "#f8fafc", borderRadius: 8 }} role="img" aria-label="กราฟคะแนนตลอดภาคเรียน">
+      {[90, 80, 70, 60].map(line => <line key={line} x1={0} x2={width} y1={y(line)} y2={y(line)} stroke="#e2e8f0" strokeDasharray="3 3" />)}
+      {[100, 60].map(line => <text key={line} x={width - 2} y={y(line) - 2} fontSize="8" textAnchor="end" fill="#94a3b8">{line}</text>)}
+      <path d={path} fill="none" stroke={evalLevel(score).color} strokeWidth="2" />
+    </svg>
   );
 }
 
@@ -5814,63 +5875,35 @@ function SemesterPicker({ sem, onChange, range }) {
         {years.map(year => <option key={year} value={year}>ปีการศึกษา {year}</option>)}
       </select>
       <span style={{ fontSize: "0.78rem", color: "#64748b" }}>{formatThaiDateKey(range.start)} – {formatThaiDateKey(range.end)}</span>
+      {todayISO() < range.start && <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "#0072D9", background: "#EAF5FF", border: "1px solid #B8E0FF", borderRadius: 999, padding: "0.15rem 0.6rem" }}>ยังไม่เริ่มเทอม · ทุกคน 100 คะแนน</span>}
     </div>
   );
 }
 
-function EvalBreakdown({ auto, admin, record, showAdmin }) {
-  const total = auto.total + (showAdmin ? admin.total : 0);
-  return (
-    <div style={{ display: "grid", gap: "0.75rem" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
-        <span style={{ fontSize: "1.8rem", fontWeight: 900, color: "#0f172a" }}>{total.toFixed(1)}</span>
-        <span style={{ color: "#64748b", fontSize: "0.85rem" }}>/ 100</span>
-        {showAdmin ? <EvalLevelBadge score={total} /> : <span style={{ fontSize: "0.75rem", color: "#b45309" }}>คะแนนผู้บริหารยังไม่เผยแพร่ (แสดงเฉพาะส่วนอัตโนมัติ)</span>}
-      </div>
-      <Card padding="0.75rem">
-        <div style={{ fontWeight: 800, color: "#1d4ed8", marginBottom: "0.5rem", fontSize: "0.9rem" }}>ส่วนที่ 1 คะแนนอัตโนมัติ {auto.total.toFixed(1)}/60</div>
-        <div style={{ display: "grid", gap: "0.55rem" }}>
-          {EVAL_AUTO_ITEMS.map(item => <EvalBar key={item.key} label={item.label} value={auto.items[item.key] || 0} max={item.max} hint={auto.hints[item.key]} detail={auto.details[item.key]} />)}
-        </div>
-      </Card>
-      {showAdmin && (
-        <Card padding="0.75rem">
-          <div style={{ fontWeight: 800, color: "#7c3aed", marginBottom: "0.5rem", fontSize: "0.9rem" }}>ส่วนที่ 2 ผู้บริหารประเมิน {admin.total.toFixed(1)}/40</div>
-          <div style={{ display: "grid", gap: "0.55rem" }}>
-            {EVAL_ADMIN_ITEMS.map(item => <EvalBar key={item.key} label={item.label} value={admin.items[item.key] || 0} max={item.max} detail={record?.ratings?.[item.key] ? `ระดับ ${record.ratings[item.key]}/5` : "ยังไม่ประเมิน"} />)}
-          </div>
-          {record?.comment && <div style={{ marginTop: "0.6rem" }}><div style={{ fontWeight: 800, fontSize: "0.85rem" }}>ข้อเสนอแนะ</div><FullText value={record.comment} /></div>}
-        </Card>
-      )}
-    </div>
-  );
-}
-
-function TeacherEvalPage({ employees, currentUser }) {
+function TeacherEvalPage({ employees, currentUser, initialSelected = "" }) {
   if (!isExecutiveUser(currentUser)) return <NoAccessCard />;
-  return <TeacherEvalAdmin employees={employees} currentUser={currentUser} />;
+  return <TeacherDeductPage key={initialSelected || "list"} employees={employees} currentUser={currentUser} initialSelected={initialSelected} />;
 }
 
-function TeacherEvalAdmin({ employees, currentUser }) {
-  const isAdmin = true;
+function TeacherDeductPage({ employees, currentUser, initialSelected = "" }) {
   const [sem, setSem] = useState(currentSemester);
   const [store, setStore] = useState(null);
   const [sources, setSources] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [selected, setSelected] = useState("");
-  const [sort, setSort] = useState({ key: "total", dir: -1 });
-  const [draft, setDraft] = useState(null);
-  const [saving, setSaving] = useState(false);
+  const [selected, setSelected] = useState(initialSelected ? String(initialSelected) : "");
+  const [sort, setSort] = useState({ key: "score", dir: 1 });
   const [showSettings, setShowSettings] = useState(false);
-  const settings = store?.settings || cleanEvalSettings(EVAL_DEFAULT_SETTINGS);
+  const [form, setForm] = useState(() => ({ date: todayISO(), category: "dress", type: "deduct", points: 1, reason: "" }));
+  const settings = store?.settings || cleanEval2Settings(null, "08:00");
   const range = semesterRange(sem, settings);
   const semKey = semesterKey(sem);
+  const lock = store?.locks?.[semKey] || null;
 
   useEffect(() => {
     let active = true;
-    loadEvalStore(currentUser).then(result => {
+    loadEval2Store(currentUser).then(result => {
       if (!active) return;
       setStore(result);
       if (result.loadError) setError(`โหลดคะแนนจากฐานข้อมูลไม่ได้ (${result.loadError}) ใช้ข้อมูลในเครื่องนี้`);
@@ -5882,7 +5915,7 @@ function TeacherEvalAdmin({ employees, currentUser }) {
     if (!store) return undefined;
     let active = true;
     setLoading(true);
-    loadEvalSources(range, isAdmin ? null : currentUser.id).then(result => {
+    loadEval2Sources(range).then(result => {
       if (!active) return;
       setSources(result);
       if (result.errors.length) setError(`โหลดบางส่วนไม่ได้: ${result.errors.join(" · ")}`);
@@ -5890,94 +5923,128 @@ function TeacherEvalAdmin({ employees, currentUser }) {
     });
     return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store === null, range.start, range.end, isAdmin, currentUser.id]);
+  }, [store === null, range.start, range.end]);
 
-  const persistStore = (records, nextSettings) => {
-    const next = { ...store, records, settings: nextSettings };
+  const updateStore = patch => {
+    const next = { ...store, ...patch };
     setStore(next);
-    writeEvalLocal(records, nextSettings);
+    writeEval2Local(next);
+    return next;
   };
 
   const teachers = (employees || []).filter(emp => !isExecutiveUser(emp));
   const rows = (sources ? teachers : []).map(emp => {
-    const auto = computeAutoScores(emp.id, sources, range, settings);
-    const record = store?.records?.[`${semKey}:${emp.id}`] || null;
-    const admin = adminScores(record);
-    const total = Math.round((auto.total + admin.total) * 10) / 10;
-    return { emp, auto, admin, record, total, name: emp.name || "", status: record?.published ? 2 : admin.rated ? 1 : 0 };
+    const key = `${semKey}:${emp.id}`;
+    const frozen = lock?.teachers?.[emp.id];
+    const manual = (store?.books?.[key]?.entries || []).filter(entry => entry.date >= range.start && entry.date <= range.end);
+    const entries = frozen ? frozen.entries : [...computeAutoEntries(emp.id, sources, range, settings), ...manual];
+    const summary = evalSummary(entries);
+    return { emp, entries, ...summary, name: emp.name || "" };
   });
 
-  const saveRecord = async (publish) => {
-    if (!draft) return;
-    const record = cleanEvalRecord({ ...draft, published: publish ?? draft.published, rated_by: currentUser.name, updated_at: new Date().toISOString(), teacher_id: selected, sem: semKey });
-    setSaving(true);
-    setError("");
+  const saveBook = async (teacherId, mutate, success) => {
+    const key = `${semKey}:${teacherId}`;
+    const current = store.books[key] || cleanEvalBook({ teacher_id: teacherId, sem: semKey });
+    const next = cleanEvalBook({ ...mutate(current), teacher_id: teacherId, sem: semKey, updated_at: new Date().toISOString(), row_id: current.row_id });
     try {
-      record.row_id = await writeEvalRow(selected, semKey, record, record.row_id);
-      record.pending = false;
-      setMessage(record.published ? "บันทึกและเผยแพร่คะแนนแล้ว" : "บันทึกคะแนนแล้ว (ยังไม่เผยแพร่)");
+      next.row_id = await writeEvalRow(teacherId, semKey, next, next.row_id);
+      next.pending = false;
+      setMessage(success);
+      setError("");
     } catch (err) {
-      record.pending = true;
+      next.pending = true;
       setError(`${err.message || "บันทึกไม่สำเร็จ"} · เก็บไว้ในเครื่องนี้แล้ว จะซิงก์เมื่อเปิดหน้านี้ครั้งถัดไป`);
     }
-    persistStore({ ...store.records, [`${semKey}:${selected}`]: record }, settings);
-    setDraft(record);
-    setSaving(false);
+    updateStore({ books: { ...store.books, [key]: next } });
   };
 
-  const saveSettings = async (patch) => {
-    const next = cleanEvalSettings({ ...settings, ...patch, updated_at: new Date().toISOString() });
+  const addEntry = () => {
+    if (lock) return;
+    if (form.category === "other" && !form.reason.trim()) { setError("หมวด อื่นๆ ต้องกรอกเหตุผล"); return; }
+    if (form.date < range.start || form.date > range.end) { setError("วันที่ต้องอยู่ในภาคเรียนที่เลือก"); return; }
+    const entry = cleanEvalEntry({ ...form, id: newSupervisionId(), by: currentUser.name, at: new Date().toISOString() });
+    saveBook(selected, book => ({ ...book, entries: [...book.entries, entry] }), `${entry.type === "add" ? "เพิ่ม" : "หัก"} ${entry.points} คะแนนแล้ว`);
+    setForm(current => ({ ...current, reason: "" }));
+  };
+
+  const deleteEntry = entry => {
+    if (lock || !window.confirm(`ลบรายการ "${evalEntryLabel(entry)}" ${entry.points} คะแนน?`)) return;
+    saveBook(selected, book => ({ ...book, entries: book.entries.filter(item => item.id !== entry.id), deleted: [...book.deleted, entry.id] }), "ลบรายการแล้ว");
+  };
+
+  const saveSettings = async patch => {
+    const next = cleanEval2Settings({ ...settings, ...patch, updated_at: new Date().toISOString() }, store.systemWorkStart);
     try {
-      next.row_id = await writeEvalRow(currentUser.id, EVAL_SETTINGS_PERIOD, next, next.row_id);
+      next.row_id = await writeEvalRow(currentUser.id, EVAL2_SETTINGS_PERIOD, next, settings.row_id);
       next.pending = false;
       setMessage("บันทึกการตั้งค่าแล้ว");
     } catch (err) {
       next.pending = true;
       setError(`${err.message || "บันทึกไม่สำเร็จ"} · เก็บไว้ในเครื่องนี้แล้ว`);
     }
-    persistStore(store.records, next);
+    updateStore({ settings: next });
   };
 
-  const exportExcel = () => {
-    const data = sorted.map((row, index) => {
-      const out = { "ลำดับ": index + 1, "ชื่อ": row.name };
-      EVAL_AUTO_ITEMS.forEach(item => { out[`${item.label} (${item.max})`] = row.auto.items[item.key]; });
-      out["อัตโนมัติ (60)"] = row.auto.total;
-      EVAL_ADMIN_ITEMS.forEach(item => { out[`${item.label} (${item.max})`] = row.admin.items[item.key]; });
-      out["ผู้บริหาร (40)"] = row.admin.total;
-      out["รวม (100)"] = row.total;
-      out["ระดับ"] = evalLevel(row.total).label;
-      out["สถานะ"] = ["ยังไม่ประเมิน", "ร่าง", "เผยแพร่แล้ว"][row.status];
-      out["ข้อเสนอแนะ"] = row.record?.comment || "";
-      return out;
-    });
-    const workbook = xlsxUtils.book_new();
-    xlsxUtils.book_append_sheet(workbook, xlsxUtils.json_to_sheet(data), "ประเมินครู");
-    writeWorkbookFile(workbook, `ประเมินครู_ภาค${sem.term}_${sem.year}.xlsx`);
+  const toggleLock = async () => {
+    if (lock) {
+      if (!window.confirm("ปลดล็อกคะแนนภาคเรียนนี้? คะแนนจะคำนวณใหม่จากข้อมูลปัจจุบัน")) return;
+      try { if (lock.row_id) await supabase.from("teaching_schedule").delete().eq("id", lock.row_id); } catch { /* ignore */ }
+      const locks = { ...store.locks };
+      delete locks[semKey];
+      updateStore({ locks });
+      setMessage("ปลดล็อกแล้ว");
+      return;
+    }
+    if (!window.confirm(`ล็อกคะแนนภาคเรียน ${sem.term}/${sem.year}? คะแนนทุกคนจะถูกตรึงไว้ เพิ่ม/ลบรายการไม่ได้จนกว่าจะปลดล็อก`)) return;
+    const teachersSnap = {};
+    rows.forEach(row => { teachersSnap[row.emp.id] = { entries: row.entries, score: row.score, deduct: row.deduct, bonus: row.bonus }; });
+    const next = { kind: "deduct_lock", sem: semKey, at: new Date().toISOString(), by: currentUser.name, teachers: teachersSnap };
+    try {
+      next.row_id = await writeEvalRow(currentUser.id, semKey, next, null);
+      setMessage("ล็อกคะแนนแล้ว");
+    } catch (err) {
+      setError(`${err.message || "ล็อกไม่สำเร็จ"} · ล็อกไว้ในเครื่องนี้เท่านั้น`);
+    }
+    updateStore({ locks: { ...store.locks, [semKey]: next } });
   };
 
   const sorted = [...rows].sort((a, b) => {
-    const pick = row => (sort.key === "name" ? row.name : sort.key === "auto" ? row.auto.total : sort.key === "admin" ? row.admin.total : sort.key === "status" ? row.status : row.total);
-    const left = pick(a);
-    const right = pick(b);
+    const left = a[sort.key];
+    const right = b[sort.key];
     return (typeof left === "string" ? left.localeCompare(right, "th") : left - right) * sort.dir;
   });
-  const head = (key, label) => (
-    <th onClick={() => setSort(current => ({ key, dir: current.key === key ? -current.dir : (key === "name" ? 1 : -1) }))} style={{ padding: "0.3rem 0.45rem", fontSize: "0.75rem", fontWeight: 800, color: "#475569", textAlign: key === "name" ? "left" : "center", whiteSpace: "nowrap", cursor: "pointer", borderBottom: "1px solid #e2e8f0" }}>
+
+  const exportExcel = () => {
+    const summary = sorted.map((row, index) => ({ "ลำดับ": index + 1, "ชื่อ": row.name, "หัก": row.deduct, "เพิ่ม": row.bonus, "คงเหลือ (100)": row.score, "ระดับ": evalLevel(row.score).label }));
+    const all = [];
+    sorted.forEach(row => [...row.entries].sort((a, b) => a.date.localeCompare(b.date)).forEach(entry => all.push({
+      "ชื่อ": row.name, "วันที่": entry.date, "ประเภท": entry.auto ? "อัตโนมัติ" : "บันทึกโดยผู้บริหาร", "หมวด": evalEntryLabel(entry),
+      "หัก/เพิ่ม": entry.type === "add" ? "เพิ่ม" : "หัก", "คะแนน": entry.type === "add" ? entry.points : -entry.points, "เหตุผล": entry.reason, "ผู้บันทึก": entry.by || "", "เวลาบันทึก": entry.at ? `${fmtDate(entry.at)} ${fmtTime(entry.at)}` : "",
+    })));
+    const workbook = xlsxUtils.book_new();
+    xlsxUtils.book_append_sheet(workbook, xlsxUtils.json_to_sheet(summary), "สรุป");
+    xlsxUtils.book_append_sheet(workbook, xlsxUtils.json_to_sheet(all.length ? all : [{ "ชื่อ": "ไม่มีรายการ" }]), "รายการทั้งหมด");
+    writeWorkbookFile(workbook, `ประเมินครู_ภาค${sem.term}_${sem.year}${lock ? "_ล็อก" : ""}.xlsx`);
+  };
+
+  const head = (key, label, align = "center") => (
+    <th onClick={() => setSort(current => ({ key, dir: current.key === key ? -current.dir : (key === "name" ? 1 : key === "deduct" ? -1 : 1) }))} style={{ padding: "0.3rem 0.45rem", fontSize: "0.75rem", fontWeight: 800, color: "#475569", textAlign: align, whiteSpace: "nowrap", cursor: "pointer", borderBottom: "1px solid #e2e8f0" }}>
       {label}{sort.key === key ? (sort.dir > 0 ? " ▲" : " ▼") : ""}
     </th>
   );
+  const small = { ...inputStyle, padding: "0.35rem 0.5rem", fontSize: "0.85rem" };
+  const header = (
+    <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+      <div style={{ fontWeight: 800, fontSize: "1.15rem", color: "#233862", flex: "1 1 160px" }}>ประเมินครู <span style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: 600 }}>เริ่ม 100 คะแนน/ภาคเรียน</span></div>
+      <SemesterPicker sem={sem} onChange={next => { setSem(next); setSelected(""); }} range={range} />
+    </div>
+  );
   const banner = (
     <>
+      {lock && <div style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 10, padding: "0.45rem 0.75rem", fontSize: "0.82rem", fontWeight: 700, color: "#334155" }}>🔒 ล็อกคะแนนแล้วโดย {lock.by || "-"} · {lock.at ? `${fmtDate(lock.at)} ${fmtTime(lock.at)}` : ""}</div>}
       {error && <ErrorBox>{error}</ErrorBox>}
       {message && <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", borderRadius: 10, padding: "0.5rem 0.8rem", color: "#166534", fontWeight: 700, fontSize: "0.85rem" }}>{message}</div>}
     </>
-  );
-  const header = (
-    <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-      <div style={{ fontWeight: 800, fontSize: "1.15rem", color: "#0f172a", flex: "1 1 160px" }}>ประเมินครู</div>
-      <SemesterPicker sem={sem} onChange={next => { setSem(next); setSelected(""); setDraft(null); }} range={range} />
-    </div>
   );
 
   if (!store || loading || !sources) return <div style={{ display: "grid", gap: "0.75rem", maxWidth: 960 }}>{header}<Card><div style={{ color: "#64748b" }}>กำลังคำนวณคะแนน...</div></Card></div>;
@@ -5985,52 +6052,71 @@ function TeacherEvalAdmin({ employees, currentUser }) {
   if (selected) {
     const row = rows.find(item => String(item.emp.id) === String(selected));
     if (!row) return null;
-    const current = draft || cleanEvalRecord({ ...(row.record || {}), teacher_id: selected, sem: semKey });
-    const setRating = (key, value) => setDraft({ ...current, ratings: { ...current.ratings, [key]: value } });
-    const admin = adminScores(current);
+    const level = evalLevel(row.score);
+    const timeline = [...row.entries].sort((a, b) => b.date.localeCompare(a.date) || String(b.at || "").localeCompare(String(a.at || "")));
+    const pickCategory = key => {
+      const category = EVAL_CATEGORIES.find(item => item.key === key);
+      setForm(current => ({ ...current, category: key, type: category.type, points: category.points }));
+    };
     return (
       <div style={{ display: "grid", gap: "0.75rem", maxWidth: 820 }}>
         {header}
         {banner}
-        <button type="button" onClick={() => { setSelected(""); setDraft(null); setMessage(""); }} style={{ ...btnSecondary, flex: "none", width: "fit-content", padding: "0.35rem 0.7rem", fontSize: "0.82rem" }}><ChevronLeft size={14} /> กลับไปตาราง</button>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-          <span style={{ fontWeight: 800, fontSize: "1.05rem" }}>{row.name}</span>
-          <span style={{ fontSize: "0.85rem", color: "#64748b" }}>รวม {(row.auto.total + admin.total).toFixed(1)}/100</span>
-          <EvalLevelBadge score={row.auto.total + admin.total} />
-          {current.published && <span style={{ fontSize: "0.72rem", color: "#166534", fontWeight: 800 }}>เผยแพร่แล้ว</span>}
-        </div>
-        <EvalBreakdown auto={row.auto} admin={admin} record={current} showAdmin={false} />
-        <Card padding="0.75rem">
-          <div style={{ fontWeight: 800, color: "#7c3aed", marginBottom: "0.5rem", fontSize: "0.9rem" }}>ส่วนที่ 2 ผู้บริหารประเมิน {admin.total.toFixed(1)}/40 <span style={{ color: "#64748b", fontWeight: 400, fontSize: "0.75rem" }}>(1 = ต้องปรับปรุง … 5 = ดีเยี่ยม)</span></div>
-          <div style={{ display: "grid", gap: "0.5rem" }}>
-            {EVAL_ADMIN_ITEMS.map(item => (
-              <div key={item.key} style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" }}>
-                <span style={{ flex: "1 1 180px", fontSize: "0.85rem", fontWeight: 700 }}>{item.label} <span style={{ color: "#64748b", fontWeight: 400 }}>({admin.items[item.key].toFixed(1)}/{item.max})</span></span>
-                <div style={{ display: "flex", gap: "0.2rem" }}>
-                  {[1, 2, 3, 4, 5].map(value => {
-                    const on = current.ratings[item.key] === value;
-                    return <button key={value} type="button" aria-pressed={on} aria-label={`${item.label} ${value}`} onClick={() => setRating(item.key, value)} style={{ width: 32, height: 30, borderRadius: 8, border: `1px solid ${on ? "#7c3aed" : "#e2e8f0"}`, background: on ? "#7c3aed" : "#fff", color: on ? "#fff" : "#475569", fontWeight: 800, fontFamily: "inherit", cursor: "pointer" }}>{value}</button>;
-                  })}
-                </div>
-              </div>
-            ))}
-            <Field label="ข้อเสนอแนะ">
-              <textarea value={current.comment} onChange={event => setDraft({ ...current, comment: event.target.value })} style={{ ...inputStyle, minHeight: 80, resize: "vertical", fontSize: "0.9rem" }} />
-            </Field>
-            <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-              <button type="button" disabled={saving} onClick={() => saveRecord(false)} style={{ ...btnSecondary, flex: "1 1 140px", padding: "0.5rem" }}><Save size={15} /> บันทึก (ยังไม่เผยแพร่)</button>
-              <button type="button" disabled={saving} onClick={() => saveRecord(true)} style={{ ...btnPrimary, flex: "1 1 140px", padding: "0.5rem", background: "linear-gradient(135deg, #16a34a, #15803d)", color: "#fff", cursor: "pointer" }}><CheckCircle size={15} /> บันทึกและเผยแพร่</button>
+        <button type="button" onClick={() => { setSelected(""); setMessage(""); setError(""); }} style={{ ...btnSecondary, flex: "none", width: "fit-content", padding: "0.35rem 0.7rem", fontSize: "0.82rem" }}><ChevronLeft size={14} /> กลับไปตาราง</button>
+        <Card padding="0.8rem">
+          <div style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ textAlign: "center", minWidth: 110 }}>
+              <div style={{ fontSize: "2.6rem", fontWeight: 900, color: level.color, lineHeight: 1 }}>{row.score.toFixed(1)}</div>
+              <div style={{ fontSize: "0.75rem", color: "#64748b" }}>/ 100</div>
+              <div style={{ marginTop: "0.25rem" }}><EvalLevelBadge score={row.score} /></div>
+            </div>
+            <div style={{ flex: "1 1 240px", display: "grid", gap: "0.3rem" }}>
+              <div style={{ fontWeight: 800, fontSize: "1.05rem" }}>{row.name}</div>
+              <div style={{ fontSize: "0.82rem", color: "#475569" }}>หัก <strong style={{ color: "#dc2626" }}>-{row.deduct}</strong> · เพิ่ม <strong style={{ color: "#16a34a" }}>+{row.bonus}</strong> · {row.entries.length} รายการ</div>
+              <EvalScoreChart entries={row.entries} range={range} />
             </div>
           </div>
         </Card>
+        <EvalExplain entries={row.entries} deduct={row.deduct} bonus={row.bonus} score={row.score} />
+        {!lock && (
+          <Card padding="0.75rem">
+            <div style={{ fontWeight: 800, fontSize: "0.9rem", marginBottom: "0.5rem" }}>บันทึกหัก/เพิ่มคะแนน</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))", gap: "0.45rem", alignItems: "center" }}>
+              <input type="date" aria-label="วันที่" value={form.date} min={range.start} max={range.end} onChange={event => setForm(current => ({ ...current, date: event.target.value }))} style={small} />
+              <select aria-label="หมวด" value={form.category} onChange={event => pickCategory(event.target.value)} style={small}>
+                {EVAL_CATEGORIES.map(item => <option key={item.key} value={item.key}>{item.label}{item.type === "add" ? " (เพิ่ม)" : ""}</option>)}
+              </select>
+              <div style={{ display: "flex", gap: "0.25rem" }}>
+                {[["deduct", "หัก", "#dc2626", "#fee2e2"], ["add", "เพิ่ม", "#16a34a", "#dcfce7"]].map(([value, label, color, bg]) => (
+                  <button key={value} type="button" aria-pressed={form.type === value} onClick={() => setForm(current => ({ ...current, type: value }))} style={{ flex: 1, padding: "0.35rem", borderRadius: 8, border: `1px solid ${form.type === value ? color : "#e2e8f0"}`, background: form.type === value ? bg : "#fff", color: form.type === value ? color : "#64748b", fontWeight: 800, fontFamily: "inherit", cursor: "pointer" }}>{label}</button>
+                ))}
+              </div>
+              <select aria-label="คะแนน" value={form.points} onChange={event => setForm(current => ({ ...current, points: Number(event.target.value) }))} style={small}>
+                {EVAL_POINT_OPTIONS.map(value => <option key={value} value={value}>{value} คะแนน</option>)}
+              </select>
+            </div>
+            <div style={{ display: "flex", gap: "0.45rem", marginTop: "0.45rem" }}>
+              <input value={form.reason} placeholder={form.category === "other" ? "เหตุผล (จำเป็น)" : "เหตุผล/รายละเอียด"} onChange={event => setForm(current => ({ ...current, reason: event.target.value }))} style={{ ...small, flex: 1 }} />
+              <button type="button" onClick={addEntry} style={{ ...btnPrimary, flex: "none", padding: "0.4rem 0.9rem", background: form.type === "add" ? "linear-gradient(135deg, #16a34a, #15803d)" : "linear-gradient(135deg, #dc2626, #b91c1c)", color: "#fff", cursor: "pointer" }}><Plus size={15} /> {form.type === "add" ? `+${form.points}` : `-${form.points}`}</button>
+            </div>
+          </Card>
+        )}
         <Card padding="0.75rem">
-          <div style={{ fontWeight: 800, fontSize: "0.9rem", marginBottom: "0.4rem" }}>ข้อมูลนิเทศอ้างอิง ({row.auto.supervision.length})</div>
-          {row.auto.supervision.length === 0 ? <div style={{ color: "#94a3b8", fontSize: "0.85rem" }}>ยังไม่มีบันทึกการนิเทศในภาคเรียนนี้</div> : (
-            <div style={{ display: "grid", gap: "0.35rem" }}>
-              {row.auto.supervision.map((item, index) => (
-                <div key={index} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "0.4rem 0.55rem", fontSize: "0.82rem" }}>
-                  <div style={{ fontWeight: 800 }}>{item.date ? formatThaiDateKey(item.date) : "-"} · {item.kind}{item.match ? ` · ${item.match}` : ""}</div>
-                  <FullText value={item.note} />
+          <div style={{ fontWeight: 800, fontSize: "0.9rem", marginBottom: "0.4rem" }}>ไทม์ไลน์ ({timeline.length})</div>
+          {timeline.length === 0 ? <div style={{ color: "#94a3b8", fontSize: "0.85rem" }}>ยังไม่มีรายการ คะแนนเต็ม 100</div> : (
+            <div style={{ display: "grid" }}>
+              {timeline.map(entry => (
+                <div key={entry.id} style={{ display: "grid", gridTemplateColumns: "4.6rem minmax(0,1fr) auto", gap: "0.45rem", alignItems: "start", padding: "0.3rem 0", borderTop: "1px solid #f1f5f9", fontSize: "0.8rem" }}>
+                  <span style={{ color: "#64748b", whiteSpace: "nowrap" }}>{formatThaiDateKey(entry.date)}</span>
+                  <div style={{ minWidth: 0 }}>
+                    <span style={{ fontWeight: 800, color: "#233862" }}>{evalEntryLabel(entry)}</span>
+                    {entry.auto ? <span style={{ marginLeft: "0.3rem", background: "#e0e7ff", color: "#4338ca", fontSize: "0.65rem", fontWeight: 800, borderRadius: 10, padding: "0.05rem 0.4rem" }}>อัตโนมัติ</span> : <span style={{ marginLeft: "0.3rem", color: "#94a3b8", fontSize: "0.7rem" }}>โดย {entry.by || "-"}{entry.at ? ` · ${fmtDate(entry.at)} ${fmtTime(entry.at)}` : ""}</span>}
+                    {entry.reason && <div style={{ color: "#475569", wordBreak: "break-word" }}>{entry.reason}</div>}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                    <span style={{ fontWeight: 900, color: entry.type === "add" ? "#16a34a" : "#dc2626", whiteSpace: "nowrap" }}>{entry.type === "add" ? "+" : "-"}{entry.points}</span>
+                    {!entry.auto && !lock && <button type="button" aria-label="ลบรายการ" onClick={() => deleteEntry(entry)} style={{ width: 22, height: 22, border: "none", borderRadius: "50%", background: "#fee2e2", color: "#b91c1c", display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}><X size={12} /></button>}
+                  </div>
                 </div>
               ))}
             </div>
@@ -6040,7 +6126,7 @@ function TeacherEvalAdmin({ employees, currentUser }) {
     );
   }
 
-  const distribution = EVAL_LEVELS.map(level => ({ ...level, count: rows.filter(row => evalLevel(row.total).label === level.label).length }));
+  const distribution = EVAL_LEVELS.map(level => ({ ...level, count: rows.filter(row => evalLevel(row.score).label === level.label).length }));
   return (
     <div style={{ display: "grid", gap: "0.75rem", maxWidth: 960 }}>
       {header}
@@ -6050,36 +6136,399 @@ function TeacherEvalAdmin({ employees, currentUser }) {
         <span style={{ flex: 1 }} />
         <button type="button" onClick={() => setShowSettings(value => !value)} style={{ ...btnSecondary, flex: "none", padding: "0.3rem 0.6rem", fontSize: "0.8rem" }}><Settings size={14} /> ตั้งค่า</button>
         <button type="button" onClick={exportExcel} style={{ ...btnSecondary, flex: "none", padding: "0.3rem 0.6rem", fontSize: "0.8rem" }}><FileText size={14} /> Excel</button>
+        <button type="button" onClick={toggleLock} style={{ ...btnSecondary, flex: "none", padding: "0.3rem 0.6rem", fontSize: "0.8rem", color: lock ? "#b45309" : "#334155" }}><Lock size={14} /> {lock ? "ปลดล็อก" : "ล็อกคะแนน"}</button>
       </div>
       {showSettings && (
         <Card padding="0.75rem">
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 170px), 1fr))", gap: "0.5rem", alignItems: "end" }}>
-            <Field label="เป้าอบรม (วัน/ภาคเรียน)"><input type="number" min={1} defaultValue={settings.training_target_days} onBlur={event => saveSettings({ training_target_days: Number(event.target.value) })} style={{ ...inputStyle, padding: "0.4rem" }} /></Field>
-            <Field label="เป้ากิจกรรม (ครั้ง/ภาคเรียน)"><input type="number" min={1} defaultValue={settings.activity_target} onBlur={event => saveSettings({ activity_target: Number(event.target.value) })} style={{ ...inputStyle, padding: "0.4rem" }} /></Field>
-            <Field label="เริ่มภาคเรียน"><input type="date" key={`s${semKey}`} defaultValue={range.start} onBlur={event => saveSettings({ ranges: { ...settings.ranges, [semKey]: { ...range, start: event.target.value } } })} style={{ ...inputStyle, padding: "0.4rem" }} /></Field>
-            <Field label="สิ้นสุดภาคเรียน"><input type="date" key={`e${semKey}`} defaultValue={range.end} onBlur={event => saveSettings({ ranges: { ...settings.ranges, [semKey]: { ...range, end: event.target.value } } })} style={{ ...inputStyle, padding: "0.4rem" }} /></Field>
+          <div style={{ fontWeight: 800, fontSize: "0.88rem", marginBottom: "0.4rem" }}>หักอัตโนมัติ (คะแนนต่อครั้ง)</div>
+          <div style={{ display: "grid", gap: "0.3rem" }}>
+            {EVAL_AUTO_RULES.map(rule => (
+              <div key={rule.key} style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.82rem" }}>
+                <input type="checkbox" checked={settings.rules[rule.key].on} onChange={event => saveSettings({ rules: { ...settings.rules, [rule.key]: { ...settings.rules[rule.key], on: event.target.checked } } })} />
+                <span style={{ flex: 1 }}>{rule.label}</span>
+                <input type="number" step="0.5" min="0" key={`${rule.key}-${settings.updated_at}`} defaultValue={settings.rules[rule.key].points} onBlur={event => saveSettings({ rules: { ...settings.rules, [rule.key]: { ...settings.rules[rule.key], points: Number(event.target.value) } } })} style={{ ...small, width: 70 }} />
+              </div>
+            ))}
           </div>
-          <div style={{ fontSize: "0.72rem", color: "#64748b", marginTop: "0.35rem" }}>อบรมนับจากการลงเวลาแบบ "ไปอบรม" (1 วัน ≈ 6 ชม. เป้า 5 วัน ≈ 30 ชม.) · กิจกรรมนับจากแผนการจัดกิจกรรมที่ครูเป็นผู้จัด</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 160px), 1fr))", gap: "0.5rem", marginTop: "0.6rem", alignItems: "end" }}>
+            <Field label={`เวลาเริ่มงาน (ระบบ ${store.systemWorkStart})`}><input type="time" key={`ws-${settings.updated_at}`} defaultValue={settings.work_start} onBlur={event => saveSettings({ work_start: event.target.value })} style={small} /></Field>
+            <Field label="เริ่มภาคเรียน"><input type="date" key={`s${semKey}`} defaultValue={range.start} onBlur={event => saveSettings({ ranges: { ...settings.ranges, [semKey]: { ...range, start: event.target.value } } })} style={small} /></Field>
+            <Field label="สิ้นสุดภาคเรียน"><input type="date" key={`e${semKey}`} defaultValue={range.end} onBlur={event => saveSettings({ ranges: { ...settings.ranges, [semKey]: { ...range, end: event.target.value } } })} style={small} /></Field>
+          </div>
+          <Field label="วันหยุด (ไม่นับขาด/ไม่เช็คชื่อ) ใส่ปี-เดือน-วัน คั่นด้วยเว้นวรรคหรือขึ้นบรรทัด">
+            <textarea key={`h-${settings.updated_at}`} defaultValue={settings.holidays.join("\n")} onBlur={event => saveSettings({ holidays: event.target.value.split(/[\s,]+/).filter(Boolean) })} style={{ ...small, minHeight: 50 }} />
+          </Field>
         </Card>
       )}
       <div style={{ overflowX: "auto", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10 }}>
-        <table style={{ width: "100%", minWidth: 560, borderCollapse: "collapse", fontSize: "0.82rem" }}>
-          <thead><tr style={{ background: "#f8fafc" }}>{head("name", "ชื่อ")}{head("auto", "อัตโนมัติ/60")}{head("admin", "ผู้บริหาร/40")}{head("total", "รวม")}{head("total", "ระดับ")}{head("status", "สถานะ")}</tr></thead>
+        <table style={{ width: "100%", minWidth: 460, borderCollapse: "collapse", fontSize: "0.82rem" }}>
+          <thead><tr style={{ background: "#f8fafc" }}>{head("name", "ชื่อ", "left")}{head("deduct", "หัก")}{head("bonus", "เพิ่ม")}{head("score", "คงเหลือ /100")}{head("score", "ระดับ")}</tr></thead>
           <tbody>
-            {sorted.length === 0 && <tr><td colSpan={6} style={{ padding: "1rem", textAlign: "center", color: "#94a3b8" }}>ยังไม่มีครูในระบบ</td></tr>}
+            {sorted.length === 0 && <tr><td colSpan={5} style={{ padding: "1rem", textAlign: "center", color: "#94a3b8" }}>ยังไม่มีครูในระบบ</td></tr>}
             {sorted.map(row => (
-              <tr key={row.emp.id} onClick={() => { setSelected(String(row.emp.id)); setDraft(null); setMessage(""); }} style={{ borderTop: "1px solid #f1f5f9", cursor: "pointer" }}>
-                <td style={{ padding: "0.3rem 0.45rem", fontWeight: 700, color: "#1d4ed8", whiteSpace: "nowrap" }}>{row.name}</td>
-                <td style={{ padding: "0.3rem 0.45rem", textAlign: "center" }}>{row.auto.total.toFixed(1)}</td>
-                <td style={{ padding: "0.3rem 0.45rem", textAlign: "center" }}>{row.admin.rated ? row.admin.total.toFixed(1) : "-"}</td>
-                <td style={{ padding: "0.3rem 0.45rem", textAlign: "center", fontWeight: 800 }}>{row.total.toFixed(1)}</td>
-                <td style={{ padding: "0.3rem 0.45rem", textAlign: "center" }}><EvalLevelBadge score={row.total} /></td>
-                <td style={{ padding: "0.3rem 0.45rem", textAlign: "center", whiteSpace: "nowrap", fontSize: "0.75rem", color: ["#94a3b8", "#b45309", "#166534"][row.status] }}>{["ยังไม่ประเมิน", "ร่าง", "เผยแพร่แล้ว"][row.status]}{row.record?.pending ? " · รอซิงก์" : ""}</td>
+              <tr key={row.emp.id} onClick={() => { setSelected(String(row.emp.id)); setMessage(""); setError(""); }} style={{ borderTop: "1px solid #f1f5f9", cursor: "pointer" }}>
+                <td style={{ padding: "0.3rem 0.45rem", fontWeight: 700, color: "#0072D9", whiteSpace: "nowrap" }}>{row.name}</td>
+                <td style={{ padding: "0.3rem 0.45rem", textAlign: "center", color: row.deduct ? "#dc2626" : "#94a3b8" }}>{row.deduct ? `-${row.deduct}` : "0"}</td>
+                <td style={{ padding: "0.3rem 0.45rem", textAlign: "center", color: row.bonus ? "#16a34a" : "#94a3b8" }}>{row.bonus ? `+${row.bonus}` : "0"}</td>
+                <td style={{ padding: "0.3rem 0.45rem", textAlign: "center", fontWeight: 900, color: evalLevel(row.score).color }}>{row.score.toFixed(1)}</td>
+                <td style={{ padding: "0.3rem 0.45rem", textAlign: "center" }}><EvalLevelBadge score={row.score} /></td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      <div style={{ fontSize: "0.72rem", color: "#64748b" }}>หักอัตโนมัติคิดถึงเมื่อวาน (วันนี้ยังไม่นับ) · ลงเวลาจากตาราง attendance เทียบเวลาเริ่มงาน {settings.work_start} น. · วันลาที่อนุมัติไม่ถูกหัก</div>
+    </div>
+  );
+}
+
+// ─── หน้าผู้บริหาร (Executive dashboard) ─────────────────────────────────────
+function evalExplainGroups(entries) {
+  const groups = new Map();
+  entries.forEach(entry => {
+    const key = `${entry.auto ? "auto" : "manual"}:${entry.type}:${entry.category}`;
+    if (!groups.has(key)) groups.set(key, { key, type: entry.type, auto: !!entry.auto, label: evalEntryLabel(entry), items: [] });
+    groups.get(key).items.push(entry);
+  });
+  return [...groups.values()].map(group => {
+    const items = [...group.items].sort((a, b) => a.date.localeCompare(b.date));
+    const total = Math.round(items.reduce((sum, entry) => sum + entry.points, 0) * 10) / 10;
+    const uniform = items.every(entry => entry.points === items[0].points);
+    return { ...group, items, total, uniform, unit: items[0]?.points || 0 };
+  }).sort((a, b) => b.total - a.total);
+}
+
+function EvalExplain({ entries, deduct, bonus, score }) {
+  const [open, setOpen] = useState({});
+  const groups = evalExplainGroups(entries);
+  const section = (type, title, color, bg) => {
+    const list = groups.filter(group => group.type === type);
+    return (
+      <div style={{ display: "grid", gap: "0.35rem" }}>
+        <div style={{ fontWeight: 800, fontSize: "0.85rem", color }}>{title}</div>
+        {list.length === 0 ? <div style={{ fontSize: "0.8rem", color: "#94a3b8" }}>ไม่มี</div> : list.map(group => {
+          const isOpen = !!open[group.key];
+          const sign = type === "add" ? "+" : "-";
+          return (
+            <div key={group.key} style={{ border: `1px solid ${bg}`, borderRadius: 12, overflow: "hidden" }}>
+              <button type="button" aria-expanded={isOpen} onClick={() => setOpen(current => ({ ...current, [group.key]: !isOpen }))} style={{ width: "100%", display: "flex", gap: "0.5rem", alignItems: "center", padding: "0.5rem 0.7rem", background: bg, border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+                {isOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                <span style={{ flex: 1, fontWeight: 700, color: "#233862", fontSize: "0.85rem" }}>{group.label}{group.auto ? " (อัตโนมัติ)" : ""}</span>
+                <span style={{ fontSize: "0.82rem", color: "#475569", whiteSpace: "nowrap" }}>{group.items.length} ครั้ง{group.uniform ? ` × ${group.unit}` : ""} = <strong style={{ color }}>{sign}{group.total}</strong></span>
+              </button>
+              {isOpen && (
+                <div style={{ display: "grid", background: "#fff" }}>
+                  {group.items.map(entry => (
+                    <div key={entry.id} style={{ display: "grid", gridTemplateColumns: "6.5rem minmax(0,1fr) auto", gap: "0.45rem", padding: "0.35rem 0.7rem", borderTop: "1px solid #f1f5f9", fontSize: "0.8rem" }}>
+                      <span style={{ color: "#64748b" }}>{formatThaiDateKey(entry.date)}</span>
+                      <span style={{ color: "#334155", wordBreak: "break-word" }}>
+                        {entry.reason || evalEntryLabel(entry)}
+                        {!entry.auto && <span style={{ display: "block", color: "#94a3b8", fontSize: "0.72rem" }}>บันทึกโดย {entry.by || "-"}{entry.at ? ` · ${fmtDate(entry.at)} ${fmtTime(entry.at)}` : ""}</span>}
+                      </span>
+                      <span style={{ fontWeight: 800, color }}>{sign}{entry.points}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+  return (
+    <Card padding="0.8rem">
+      <div style={{ fontWeight: 800, fontSize: "1rem", color: "#233862", marginBottom: "0.55rem" }}>ทำไมคะแนนเหลือ {score.toFixed(1)}</div>
+      <div style={{ display: "grid", gap: "0.75rem" }}>
+        {section("deduct", "รายการที่หักคะแนน", "#dc2626", "#fee2e2")}
+        {section("add", "รายการที่เพิ่มคะแนน", "#16a34a", "#dcfce7")}
+        <div style={{ background: "#EAF5FF", border: "1px solid #B8E0FF", borderRadius: 12, padding: "0.6rem 0.8rem", fontWeight: 800, color: "#233862", fontSize: "0.92rem" }}>
+          100 - หัก <span style={{ color: "#dc2626" }}>{deduct}</span> + เพิ่ม <span style={{ color: "#16a34a" }}>{bonus}</span> = คงเหลือ <span style={{ color: "#0072D9" }}>{score.toFixed(1)}</span>
+          {100 - deduct + bonus !== score && <span style={{ display: "block", fontSize: "0.75rem", color: "#64748b", fontWeight: 600 }}>คะแนนถูกจำกัดไว้ระหว่าง 0–100</span>}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+const EXEC_PLAN_STATUS = {
+  submitted: { label: "ส่งแล้ว", color: "#166534", bg: "#dcfce7" },
+  late: { label: "ส่งช้า", color: "#b45309", bg: "#fef3c7" },
+  missing: { label: "ยังไม่ส่ง", color: "#b91c1c", bg: "#fee2e2" },
+};
+
+function ExecPill({ color, bg, children }) {
+  return <span style={{ background: bg, color, fontWeight: 800, fontSize: "0.72rem", borderRadius: 20, padding: "0.12rem 0.55rem", whiteSpace: "nowrap" }}>{children}</span>;
+}
+
+function ExecSection({ title, icon: Icon, right, children }) {
+  return (
+    <Card padding="1rem">
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.7rem", flexWrap: "wrap" }}>
+        {Icon && <span style={{ width: 30, height: 30, borderRadius: 10, background: "linear-gradient(135deg, #008CFF, #3EBFFB)", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><Icon size={16} /></span>}
+        <div style={{ fontWeight: 800, color: "#233862", fontSize: "1rem", flex: 1 }}>{title}</div>
+        {right}
+      </div>
+      {children}
+    </Card>
+  );
+}
+
+function ExecPlanModal({ teacher, weekStart, onClose }) {
+  const [state, setState] = useState({ loading: true, plan: null, error: "" });
+  useEffect(() => {
+    let active = true;
+    fetchSupervisionRows(teacher.id, weekStart)
+      .then(rows => { if (active) setState({ loading: false, plan: rows[0] ? parseSupervisionPlan(rows[0].subject, weekStart) : null, error: "" }); })
+      .catch(err => { if (active) setState({ loading: false, plan: loadLocalPlan(teacher.id, weekStart), error: err.message || "โหลดแผนไม่สำเร็จ" }); });
+    return () => { active = false; };
+  }, [teacher.id, weekStart]);
+  const plan = state.plan;
+  return (
+    <div role="dialog" aria-modal="true" style={{ position: "fixed", inset: 0, background: "rgba(35,56,98,0.45)", zIndex: 1000, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1rem", overflowY: "auto" }} onClick={onClose}>
+      <div onClick={event => event.stopPropagation()} style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 860, padding: "1rem", boxShadow: "0 4px 24px rgba(0,140,255,0.15)", display: "grid", gap: "0.8rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <div style={{ flex: 1, fontWeight: 800, color: "#233862", fontSize: "1.05rem" }}>แผนของ {teacher.name} · สัปดาห์ {formatThaiDateKey(weekStart)} <span style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: 600 }}>(อ่านอย่างเดียว)</span></div>
+          <button type="button" aria-label="ปิด" onClick={onClose} style={{ border: "none", background: "#f1f5f9", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><X size={16} /></button>
+        </div>
+        {state.error && <ErrorBox>{state.error}</ErrorBox>}
+        {state.loading ? <div style={{ color: "#64748b" }}>กำลังโหลดแผน...</div> : !plan ? <div style={{ color: "#64748b" }}>ยังไม่มีแผนสัปดาห์นี้</div> : (
+          <>
+            {plan.submitted_at && <div style={{ fontSize: "0.8rem", color: "#64748b" }}>ส่งล่าสุด {fmtDate(plan.submitted_at)} {fmtTime(plan.submitted_at)}{plan.late ? " · ส่งช้า" : ""}</div>}
+            {plan.signoff?.at && (
+              <div style={{ background: "#EAF5FF", border: "1px solid #B8E0FF", borderRadius: 12, padding: "0.7rem" }}>
+                <div style={{ fontWeight: 800, color: "#0072D9" }}>รับทราบแล้ว · {plan.signoff.by || "ฝ่ายวิชาการ"} · {fmtDate(plan.signoff.at)} {fmtTime(plan.signoff.at)}</div>
+                <FullText value={plan.signoff.comment} />
+              </div>
+            )}
+            {(plan.observations || []).map((item, index) => (
+              <div key={item.id || index} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 12, padding: "0.7rem" }}>
+                <div style={{ fontWeight: 800, color: "#233862" }}>นิเทศในห้อง {formatThaiDateKey(item.date)} · {labelOf(OBSERVATION_MATCH, item.match) || "-"} · {item.by || "ฝ่ายวิชาการ"}</div>
+                <FullText value={item.note} />
+              </div>
+            ))}
+            {plan.kind === "kindergarten" ? <KindergartenWeekView plan={plan} weekStart={weekStart} /> : <SupervisionWeekView periods={plan.periods} weekStart={weekStart} />}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEval, onOpenLeave }) {
+  const [date, setDate] = useState(() => todayISO());
+  const [attendance, setAttendance] = useState([]);
+  const [attLoading, setAttLoading] = useState(true);
+  const [evalRows, setEvalRows] = useState(null);
+  const [evalNote, setEvalNote] = useState("");
+  const [plans, setPlans] = useState(null);
+  const [planWeek, setPlanWeek] = useState(() => mondayOf(todayISO()));
+  const [planTeacher, setPlanTeacher] = useState(null);
+  const [error, setError] = useState("");
+  const people = (employees || []);
+  const teachers = people.filter(emp => !isExecutiveUser(emp));
+  const workStart = String(settings?.work_start || "08:00").slice(0, 5);
+  const grace = Number(settings?.late_grace_minutes || 0);
+
+  useEffect(() => {
+    let active = true;
+    setAttLoading(true);
+    supabase.from("attendance").select("employee_id, check_in, check_out, work_activity").gte("check_in", `${date}T00:00:00+07:00`).lte("check_in", `${date}T23:59:59+07:00`).then(({ data, error: err }) => {
+      if (!active) return;
+      if (err) setError(`ลงเวลา: ${err.message}`);
+      setAttendance(data || []);
+      setAttLoading(false);
+    });
+    return () => { active = false; };
+  }, [date]);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const store = await loadEval2Store(currentUser);
+      const sem = currentSemester();
+      const range = semesterRange(sem, store.settings);
+      const sources = await loadEval2Sources(range);
+      if (!active) return;
+      const semKey = semesterKey(sem);
+      const lock = store.locks?.[semKey];
+      const rows = teachers.map(emp => {
+        const frozen = lock?.teachers?.[emp.id];
+        const manual = (store.books?.[`${semKey}:${emp.id}`]?.entries || []).filter(entry => entry.date >= range.start && entry.date <= range.end);
+        const entries = frozen ? frozen.entries : [...computeAutoEntries(emp.id, sources, range, store.settings), ...manual];
+        return { emp, ...evalSummary(entries) };
+      }).sort((a, b) => a.score - b.score || String(a.emp.name).localeCompare(String(b.emp.name), "th"));
+      setEvalRows(rows);
+      setEvalNote(`ภาคเรียน ${sem.term}/${sem.year}${todayISO() < range.start ? " · ยังไม่เริ่มเทอม" : ""}`);
+    })().catch(err => { if (active) { setEvalRows([]); setError(`ประเมินครู: ${err.message}`); } });
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser, employees]);
+
+  useEffect(() => {
+    let active = true;
+    setPlans(null);
+    supabase.from("teaching_schedule").select("id, employee_id, period, start_time, subject, created_at").eq("class_room", SUPERVISION_SCHEDULE_ROOM).eq("day_of_week", 0).eq("period", weekPeriodKey(planWeek)).then(({ data, error: err }) => {
+      if (!active) return;
+      if (err) setError(`แผนการสอน: ${err.message}`);
+      const latest = new Map();
+      (data || []).forEach(row => {
+        const key = String(row.employee_id);
+        if (!latest.has(key) || String(row.created_at || "") > String(latest.get(key).created_at || "")) latest.set(key, row);
+      });
+      setPlans(latest);
+    });
+    return () => { active = false; };
+  }, [planWeek]);
+
+  // ลงเวลา
+  const firstRow = new Map();
+  attendance.forEach(row => {
+    const key = String(row.employee_id);
+    const current = firstRow.get(key);
+    if (!current || row.check_in < current.check_in) firstRow.set(key, { ...row, check_out: row.check_out || current?.check_out || null });
+    else if (row.check_out && (!current.check_out || row.check_out > current.check_out)) current.check_out = row.check_out;
+  });
+  const leaveOn = day => (leaves || []).filter(row => row.status === "approved" && row.start_date <= day && (row.end_date || row.start_date) >= day);
+  const onLeave = new Set(leaveOn(date).map(row => String(row.employee_id)));
+  const attRows = people.map(emp => {
+    const row = firstRow.get(String(emp.id));
+    const late = row && row.work_activity !== "training" ? checkLate(row.check_in, workStart, grace) : null;
+    return { emp, row, late: late?.late ? late.minutes : 0 };
+  });
+  const checkedIn = attRows.filter(item => item.row).sort((a, b) => a.row.check_in.localeCompare(b.row.check_in));
+  const lateList = checkedIn.filter(item => item.late > 0);
+  const outList = checkedIn.filter(item => item.row.check_out);
+  const notIn = attRows.filter(item => !item.row);
+
+  // การลา
+  const today = todayISO();
+  const todayLeaves = leaveOn(today);
+  const upcoming = (leaves || []).filter(row => row.status === "approved" && row.start_date > today && row.start_date <= shiftDateKey(today, 30)).sort((a, b) => a.start_date.localeCompare(b.start_date));
+  const pending = (leaves || []).filter(row => row.status === "pending");
+  const leaveLine = row => `${row.employees?.name || people.find(emp => String(emp.id) === String(row.employee_id))?.name || "-"} · ${row.leave_type || "ลา"} · ${formatThaiDateKey(row.start_date)}${row.end_date && row.end_date !== row.start_date ? ` – ${formatThaiDateKey(row.end_date)}` : ""}`;
+
+  // แผน
+  const planStatus = emp => {
+    const row = plans?.get(String(emp.id));
+    if (!row) return "missing";
+    const status = supervisionStatusFromStartTime(row.start_time);
+    if (status === "submitted" || status === "late") return status;
+    const plan = parseSupervisionPlan(row.subject, planWeek);
+    if (plan?.status === "submitted") return plan.late ? "late" : "submitted";
+    return "missing";
+  };
+  const planCounts = { submitted: 0, late: 0, missing: 0 };
+  if (plans) teachers.forEach(emp => { planCounts[planStatus(emp)] += 1; });
+
+  const distribution = EVAL_LEVELS.map(level => ({ ...level, count: (evalRows || []).filter(row => evalLevel(row.score).label === level.label).length }));
+  const maxCount = Math.max(1, ...distribution.map(level => level.count));
+  const tile = (label, value, color) => (
+    <div style={{ flex: "1 1 110px", background: "#F3F8FD", border: "1px solid #E4EEF8", borderRadius: 14, padding: "0.6rem 0.75rem" }}>
+      <div style={{ fontSize: "0.75rem", color: "#596068" }}>{label}</div>
+      <div style={{ fontSize: "1.5rem", fontWeight: 900, color }}>{value}</div>
+    </div>
+  );
+  const nameCell = emp => <span style={{ fontWeight: 700, color: "#233862" }}>{emp.name}</span>;
+  const listBox = { display: "grid", gap: "0.3rem", maxHeight: 260, overflowY: "auto" };
+  const line = { display: "flex", justifyContent: "space-between", gap: "0.5rem", fontSize: "0.83rem", padding: "0.3rem 0.1rem", borderTop: "1px solid #f1f5f9" };
+
+  return (
+    <div style={{ display: "grid", gap: "1rem" }}>
+      <div style={{ background: "linear-gradient(90deg, #008CFF, #3EBFFB)", borderRadius: 18, padding: "1rem 1.2rem", color: "#fff", boxShadow: "0 4px 24px rgba(0,140,255,0.2)" }}>
+        <div style={{ fontSize: "1.25rem", fontWeight: 800 }}>หน้าผู้บริหาร</div>
+        <div style={{ fontSize: "0.85rem", opacity: 0.9 }}>สวัสดี {currentUser?.name} · ภาพรวมวันที่ {formatThaiDateKey(today)}</div>
+      </div>
+      {error && <ErrorBox>{error}</ErrorBox>}
+      <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 1fr))" }}>
+        <ExecSection title="การประเมินครู" icon={TrendingUp} right={<span style={{ fontSize: "0.75rem", color: "#64748b" }}>{evalNote}</span>}>
+          {!evalRows ? <div style={{ color: "#64748b" }}>กำลังคำนวณคะแนน...</div> : (
+            <div style={{ display: "grid", gap: "0.7rem" }}>
+              <div style={{ display: "grid", gap: "0.3rem" }} aria-label="กราฟการกระจายระดับ">
+                {distribution.map(level => (
+                  <div key={level.label} style={{ display: "grid", gridTemplateColumns: "6.5rem 1fr 2rem", alignItems: "center", gap: "0.4rem", fontSize: "0.78rem" }}>
+                    <span style={{ color: level.color, fontWeight: 700 }}>{level.label}</span>
+                    <div style={{ background: "#F3F8FD", borderRadius: 8, height: 14 }}><div style={{ width: `${(level.count / maxCount) * 100}%`, background: level.color, opacity: 0.8, height: "100%", borderRadius: 8, minWidth: level.count ? 6 : 0 }} /></div>
+                    <span style={{ fontWeight: 800, color: "#233862", textAlign: "right" }}>{level.count}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={listBox}>
+                {evalRows.map(row => (
+                  <button key={row.emp.id} type="button" onClick={() => onOpenEval(row.emp.id)} style={{ ...line, background: "none", border: "none", borderTop: "1px solid #f1f5f9", cursor: "pointer", fontFamily: "inherit", textAlign: "left", alignItems: "center" }}>
+                    {nameCell(row.emp)}
+                    <span style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}><strong style={{ color: evalLevel(row.score).color }}>{row.score.toFixed(1)}</strong><EvalLevelBadge score={row.score} /><ChevronRight size={14} color="#94a3b8" /></span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </ExecSection>
+
+        <ExecSection title="ลงเวลา" icon={Clock} right={<input type="date" aria-label="เลือกวันที่" value={date} max={today} onChange={event => event.target.value && setDate(event.target.value)} style={{ ...inputStyle, width: "auto", padding: "0.3rem 0.5rem", fontSize: "0.82rem" }} />}>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.6rem" }}>
+            {tile("ลงเวลาเข้า", checkedIn.length, "#008CFF")}
+            {tile("มาสาย", lateList.length, "#FF7106")}
+            {tile("ลงเวลาออก", outList.length, "#16a34a")}
+            {tile("ยังไม่ลงเวลา", notIn.length, "#dc2626")}
+          </div>
+          {attLoading ? <div style={{ color: "#64748b" }}>กำลังโหลด...</div> : (
+            <div style={listBox}>
+              {checkedIn.map(item => (
+                <div key={item.emp.id} style={line}>
+                  {nameCell(item.emp)}
+                  <span style={{ display: "flex", gap: "0.35rem", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    <span>เข้า {fmtTime(item.row.check_in)}</span>
+                    {item.late > 0 && <ExecPill color="#b45309" bg="#fef3c7">สาย {item.late} นาที</ExecPill>}
+                    <span style={{ color: item.row.check_out ? "#16a34a" : "#94a3b8" }}>ออก {item.row.check_out ? fmtTime(item.row.check_out) : "-"}</span>
+                  </span>
+                </div>
+              ))}
+              {notIn.map(item => (
+                <div key={item.emp.id} style={line}>
+                  {nameCell(item.emp)}
+                  {onLeave.has(String(item.emp.id)) ? <ExecPill color="#0072D9" bg="#DCEFFF">ลา</ExecPill> : <ExecPill color="#b91c1c" bg="#fee2e2">ยังไม่ลงเวลา</ExecPill>}
+                </div>
+              ))}
+            </div>
+          )}
+        </ExecSection>
+
+        <ExecSection title="การลา" icon={Umbrella} right={<button type="button" onClick={onOpenLeave} style={{ border: "none", background: pending.length ? "linear-gradient(90deg, #FF7106, #FF9A3C)" : "#EAF5FF", color: pending.length ? "#fff" : "#0072D9", fontWeight: 800, borderRadius: 999, padding: "0.3rem 0.8rem", cursor: "pointer", fontFamily: "inherit", fontSize: "0.8rem" }}>รออนุมัติ {pending.length} · ไปหน้าอนุมัติ</button>}>
+          <div style={{ display: "grid", gap: "0.6rem" }}>
+            {[["ลาวันนี้", todayLeaves], ["ลาที่กำลังจะถึง (30 วัน)", upcoming], ["รออนุมัติ", pending]].map(([title, list]) => (
+              <div key={title}>
+                <div style={{ fontWeight: 800, fontSize: "0.83rem", color: "#233862", marginBottom: "0.2rem" }}>{title} ({list.length})</div>
+                {list.length === 0 ? <div style={{ fontSize: "0.8rem", color: "#94a3b8" }}>ไม่มี</div> : (
+                  <div style={{ display: "grid" }}>{list.slice(0, 8).map(row => <div key={row.id} style={{ ...line, display: "block" }}>{leaveLine(row)}{row.reason ? <span style={{ color: "#64748b" }}> — {row.reason}</span> : null}</div>)}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </ExecSection>
+
+        <ExecSection title="แผนที่ครูส่ง" icon={BookOpen} right={<WeekSwitcher weekStart={planWeek} onChange={setPlanWeek} />}>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.6rem" }}>
+            {tile("ส่งแล้ว", planCounts.submitted, "#16a34a")}
+            {tile("ส่งช้า", planCounts.late, "#b45309")}
+            {tile("ยังไม่ส่ง", planCounts.missing, "#dc2626")}
+          </div>
+          {!plans ? <div style={{ color: "#64748b" }}>กำลังโหลด...</div> : (
+            <div style={listBox}>
+              {teachers.map(emp => {
+                const status = EXEC_PLAN_STATUS[planStatus(emp)];
+                return (
+                  <button key={emp.id} type="button" onClick={() => setPlanTeacher(emp)} style={{ ...line, background: "none", border: "none", borderTop: "1px solid #f1f5f9", cursor: "pointer", fontFamily: "inherit", textAlign: "left", alignItems: "center" }}>
+                    {nameCell(emp)}
+                    <span style={{ display: "flex", gap: "0.35rem", alignItems: "center" }}><ExecPill color={status.color} bg={status.bg}>{status.label}</ExecPill><Eye size={14} color="#94a3b8" /></span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </ExecSection>
+      </div>
+      {planTeacher && <ExecPlanModal teacher={planTeacher} weekStart={planWeek} onClose={() => setPlanTeacher(null)} />}
     </div>
   );
 }
@@ -6147,7 +6596,7 @@ function SubstitutePlanView({ employees, currentUser }) {
   return (
     <div style={{ display: "grid", gap: "1rem" }}>
       <Card>
-        <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.75rem" }}>ดูแผนสำหรับสอนแทน</div>
+        <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#233862", marginBottom: "0.75rem" }}>ดูแผนสำหรับสอนแทน</div>
         <div style={periodGrid}>
           <Field label="ครูเจ้าของแผน">
             <select value={teacherId} onChange={event => setTeacherId(event.target.value)} style={periodSelect}>
@@ -6177,7 +6626,7 @@ function SubstitutePlanView({ employees, currentUser }) {
         <Card><div style={{ textAlign: "center", color: "#64748b", padding: "1.5rem" }}>{teacher?.name || "ครู"} ยังไม่มีแผน{periodNo ? `คาบที่ ${periodNo} ` : ""}ของ{formatThaiDateKey(date)}</div></Card>
       ) : (
         <Card>
-          <div style={{ fontWeight: 800, color: "#0f172a", marginBottom: "0.6rem" }}>แผนของ {teacher?.name} · วัน{DAY_NAMES[day]} {formatThaiDateKey(date)}</div>
+          <div style={{ fontWeight: 800, color: "#233862", marginBottom: "0.6rem" }}>แผนของ {teacher?.name} · วัน{DAY_NAMES[day]} {formatThaiDateKey(date)}</div>
           <div style={{ display: "grid", gap: "0.5rem" }}>
             {periods.map(period => (
               <SupervisionPeriodRead
@@ -6226,7 +6675,7 @@ function AcademicPage({ employees, currentUser }) {
                 role="tab"
                 aria-selected={active}
                 onClick={() => setTab(item.key)}
-                style={{ flex: "0 0 auto", minWidth: "max-content", minHeight: 44, border: "none", borderRadius: 10, padding: "0.55rem 0.9rem", background: active ? "linear-gradient(135deg, #2563eb, #1d4ed8)" : "transparent", color: active ? "#fff" : "#475569", fontWeight: 800, fontFamily: "inherit", fontSize: "0.92rem", cursor: "pointer", whiteSpace: "nowrap" }}
+                style={{ flex: "0 0 auto", minWidth: "max-content", minHeight: 44, border: "none", borderRadius: 10, padding: "0.55rem 0.9rem", background: active ? "linear-gradient(135deg, #008CFF, #0072D9)" : "transparent", color: active ? "#fff" : "#475569", fontWeight: 800, fontFamily: "inherit", fontSize: "0.92rem", cursor: "pointer", whiteSpace: "nowrap" }}
               >
                 {index + 1}. {item.label}
               </button>
@@ -6378,11 +6827,11 @@ function StudentRollTeacher({ currentUser }) {
 
   const rosterEditor = (
     <Card padding="0.85rem">
-      <div style={{ fontWeight: 800, color: "#0f172a", fontSize: "1.05rem" }}>รายชื่อนักเรียน{className ? ` ${className}` : ""} ({namedStudents.length} คน)</div>
+      <div style={{ fontWeight: 800, color: "#233862", fontSize: "1.05rem" }}>รายชื่อนักเรียน{className ? ` ${className}` : ""} ({namedStudents.length} คน)</div>
       <div style={{ color: "#64748b", fontSize: "0.8rem", marginTop: "0.25rem" }}>พิมพ์ชื่อ-นามสกุล แล้วกด + หรือ Enter เพื่อเพิ่มทีละคน</div>
       <form onSubmit={event => { event.preventDefault(); addStudent(); }} style={{ display: "flex", gap: "0.4rem", marginTop: "0.6rem" }}>
         <input value={newName} onChange={event => setNewName(event.target.value)} placeholder="ชื่อ นามสกุล" disabled={saving} style={{ ...inputStyle, flex: 1, minWidth: 0, fontSize: "16px" }} />
-        <button type="submit" aria-label="เพิ่มนักเรียน" disabled={saving || !newName.trim()} style={{ ...btnPrimary, flex: "none", minWidth: 48, minHeight: 44, justifyContent: "center", background: "linear-gradient(135deg, #2563eb, #1d4ed8)", color: "#fff", cursor: saving || !newName.trim() ? "not-allowed" : "pointer" }}><Plus size={18} /></button>
+        <button type="submit" aria-label="เพิ่มนักเรียน" disabled={saving || !newName.trim()} style={{ ...btnPrimary, flex: "none", minWidth: 48, minHeight: 44, justifyContent: "center", background: "linear-gradient(135deg, #008CFF, #0072D9)", color: "#fff", cursor: saving || !newName.trim() ? "not-allowed" : "pointer" }}><Plus size={18} /></button>
       </form>
     </Card>
   );
@@ -6444,7 +6893,7 @@ function StudentRollTeacher({ currentUser }) {
               <div style={{ display: "grid", gap: "0.8rem", minWidth: 0 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 800, color: "#0f172a", fontSize: "1.05rem" }}>เช็คชื่อ{className ? ` ${className}` : ""}</div>
+                    <div style={{ fontWeight: 800, color: "#233862", fontSize: "1.05rem" }}>เช็คชื่อ{className ? ` ${className}` : ""}</div>
                     <div style={{ color: "#64748b", fontSize: "0.8rem" }}>{formatThaiDateKey(date)} · นักเรียน {namedStudents.length} คน</div>
                   </div>
                   {baseline.days[date]?.saved_at && <span style={{ background: "#dcfce7", color: "#166534", fontWeight: 800, fontSize: "0.75rem", borderRadius: 20, padding: "0.25rem 0.6rem" }}>บันทึกแล้ว {fmtTime(baseline.days[date].saved_at)}</span>}
@@ -6474,9 +6923,9 @@ function StudentRollTeacher({ currentUser }) {
                         const tick = status => event => setMarks(current => ({ ...current, [student.id]: event.target.checked ? status : "" }));
                         return (
                           <Fragment key={student.id}>
-                            <tr style={{ borderTop: "1px solid #f1f5f9", background: value === "sick" ? "#eff6ff" : undefined }}>
+                            <tr style={{ borderTop: "1px solid #f1f5f9", background: value === "sick" ? "#EAF5FF" : undefined }}>
                               <td style={{ ...rollTd, color: "#94a3b8", fontWeight: 700 }}>{student.number}</td>
-                              <td style={{ ...rollTd, textAlign: "left", fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis" }} title={studentLabel(student)}>{studentLabel(student)}</td>
+                              <td style={{ ...rollTd, textAlign: "left", fontWeight: 700, color: "#233862", whiteSpace: "nowrap", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis" }} title={studentLabel(student)}>{studentLabel(student)}</td>
                               {["present", "personal", "sick"].map(status => (
                                 <td key={status} style={rollTd}>
                                   <input type="checkbox" aria-label={`${studentLabel(student)} ${labelOf(ROLL_STATUSES, status)}`} disabled={saving} checked={value === status} onChange={tick(status)} style={{ width: 16, height: 16, cursor: "pointer" }} />
@@ -6499,7 +6948,7 @@ function StudentRollTeacher({ currentUser }) {
                     </tbody>
                   </table>
                 </div>
-                <button type="button" onClick={saveMarks} disabled={saving} style={{ ...btnPrimary, flex: "none", width: "100%", minHeight: 48, background: "linear-gradient(135deg, #2563eb, #1d4ed8)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}>
+                <button type="button" onClick={saveMarks} disabled={saving} style={{ ...btnPrimary, flex: "none", width: "100%", minHeight: 48, background: "linear-gradient(135deg, #008CFF, #0072D9)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}>
                   {saving ? <RefreshCw size={16} style={{ animation: "spin 1s linear infinite" }} /> : <Save size={16} />}
                   {saving ? "กำลังบันทึก..." : "บันทึกการเช็คชื่อ"}
                 </button>
@@ -6647,7 +7096,7 @@ function StudentRollAdmin({ employees }) {
                       <span style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
                         <Avatar name={item.teacher?.name || item.book.class_name} index={index} />
                         <span style={{ flex: 1, minWidth: 0 }}>
-                          <span style={{ display: "block", fontWeight: 800, color: "#0f172a" }}>{item.book.class_name || "ไม่ระบุห้อง"}</span>
+                          <span style={{ display: "block", fontWeight: 800, color: "#233862" }}>{item.book.class_name || "ไม่ระบุห้อง"}</span>
                           <span style={{ display: "block", fontSize: "0.75rem", color: "#64748b" }}>{item.teacher?.name || "ไม่พบชื่อครู"} · เช็คชื่อแล้ว {summary.totals.days} วัน</span>
                         </span>
                         <ChevronRight size={16} color="#94a3b8" />
@@ -6665,7 +7114,7 @@ function StudentRollAdmin({ employees }) {
       <Card>
         <div style={{ display: "grid", gap: "0.8rem", minWidth: 0 }}>
           <div>
-            <div style={{ fontWeight: 800, color: "#0f172a", fontSize: "1.05rem" }}>อัปรายชื่อจาก Excel</div>
+            <div style={{ fontWeight: 800, color: "#233862", fontSize: "1.05rem" }}>อัปรายชื่อจาก Excel</div>
           </div>
           <Field label="ครูประจำชั้น">
             <select value={teacherId} onChange={event => setTeacherId(event.target.value)} style={{ ...selectStyle, boxSizing: "border-box", fontSize: "16px", maxWidth: "100%" }}>
@@ -6684,18 +7133,18 @@ function StudentRollAdmin({ employees }) {
           </label>
           {incoming.length > 0 && (
             <div style={{ display: "grid", gap: "0.45rem", minWidth: 0 }}>
-              <div style={{ fontWeight: 800, color: "#0f172a" }}>พบ {incoming.length} คน{classHint ? ` · ไฟล์ระบุ ${classHint}` : ""}</div>
+              <div style={{ fontWeight: 800, color: "#233862" }}>พบ {incoming.length} คน{classHint ? ` · ไฟล์ระบุ ${classHint}` : ""}</div>
               <div style={{ maxHeight: 200, overflow: "auto", border: "1px solid #e2e8f0", borderRadius: 10, minWidth: 0 }}>
                 {incoming.map(student => (
                   <div key={student.id} style={{ display: "flex", gap: "0.45rem", padding: "0.35rem 0.65rem", borderTop: "1px solid #f1f5f9", minWidth: 0 }}>
                     <span style={{ fontWeight: 800, color: "#64748b", flex: "0 0 auto" }}>{student.number}</span>
-                    <span style={{ fontWeight: 700, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{studentLabel(student)}</span>
+                    <span style={{ fontWeight: 700, color: "#233862", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{studentLabel(student)}</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
-          <button type="button" onClick={saveRoster} disabled={saving} style={{ ...btnPrimary, flex: "none", width: "100%", maxWidth: 280, minHeight: 48, background: "linear-gradient(135deg, #2563eb, #1d4ed8)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}>
+          <button type="button" onClick={saveRoster} disabled={saving} style={{ ...btnPrimary, flex: "none", width: "100%", maxWidth: 280, minHeight: 48, background: "linear-gradient(135deg, #008CFF, #0072D9)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}>
             {saving ? <RefreshCw size={16} style={{ animation: "spin 1s linear infinite" }} /> : <Save size={16} />}
             {saving ? "กำลังบันทึก..." : "บันทึกรายชื่อ"}
           </button>
@@ -6712,7 +7161,7 @@ function StudentRollAdmin({ employees }) {
           <button type="button" onClick={() => setSelectedId("")} style={{ ...btnSecondary, flex: "none", minHeight: 44, marginBottom: "0.9rem" }}><ChevronLeft size={16} /> กลับ</button>
           <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 800, fontSize: "1.05rem", color: "#0f172a" }}>{selected.book.class_name || "ไม่ระบุห้อง"}</div>
+              <div style={{ fontWeight: 800, fontSize: "1.05rem", color: "#233862" }}>{selected.book.class_name || "ไม่ระบุห้อง"}</div>
               <div style={{ color: "#64748b", fontSize: "0.82rem" }}>{selected.teacher?.name || "ไม่พบชื่อครู"} · {formatThaiDateKey(date)}</div>
             </div>
             {selected.savedAt ? <span style={{ background: "#dcfce7", color: "#166534", fontWeight: 800, fontSize: "0.75rem", borderRadius: 20, padding: "0.25rem 0.6rem", height: "fit-content" }}>บันทึกแล้ว {fmtTime(selected.savedAt)}</span> : <span style={{ background: "#fee2e2", color: "#b91c1c", fontWeight: 800, fontSize: "0.75rem", borderRadius: 20, padding: "0.25rem 0.6rem", height: "fit-content" }}>ยังไม่เช็คชื่อ</span>}
@@ -6740,7 +7189,7 @@ function StudentRollAdmin({ employees }) {
                   <span style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
                     <Avatar name={item.teacher?.name || item.book.class_name} index={index} />
                     <span style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ display: "block", fontWeight: 800, color: "#0f172a" }}>{item.book.class_name || "ไม่ระบุห้อง"}</span>
+                      <span style={{ display: "block", fontWeight: 800, color: "#233862" }}>{item.book.class_name || "ไม่ระบุห้อง"}</span>
                       <span style={{ display: "block", fontSize: "0.75rem", color: "#64748b" }}>{item.teacher?.name || "ไม่พบชื่อครู"} · {item.book.students.length} คน</span>
                     </span>
                     <span style={{ background: item.savedAt ? "#dcfce7" : "#fee2e2", color: item.savedAt ? "#166534" : "#b91c1c", fontWeight: 800, fontSize: "0.72rem", borderRadius: 20, padding: "0.2rem 0.55rem", whiteSpace: "nowrap" }}>{item.savedAt ? "เช็คแล้ว" : "ยังไม่เช็ค"}</span>
@@ -7375,19 +7824,19 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
           table { border-collapse: collapse; font-family: Tahoma, sans-serif; width: 100%; font-size: 9pt; table-layout: fixed; }
           .daily-table { margin-top: 10px; }
           th, td { border: 1px solid #cbd5e1; padding: 3px 4px; vertical-align: middle; white-space: nowrap; overflow: hidden; }
-          th { background: #eff6ff; font-weight: 700; }
-          .section-title { background: #f8fafc; color: #0f172a; font-size: 12px; text-align: left; }
+          th { background: #EAF5FF; font-weight: 700; }
+          .section-title { background: #f8fafc; color: #233862; font-size: 12px; text-align: left; }
           .count { text-align: center; }
           .money { background: #ecfdf5; color: #166534; font-weight: 700; text-align: right; }
           .deduct { background: #fef2f2; color: #b91c1c; }
           .total { background: #fff7ed; color: #c2410c; font-weight: 800; }
-          .additional { background: #eff6ff; color: #1d4ed8; font-weight: 800; }
+          .additional { background: #EAF5FF; color: #0072D9; font-weight: 800; }
         </style>
       </head>
       <body>
         <table>
           <tr>
-            <th colspan="19" style="font-size:15px;background:#dbeafe;">สรุปเงินเดือน เดือน ${escapeHtml(month)}</th>
+            <th colspan="19" style="font-size:15px;background:#DCEFFF;">สรุปเงินเดือน เดือน ${escapeHtml(month)}</th>
           </tr>
           <tr>
             <th colspan="19" class="section-title">ตารางเงินเดือนประจำ / เทียบยอดเข้า บช</th>
@@ -7463,13 +7912,13 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
   const payrollInputStyle = {
     width: 88,
     minWidth: 72,
-    border: "1px solid #93c5fd",
+    border: "1px solid #8FD0FF",
     borderRadius: "6px",
     padding: "0.38rem 0.42rem",
     fontFamily: "inherit",
     fontSize: "0.75rem",
     fontWeight: 700,
-    color: "#0f172a",
+    color: "#233862",
     background: "#fff",
     textAlign: "right",
   };
@@ -7484,9 +7933,9 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
   const payrollEditableCell = { ...payrollCellBase, background: "#fffbeb" };
   const payrollFormulaCell = { ...payrollCellBase, background: "#fef2f2", color: "#b91c1c", fontWeight: 800 };
   const payrollDeductCell = { ...payrollCellBase, background: "#fee2e2", color: "#b91c1c", fontWeight: 900 };
-  const payrollTotalCell = { ...payrollCellBase, background: "#dbeafe", color: "#1d4ed8", fontWeight: 900 };
+  const payrollTotalCell = { ...payrollCellBase, background: "#DCEFFF", color: "#0072D9", fontWeight: 900 };
   const payrollRefundCell = { ...payrollCellBase, background: "#fff7ed", color: "#c2410c", fontWeight: 900 };
-  const payrollAdditionalCell = { ...payrollCellBase, background: "#eff6ff", color: "#1d4ed8", fontWeight: 900 };
+  const payrollAdditionalCell = { ...payrollCellBase, background: "#EAF5FF", color: "#0072D9", fontWeight: 900 };
   const renderMoneyInput = (row, key, value, options = {}) => (
     <input
       type="number"
@@ -7501,10 +7950,10 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
     <Card padding="0" style={{ minWidth: 0, borderRadius: "4px", boxShadow: "none", borderColor: "#cbd5e1" }}>
       <div style={{ padding: "0.9rem 1rem", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#0f172a" }}>{title}</div>
+          <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#233862" }}>{title}</div>
           <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: "0.15rem" }}>ช่องสีขาวกรอกแก้ได้ ช่องสีอื่นเป็นสูตรคำนวณอัตโนมัติ</div>
         </div>
-        <div style={{ fontSize: "0.75rem", color: "#1d4ed8", fontWeight: 800 }}>{rows.length} คน</div>
+        <div style={{ fontSize: "0.75rem", color: "#0072D9", fontWeight: 800 }}>{rows.length} คน</div>
       </div>
       <div style={{ overflowX: "auto", maxHeight: 430, width: "100%", minWidth: 0 }}>
         <table style={{ width: "max-content", minWidth: "100%", borderCollapse: "separate", borderSpacing: 0, fontSize: "0.75rem" }}>
@@ -7520,7 +7969,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
                   padding: "0.55rem 0.5rem",
                   borderRight: "1px solid #cbd5e1",
                   borderBottom: "1px solid #94a3b8",
-                  background: index <= 8 ? "#fef3c7" : index <= 15 ? "#fed7aa" : index === 16 ? "#bfdbfe" : "#f8fafc",
+                  background: index <= 8 ? "#fef3c7" : index <= 15 ? "#fed7aa" : index === 16 ? "#B8E0FF" : "#f8fafc",
                   color: "#334155",
                   fontWeight: 800,
                   whiteSpace: "nowrap",
@@ -7537,7 +7986,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
               return (
                 <tr key={row.emp.id}>
                   <td style={{ padding: "0.45rem 0.55rem", borderRight: "1px solid #e2e8f0", borderBottom: "1px solid #e2e8f0", background: "#dcfce7", minWidth: 180 }}>
-                    <div style={{ fontWeight: 800, color: "#0f172a" }}>{row.emp.name}</div>
+                    <div style={{ fontWeight: 800, color: "#233862" }}>{row.emp.name}</div>
                     <div style={{ color: "#64748b", fontSize: "0.68rem" }}>{row.emp.department || "-"}</div>
                   </td>
                   <td style={payrollEditableCell}>
@@ -7551,7 +8000,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
                   <td style={payrollEditableCell}>{renderMoneyInput(row, "override_substitute_pay", adjustment.override_substitute_pay !== "" && adjustment.override_substitute_pay != null ? adjustment.override_substitute_pay : row.substitutePay)}</td>
                   {isDailyTable && (
                     <>
-                      <td style={{ ...payrollCellBase, background: "#eff6ff", color: "#1d4ed8", fontWeight: 900, textAlign: "center" }}>{row.attendanceDays} วัน</td>
+                      <td style={{ ...payrollCellBase, background: "#EAF5FF", color: "#0072D9", fontWeight: 900, textAlign: "center" }}>{row.attendanceDays} วัน</td>
                       <td style={{ ...payrollCellBase, background: "#ecfdf5", color: "#166534", fontWeight: 900 }}>{formatMoney(row.dailyRate)} x {row.attendanceDays} = {formatMoney(row.baseSalary)}</td>
                     </>
                   )}
@@ -7592,7 +8041,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
       `}</style>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap", marginBottom: "0.65rem" }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: "1.35rem", color: "#0f172a", letterSpacing: 0 }}>สรุปเงินเดือน</h1>
+          <h1 style={{ margin: 0, fontSize: "1.35rem", color: "#233862", letterSpacing: 0 }}>สรุปเงินเดือน</h1>
           <div style={{ color: "#64748b", fontSize: "0.74rem" }}>ข้อมูลจาก Supabase เดือน {month}</div>
         </div>
         <div style={{ display: "flex", alignItems: "end", gap: "0.5rem", flexWrap: "wrap" }}>
@@ -7624,18 +8073,18 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
             ["ยอดคืนรวม", formatMoney(totalRefund)],
             ["ต้องรับเพิ่มรวม", formatMoney(totalAdditionalPayment)],
           ].map(([label, value], index) => (
-            <div key={label} style={{ padding: "0.55rem 0.7rem", borderRight: index < 4 ? "1px solid #cbd5e1" : "none", background: index === 3 ? "#fff7ed" : index === 4 ? "#eff6ff" : "#f8fafc", minWidth: 135 }}>
+            <div key={label} style={{ padding: "0.55rem 0.7rem", borderRight: index < 4 ? "1px solid #cbd5e1" : "none", background: index === 3 ? "#fff7ed" : index === 4 ? "#EAF5FF" : "#f8fafc", minWidth: 135 }}>
               <div style={{ color: "#64748b", fontSize: "0.68rem" }}>{label}</div>
-              <div style={{ color: index === 3 ? "#c2410c" : index === 4 ? "#1d4ed8" : "#0f172a", fontSize: "0.95rem", fontWeight: 900 }}>{value}</div>
+              <div style={{ color: index === 3 ? "#c2410c" : index === 4 ? "#0072D9" : "#233862", fontSize: "0.95rem", fontWeight: 900 }}>{value}</div>
             </div>
           ))}
         </div>
-        {(loadingMonthData || monthDataError) && <div style={{ borderTop: "1px solid #cbd5e1", padding: "0.4rem 0.7rem", color: monthDataError ? "#b91c1c" : "#1d4ed8", fontSize: "0.72rem" }}>{monthDataError || "กำลังซิงก์ข้อมูลเดือนนี้..."}</div>}
+        {(loadingMonthData || monthDataError) && <div style={{ borderTop: "1px solid #cbd5e1", padding: "0.4rem 0.7rem", color: monthDataError ? "#b91c1c" : "#0072D9", fontSize: "0.72rem" }}>{monthDataError || "กำลังซิงก์ข้อมูลเดือนนี้..."}</div>}
       </div>
 
       <div className="payroll-insight-grid" style={{ marginBottom: "0.65rem" }}>
         <section style={{ border: "1px solid #cbd5e1", background: "#fff", minWidth: 300 }}>
-          <div style={{ padding: "0.42rem 0.65rem", background: "#dbeafe", borderBottom: "1px solid #94a3b8", fontSize: "0.78rem", fontWeight: 900 }}>รายละเอียด {selectedEmployee?.name || "-"}</div>
+          <div style={{ padding: "0.42rem 0.65rem", background: "#DCEFFF", borderBottom: "1px solid #94a3b8", fontSize: "0.78rem", fontWeight: 900 }}>รายละเอียด {selectedEmployee?.name || "-"}</div>
           {selectedSummaryRow ? (
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.72rem" }}><tbody>
               {[
@@ -7645,7 +8094,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
                 ["สอนแทน / ขับรถ-เวร", `${formatMoney(selectedSummaryRow.substitutePay)} / ${formatMoney(selectedSummaryRow.dutyOrDriverPay)}`],
                 ["หักลา / หักรวม", `${formatMoney(selectedSummaryRow.leaveDeductions)} / ${formatMoney(selectedSummaryRow.deductions)}`],
                 [selectedSummaryRow.additionalPayment > 0 ? "ต้องรับเพิ่ม" : "ยอดคืน", formatMoney(selectedSummaryRow.additionalPayment || selectedSummaryRow.refundAmount)],
-              ].map(([label, value], index) => <tr key={label}><td style={{ padding: "0.29rem 0.55rem", color: "#475569", borderBottom: index < 5 ? "1px solid #e2e8f0" : "none" }}>{label}</td><td style={{ padding: "0.29rem 0.55rem", textAlign: "right", fontWeight: 800, color: index === 5 ? "#c2410c" : "#0f172a", borderBottom: index < 5 ? "1px solid #e2e8f0" : "none", whiteSpace: "nowrap" }}>{value}</td></tr>)}
+              ].map(([label, value], index) => <tr key={label}><td style={{ padding: "0.29rem 0.55rem", color: "#475569", borderBottom: index < 5 ? "1px solid #e2e8f0" : "none" }}>{label}</td><td style={{ padding: "0.29rem 0.55rem", textAlign: "right", fontWeight: 800, color: index === 5 ? "#c2410c" : "#233862", borderBottom: index < 5 ? "1px solid #e2e8f0" : "none", whiteSpace: "nowrap" }}>{value}</td></tr>)}
             </tbody></table>
           ) : <div style={{ padding: "1rem", color: "#94a3b8", fontSize: "0.75rem" }}>ไม่มีข้อมูล</div>}
         </section>
@@ -7689,16 +8138,16 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
       <PageHeader title="เงินเดือน" count={selectedEmployee ? 1 : 0} />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "1rem", marginBottom: "1rem" }}>
-        <StatCard stat={{ label: "คนที่มีข้อมูลเดือนนี้", value: summaryRows.length, icon: Users, color: "#2563eb", bg: "#eff6ff", trend: month }} />
+        <StatCard stat={{ label: "คนที่มีข้อมูลเดือนนี้", value: summaryRows.length, icon: Users, color: "#008CFF", bg: "#EAF5FF", trend: month }} />
         <StatCard stat={{ label: "เงินเข้า บช รวม", value: formatMoney(totalBankDeposit), icon: Building2, color: "#7c3aed", bg: "#f5f3ff", trend: "ยอดที่โอนเข้าก่อน" }} />
         <StatCard stat={{ label: "ยอดสุทธิหลังคำนวณ", value: formatMoney(totalPayout), icon: Calendar, color: "#059669", bg: "#ecfdf5", trend: `${totalAttendanceDays} วันทำงานรวม` }} />
         <StatCard stat={{ label: "ยอดคืนรวม", value: formatMoney(totalRefund), icon: DollarSign, color: "#d97706", bg: "#fff7ed", trend: "ยอดสุดท้าย" }} />
-        <StatCard stat={{ label: "ต้องรับเพิ่มรวม", value: formatMoney(totalAdditionalPayment), icon: Plus, color: "#2563eb", bg: "#eff6ff", trend: "ยอดที่ต้องจ่ายเพิ่ม" }} />
+        <StatCard stat={{ label: "ต้องรับเพิ่มรวม", value: formatMoney(totalAdditionalPayment), icon: Plus, color: "#008CFF", bg: "#EAF5FF", trend: "ยอดที่ต้องจ่ายเพิ่ม" }} />
       </div>
 
       <Card>
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-          <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "12px", padding: "0.85rem", color: "#1d4ed8", fontSize: "0.85rem" }}>
+          <div style={{ background: "#EAF5FF", border: "1px solid #B8E0FF", borderRadius: "12px", padding: "0.85rem", color: "#0072D9", fontSize: "0.85rem" }}>
             {loadingMonthData
               ? `กำลังซิงก์ข้อมูลลงเวลา เวรรถ และสอนแทนของเดือน ${month} จาก Supabase...`
               : monthDataError || `ซิงก์ข้อมูลเดือน ${month} แล้ว: ลงเวลา ${monthAttendance.length} รายการ, ใบลาที่อนุมัติ ${monthLeaves.length} รายการ`}
@@ -7725,7 +8174,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
               <button onClick={exportExcel} style={{ ...btnSecondary, flex: "none", padding: "0.8rem 1rem" }}>
                 <FileText size={16} /> สรุปออก Excel
               </button>
-              <button onClick={handleSave} disabled={loadingConfig || loadingMonthData || Boolean(monthDataError) || saving} style={{ ...btnPrimary, flex: "none", padding: "0.8rem 1rem", background: saved ? "#16a34a" : "linear-gradient(135deg, #2563eb, #1d4ed8)", color: "#fff", cursor: loadingConfig || loadingMonthData || monthDataError || saving ? "not-allowed" : "pointer" }}>
+              <button onClick={handleSave} disabled={loadingConfig || loadingMonthData || Boolean(monthDataError) || saving} style={{ ...btnPrimary, flex: "none", padding: "0.8rem 1rem", background: saved ? "#16a34a" : "linear-gradient(135deg, #008CFF, #0072D9)", color: "#fff", cursor: loadingConfig || loadingMonthData || monthDataError || saving ? "not-allowed" : "pointer" }}>
                 {saving ? <RefreshCw size={16} style={{ animation: "spin 1s linear infinite" }} /> : saved ? <CheckCircle size={16} /> : <Save size={16} />}
                 {saving ? "กำลังคำนวณ..." : saved ? "คำนวณแล้ว" : "คำนวณเงินเดือนเดือนนี้"}
               </button>
@@ -7742,12 +8191,12 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem", marginTop: "1rem" }}>
         <Card>
-          <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.3rem" }}>ข้อมูลเงินเดือนรายคน</div>
+          <div style={{ fontSize: "1rem", fontWeight: 800, color: "#233862", marginBottom: "0.3rem" }}>ข้อมูลเงินเดือนรายคน</div>
           <div style={{ fontSize: "0.8rem", color: "#64748b", marginBottom: "0.9rem" }}>ค่าหลักดึงจากเมนูพนักงาน และแก้เฉพาะเดือนนี้ได้ด้านล่าง</div>
           {selectedEmployee && (
             <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.9rem", display: "flex", flexDirection: "column", gap: "0.9rem" }}>
               <div>
-                <div style={{ fontWeight: 800, color: "#0f172a", fontSize: "1rem" }}>{selectedEmployee.name}</div>
+                <div style={{ fontWeight: 800, color: "#233862", fontSize: "1rem" }}>{selectedEmployee.name}</div>
                 <div style={{ fontSize: "0.78rem", color: "#64748b" }}>{selectedEmployee.department || "ไม่ระบุแผนก"}</div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
@@ -7777,7 +8226,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
                   </Field>
                 </div>
               )}
-              <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "10px", padding: "0.75rem", color: "#1d4ed8", fontSize: "0.82rem", fontWeight: 700 }}>
+              <div style={{ background: "#EAF5FF", border: "1px solid #B8E0FF", borderRadius: "10px", padding: "0.75rem", color: "#0072D9", fontSize: "0.82rem", fontWeight: 700 }}>
                 ค่าสอนแทนคิดอัตโนมัติ: จินตคณิต {formatMoney(25)}, คาบปกติ {formatMoney(50)}, อนุบาลทั้งวัน {formatMoney(KINDERGARTEN_SUBSTITUTE_DAY_RATE)}
               </div>
               <div>
@@ -7790,9 +8239,9 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
                         key={type}
                         onClick={() => toggleLeaveDeductType(selectedEmployee.id, type)}
                         style={{
-                          border: `1px solid ${checked ? "#2563eb" : "#cbd5e1"}`,
-                          background: checked ? "#eff6ff" : "#fff",
-                          color: checked ? "#1d4ed8" : "#475569",
+                          border: `1px solid ${checked ? "#008CFF" : "#cbd5e1"}`,
+                          background: checked ? "#EAF5FF" : "#fff",
+                          color: checked ? "#0072D9" : "#475569",
                           borderRadius: "999px",
                           padding: "0.35rem 0.65rem",
                           fontSize: "0.75rem",
@@ -7856,7 +8305,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
           )}
         </Card>
         <Card>
-          <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.3rem" }}>ตั้งค่าอัตราเวรที่คิดเงิน</div>
+          <div style={{ fontSize: "1rem", fontWeight: 800, color: "#233862", marginBottom: "0.3rem" }}>ตั้งค่าอัตราเวรที่คิดเงิน</div>
           <div style={{ fontSize: "0.8rem", color: "#64748b", marginBottom: "0.9rem" }}>แสดงเฉพาะเวรที่มีผลกับเงินเดือน</div>
           {loadingConfig && <div style={{ color: "#64748b", fontSize: "0.8rem", marginBottom: "0.75rem" }}>กำลังโหลดค่าจาก Supabase...</div>}
           <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
@@ -7875,24 +8324,24 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
           </div>
         </Card>
         <Card>
-          <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a", marginBottom: "0.3rem" }}>สรุปของคนที่เลือก</div>
+          <div style={{ fontSize: "1rem", fontWeight: 800, color: "#233862", marginBottom: "0.3rem" }}>สรุปของคนที่เลือก</div>
           <div style={{ fontSize: "0.8rem", color: "#64748b", marginBottom: "0.9rem" }}>ดึงจากข้อมูลลงเวลา ลา และเวรของเดือนนี้อัตโนมัติ</div>
           {!selectedSummaryRow ? (
             <div style={{ color: "#94a3b8", fontSize: "0.84rem" }}>ยังไม่มีข้อมูลของพนักงานคนนี้</div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.75rem" }}>
-                <div style={{ background: "#eff6ff", borderRadius: "12px", padding: "0.85rem" }}>
-                  <div style={{ fontSize: "0.72rem", color: "#1d4ed8", fontWeight: 700 }}>มาทำงาน</div>
-                  <div style={{ fontSize: "1.25rem", color: "#0f172a", fontWeight: 800 }}>{selectedSummaryRow.attendanceDays} วัน</div>
+                <div style={{ background: "#EAF5FF", borderRadius: "12px", padding: "0.85rem" }}>
+                  <div style={{ fontSize: "0.72rem", color: "#0072D9", fontWeight: 700 }}>มาทำงาน</div>
+                  <div style={{ fontSize: "1.25rem", color: "#233862", fontWeight: 800 }}>{selectedSummaryRow.attendanceDays} วัน</div>
                 </div>
                 <div style={{ background: "#f5f3ff", borderRadius: "12px", padding: "0.85rem" }}>
                   <div style={{ fontSize: "0.72rem", color: "#7c3aed", fontWeight: 700 }}>ยอดคืน</div>
-                  <div style={{ fontSize: "1.25rem", color: "#0f172a", fontWeight: 800 }}>{formatMoney(selectedSummaryRow.refundAmount)}</div>
+                  <div style={{ fontSize: "1.25rem", color: "#233862", fontWeight: 800 }}>{formatMoney(selectedSummaryRow.refundAmount)}</div>
                 </div>
-                <div style={{ background: "#eff6ff", borderRadius: "12px", padding: "0.85rem" }}>
-                  <div style={{ fontSize: "0.72rem", color: "#1d4ed8", fontWeight: 700 }}>ต้องรับเพิ่ม</div>
-                  <div style={{ fontSize: "1.25rem", color: "#0f172a", fontWeight: 800 }}>{formatMoney(selectedSummaryRow.additionalPayment)}</div>
+                <div style={{ background: "#EAF5FF", borderRadius: "12px", padding: "0.85rem" }}>
+                  <div style={{ fontSize: "0.72rem", color: "#0072D9", fontWeight: 700 }}>ต้องรับเพิ่ม</div>
+                  <div style={{ fontSize: "1.25rem", color: "#233862", fontWeight: 800 }}>{formatMoney(selectedSummaryRow.additionalPayment)}</div>
                 </div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.75rem" }}>
@@ -7906,12 +8355,12 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
                 </div>
                 <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.8rem" }}>
                   <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "0.2rem" }}>สอนแทน</div>
-                  <div style={{ fontWeight: 800, color: "#2563eb" }}>{selectedSummaryRow.substituteCount} คาบ / {formatMoney(selectedSummaryRow.substitutePay)}</div>
+                  <div style={{ fontWeight: 800, color: "#008CFF" }}>{selectedSummaryRow.substituteCount} คาบ / {formatMoney(selectedSummaryRow.substitutePay)}</div>
                 </div>
                 {selectedSummaryRow.payType === "monthly" && (
                   <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.8rem" }}>
                     <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "0.2rem" }}>เงินเดือนตาม PDF</div>
-                    <div style={{ fontWeight: 800, color: "#0f172a" }}>{formatMoney(selectedSummaryRow.bankGrossSalary)}</div>
+                    <div style={{ fontWeight: 800, color: "#233862" }}>{formatMoney(selectedSummaryRow.bankGrossSalary)}</div>
                   </div>
                 )}
                 <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "12px", padding: "0.8rem" }}>
@@ -7926,7 +8375,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
               <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.85rem", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "0.75rem" }}>
                 <div>
                   <div style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: 700 }}>ยอดก่อนหัก</div>
-                  <div style={{ color: "#0f172a", fontWeight: 800 }}>{formatMoney(selectedSummaryRow.grossPay)}</div>
+                  <div style={{ color: "#233862", fontWeight: 800 }}>{formatMoney(selectedSummaryRow.grossPay)}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: 700 }}>ปรับเพิ่ม</div>
@@ -7971,10 +8420,10 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
         <Card padding="0">
           <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
             <div>
-              <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a" }}>ข้อมูลเงินเดือนที่บันทึกไว้แล้ว</div>
+              <div style={{ fontSize: "1rem", fontWeight: 800, color: "#233862" }}>ข้อมูลเงินเดือนที่บันทึกไว้แล้ว</div>
               <div style={{ fontSize: "0.8rem", color: "#64748b" }}>แสดงตามสูตรปัจจุบัน เทียบกับ snapshot เดือน {month}</div>
             </div>
-            <div style={{ background: "#eff6ff", borderRadius: "999px", padding: "0.35rem 0.8rem", color: "#1d4ed8", fontWeight: 700, fontSize: "0.8rem" }}>
+            <div style={{ background: "#EAF5FF", borderRadius: "999px", padding: "0.35rem 0.8rem", color: "#0072D9", fontWeight: 700, fontSize: "0.8rem" }}>
               {selectedEmployee?.name || "ยังไม่ได้เลือกพนักงาน"}
             </div>
           </div>
@@ -7997,7 +8446,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
                 ].map(([label, value]) => (
                   <div key={label} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.8rem" }}>
                     <div style={{ fontSize: "0.74rem", color: "#64748b", marginBottom: "0.2rem" }}>{label}</div>
-                    <div style={{ fontWeight: 800, color: "#0f172a" }}>{value}</div>
+                    <div style={{ fontWeight: 800, color: "#233862" }}>{value}</div>
                   </div>
                 ))}
               </div>
@@ -8009,7 +8458,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
         <Card padding="0">
           <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
             <div>
-              <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a" }}>รายการที่ใช้คิดเงินเดือน</div>
+              <div style={{ fontSize: "1rem", fontWeight: 800, color: "#233862" }}>รายการที่ใช้คิดเงินเดือน</div>
               <div style={{ fontSize: "0.8rem", color: "#64748b" }}>ดูรายการบวกและรายการหักของพนักงานคนนี้ในบล็อกเดียว</div>
             </div>
             <div style={{ background: "#fff7ed", borderRadius: "999px", padding: "0.35rem 0.8rem", color: "#d97706", fontWeight: 700, fontSize: "0.8rem" }}>
@@ -8035,7 +8484,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
                     value: formatMoney(selectedSummaryRow.dutyOrDriverPay),
                     color: "#7c3aed",
                   },
-                  { label: "สอนแทน", detail: `${selectedSummaryRow.substituteCount} คาบ`, value: formatMoney(selectedSummaryRow.substitutePay), color: "#2563eb" },
+                  { label: "สอนแทน", detail: `${selectedSummaryRow.substituteCount} คาบ`, value: formatMoney(selectedSummaryRow.substitutePay), color: "#008CFF" },
                   { label: "ปรับเพิ่ม", detail: selectedSummaryRow.adjustmentNote || "รายการพิเศษ", value: formatMoney(selectedSummaryRow.adjustmentAdd), color: "#16a34a" },
                   { label: "หักลา", detail: selectedSummaryRow.payType === "daily" ? `ลา ${selectedSummaryRow.recordedLeaveDays.toFixed(1)} วัน ไม่ได้ค่าจ้างวันนั้นและไม่หักซ้ำ` : `${selectedSummaryRow.leaveDeductDays.toFixed(1)} วัน x ${formatMoney(MONTHLY_LEAVE_DEDUCT_RATE)}${selectedSummaryRow.medicalLeaveDays > 0 ? `, ใบนัดหมอ ${selectedSummaryRow.medicalLeaveDays.toFixed(1)} วันไม่หัก` : ""}`, value: `- ${formatMoney(selectedSummaryRow.leaveDeductions)}`, color: "#dc2626" },
                   { label: "หัก 3% ตาม PDF", detail: selectedSummaryRow.payType === "monthly" ? `${formatMoney(selectedSummaryRow.bankGrossSalary)} - ${formatMoney(selectedSummaryRow.bankDeposit)}` : "เฉพาะรายเดือน", value: `- ${formatMoney(selectedSummaryRow.monthlyRecurringDeduction)}`, color: "#dc2626" },
@@ -8045,7 +8494,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
                 ].filter(Boolean).map(item => (
                   <div key={item.label} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "0.75rem", alignItems: "center", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.85rem 1rem" }}>
                     <div>
-                      <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "#0f172a" }}>{item.label}</div>
+                      <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "#233862" }}>{item.label}</div>
                       <div style={{ fontSize: "0.76rem", color: "#64748b", marginTop: "0.18rem" }}>{item.detail}</div>
                     </div>
                     <div style={{ fontSize: "0.95rem", fontWeight: 800, color: item.color, whiteSpace: "nowrap" }}>{item.value}</div>
@@ -8058,12 +8507,12 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
                   </div>
                   <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#d97706", whiteSpace: "nowrap" }}>{formatMoney(selectedSummaryRow.refundAmount)}</div>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "0.75rem", alignItems: "center", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "12px", padding: "0.95rem 1rem" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "0.75rem", alignItems: "center", background: "#EAF5FF", border: "1px solid #B8E0FF", borderRadius: "12px", padding: "0.95rem 1rem" }}>
                   <div>
-                    <div style={{ fontSize: "0.84rem", fontWeight: 800, color: "#1d4ed8" }}>ต้องรับเพิ่ม</div>
-                    <div style={{ fontSize: "0.76rem", color: "#2563eb", marginTop: "0.18rem" }}>MAX(0, รวมเข้า บช หลังคำนวณ - เงินเข้า บช ตาม PDF)</div>
+                    <div style={{ fontSize: "0.84rem", fontWeight: 800, color: "#0072D9" }}>ต้องรับเพิ่ม</div>
+                    <div style={{ fontSize: "0.76rem", color: "#008CFF", marginTop: "0.18rem" }}>MAX(0, รวมเข้า บช หลังคำนวณ - เงินเข้า บช ตาม PDF)</div>
                   </div>
-                  <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#2563eb", whiteSpace: "nowrap" }}>{formatMoney(selectedSummaryRow.additionalPayment)}</div>
+                  <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#008CFF", whiteSpace: "nowrap" }}>{formatMoney(selectedSummaryRow.additionalPayment)}</div>
                 </div>
               </div>
             )}
@@ -8100,7 +8549,7 @@ function SettingsPage({ settings, onRefresh }) {
       <PageHeader title="ตั้งค่าเวลาทำงาน" />
       <Card>
         <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem", maxWidth: 500 }}>
-          <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "10px", padding: "0.75rem", fontSize: "0.85rem", color: "#1d4ed8" }}>
+          <div style={{ background: "#EAF5FF", border: "1px solid #B8E0FF", borderRadius: "10px", padding: "0.75rem", fontSize: "0.85rem", color: "#0072D9" }}>
             ⏰ ระบบจะคำนวณ "มาสาย" และ "กลับก่อน" ตามเวลาที่ตั้งนี้
           </div>
 
@@ -8117,7 +8566,7 @@ function SettingsPage({ settings, onRefresh }) {
             <div style={{ fontSize: "0.72rem", color: "#94a3b8", marginTop: "0.25rem" }}>เช่น 5 นาที = มาสายไม่เกิน 5 นาทียังถือว่าตรงเวลา</div>
           </Field>
 
-          <button onClick={handleSave} disabled={saving} style={{ padding: "0.85rem", borderRadius: "10px", border: "none", background: saved ? "#16a34a" : "linear-gradient(135deg, #2563eb, #1d4ed8)", color: "#fff", fontWeight: 700, fontSize: "0.95rem", cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}>
+          <button onClick={handleSave} disabled={saving} style={{ padding: "0.85rem", borderRadius: "10px", border: "none", background: saved ? "#16a34a" : "linear-gradient(135deg, #008CFF, #0072D9)", color: "#fff", fontWeight: 700, fontSize: "0.95rem", cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}>
             {saving ? <RefreshCw size={18} style={{ animation: "spin 1s linear infinite" }} /> : saved ? <CheckCircle size={18} /> : <Save size={18} />}
             {saving ? "กำลังบันทึก..." : saved ? "บันทึกแล้ว!" : "บันทึกการตั้งค่า"}
           </button>
@@ -8237,7 +8686,7 @@ function FinancePortal({ employees, attendance, leaves, settings }) {
       <Card>
         <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
           <div>
-            <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0f172a" }}>ศูนย์รวมเงินเดือนและค่าใช้จ่าย</div>
+            <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#233862" }}>ศูนย์รวมเงินเดือนและค่าใช้จ่าย</div>
             <div style={{ fontSize: "0.82rem", color: "#64748b", marginTop: "0.2rem" }}>ใช้ฐานข้อมูล Supabase ชุดเดียวกับ HR ไม่ต้องเข้าสู่ระบบใหม่</div>
           </div>
           <div style={{ width: 180 }}>
@@ -8254,9 +8703,9 @@ function FinancePortal({ employees, attendance, leaves, settings }) {
             key={item.key}
             onClick={() => setTab(item.key)}
             style={{
-              border: `1.5px solid ${tab === item.key ? "#2563eb" : "#e2e8f0"}`,
-              background: tab === item.key ? "#eff6ff" : "#fff",
-              color: tab === item.key ? "#1d4ed8" : "#475569",
+              border: `1.5px solid ${tab === item.key ? "#008CFF" : "#e2e8f0"}`,
+              background: tab === item.key ? "#EAF5FF" : "#fff",
+              color: tab === item.key ? "#0072D9" : "#475569",
               borderRadius: "10px",
               padding: "0.65rem 0.9rem",
               fontWeight: 800,
@@ -8272,7 +8721,7 @@ function FinancePortal({ employees, attendance, leaves, settings }) {
       {tab === "overview" && (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "1rem", marginBottom: "1rem" }}>
-            <StatCard stat={{ label: "ยอดสุทธิหลังคำนวณ", value: loadingPayroll ? "..." : formatMoney(payrollRealSalaryTotal), icon: DollarSign, color: "#2563eb", bg: "#eff6ff", trend: month }} />
+            <StatCard stat={{ label: "ยอดสุทธิหลังคำนวณ", value: loadingPayroll ? "..." : formatMoney(payrollRealSalaryTotal), icon: DollarSign, color: "#008CFF", bg: "#EAF5FF", trend: month }} />
             <StatCard stat={{ label: "ค่าใช้จ่ายอื่น", value: formatMoney(manualExpenseTotal), icon: FileText, color: "#dc2626", bg: "#fef2f2", trend: "ค่าไฟ ค่าน้ำ และอื่นๆ" }} />
             <StatCard stat={{ label: "รายรับรวม", value: formatMoney(incomeTotal), icon: TrendingUp, color: "#16a34a", bg: "#ecfdf5", trend: "กรอกในเครื่องคิด" }} />
             <StatCard stat={{ label: "ยอดคืนรวม", value: formatMoney(payrollRefundTotal), icon: Building2, color: "#d97706", bg: "#fff7ed", trend: "จาก payroll" }} />
@@ -8280,7 +8729,7 @@ function FinancePortal({ employees, attendance, leaves, settings }) {
 
           <Card padding="0">
             <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid #f1f5f9" }}>
-              <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a" }}>เงินเดือนที่บันทึกแล้วในเดือนนี้</div>
+              <div style={{ fontSize: "1rem", fontWeight: 800, color: "#233862" }}>เงินเดือนที่บันทึกแล้วในเดือนนี้</div>
               <div style={{ fontSize: "0.8rem", color: "#64748b" }}>ดึงจากตาราง payroll โดยตรง</div>
             </div>
             <div style={{ overflowX: "auto" }}>
@@ -8300,7 +8749,7 @@ function FinancePortal({ employees, attendance, leaves, settings }) {
                     const realSalary = note.real_salary || parseMoney(row.total);
                     return (
                       <tr key={row.id} style={{ borderBottom: "1px solid #f8fafc" }}>
-                        <td style={{ padding: "0.75rem 0.9rem", fontWeight: 800, color: "#0f172a" }}>{row.employees?.name || "-"}</td>
+                        <td style={{ padding: "0.75rem 0.9rem", fontWeight: 800, color: "#233862" }}>{row.employees?.name || "-"}</td>
                         <td style={{ padding: "0.75rem 0.9rem", color: "#64748b" }}>{row.employees?.department || "-"}</td>
                         <td style={{ padding: "0.75rem 0.9rem" }}>{row.work_days || 0} วัน</td>
                         <td style={{ padding: "0.75rem 0.9rem" }}>{row.duty_count || 0} วัน</td>
@@ -8324,7 +8773,7 @@ function FinancePortal({ employees, attendance, leaves, settings }) {
         <Card>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap", marginBottom: "1rem" }}>
             <div>
-              <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a" }}>เครื่องคิดรายรับรายจ่ายโรงเรียน</div>
+              <div style={{ fontSize: "1rem", fontWeight: 800, color: "#233862" }}>เครื่องคิดรายรับรายจ่ายโรงเรียน</div>
               <div style={{ fontSize: "0.8rem", color: "#64748b" }}>ใช้รวมกับเงินเดือนที่บันทึกใน Supabase เดือน {month}</div>
             </div>
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
@@ -8357,15 +8806,15 @@ function FinancePortal({ employees, attendance, leaves, settings }) {
 
 function PayrollStandaloneApp({ employees, attendance, leaves, settings, currentUser, onBack, onLogout }) {
   return (
-    <div style={{ fontFamily: "'Sarabun', 'Noto Sans Thai', sans-serif", background: "#f8fafc", minHeight: "100vh" }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap'); * { box-sizing: border-box; margin: 0; padding: 0; } @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-      <header style={{ position: "sticky", top: 0, zIndex: 100, background: "#fff", borderBottom: "1px solid #e2e8f0", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", padding: "0 1rem", boxShadow: "0 1px 8px rgba(0,0,0,0.06)" }}>
+    <div style={{ fontFamily: "'Anuphan', 'Sarabun', 'Noto Sans Thai', sans-serif", background: "#F3F8FD", minHeight: "100vh" }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600;700&family=Sarabun:wght@400;600;700&display=swap'); * { box-sizing: border-box; margin: 0; padding: 0; } @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <header style={{ position: "sticky", top: 0, zIndex: 100, background: "#fff", borderBottom: "1px solid #e2e8f0", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", padding: "0 1rem", boxShadow: "0 4px 24px rgba(0,140,255,0.08)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", minWidth: 0 }}>
           <div style={{ width: 38, height: 38, borderRadius: "12px", background: "linear-gradient(135deg, #16a34a, #0f766e)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <DollarSign size={20} color="#fff" />
           </div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ color: "#0f172a", fontWeight: 900, fontSize: "1rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>เว็บคิดเงินเดือน</div>
+            <div style={{ color: "#233862", fontWeight: 900, fontSize: "1rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>เว็บคิดเงินเดือน</div>
             <div style={{ color: "#64748b", fontSize: "0.72rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>ดึงข้อมูลจาก Supabase ชุดเดียวกับ HR</div>
           </div>
         </div>
@@ -8391,7 +8840,7 @@ function StatCard({ stat }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div>
           <div style={{ color: "#64748b", fontSize: "0.8rem", fontWeight: 500, marginBottom: "0.4rem" }}>{stat.label}</div>
-          <div style={{ fontSize: "2rem", fontWeight: 800, color: "#0f172a", lineHeight: 1 }}>{stat.value}</div>
+          <div style={{ fontSize: "2rem", fontWeight: 800, color: "#233862", lineHeight: 1 }}>{stat.value}</div>
           <div style={{ fontSize: "0.72rem", color: stat.color, marginTop: "0.35rem", fontWeight: 600 }}>{stat.trend}</div>
         </div>
         <div style={{ background: stat.bg, borderRadius: "12px", padding: "0.6rem", display: "flex" }}><Icon size={22} color={stat.color} /></div>
@@ -8411,6 +8860,16 @@ export default function HRApp() {
     return "dashboard";
   };
   const [activePage, setActivePage] = useState(getInitialPage);
+  const [evalFocus, setEvalFocus] = useState("");
+  const landedRef = useRef("");
+  useEffect(() => {
+    // ผู้บริหาร/แอดมิน เข้าสู่ระบบแล้วไปหน้าผู้บริหารก่อน (ครั้งเดียวต่อการล็อกอิน)
+    const id = currentUser ? String(currentUser.id) : "";
+    if (!id) { landedRef.current = ""; return; }
+    if (landedRef.current === id) return;
+    landedRef.current = id;
+    if (isExecutiveUser(currentUser) && !window.location.hash) setActivePage("execDash");
+  }, [currentUser]);
   const [showAttendance, setShowAttendance] = useState(false);
   const [attMode, setAttMode] = useState("in");
   const [activityLog, setActivityLog] = useState([]);
@@ -8468,7 +8927,7 @@ export default function HRApp() {
       setActivePage("dashboard");
       return;
     }
-    if (activePage === "teacherEval" && !isExecutiveUser(currentUser)) {
+    if ((activePage === "teacherEval" || activePage === "execDash") && !isExecutiveUser(currentUser)) {
       setActivePage("dashboard");
       return;
     }
@@ -8521,7 +8980,7 @@ export default function HRApp() {
   const myAttToday = activityLog.find(a => a.employee_id === actingUser.id && isToday(a.check_in));
 
   const stats = actingUser.role === "admin" ? [
-    { label: "พนักงานทั้งหมด", value: employees.length, icon: Users, color: "#2563eb", bg: "#eff6ff", trend: "ข้อมูลจริง" },
+    { label: "พนักงานทั้งหมด", value: employees.length, icon: Users, color: "#008CFF", bg: "#EAF5FF", trend: "ข้อมูลจริง" },
     { label: "ลงเวลาวันนี้", value: todayAttendance.length, icon: CheckCircle, color: "#059669", bg: "#ecfdf5", trend: `${employees.length > 0 ? Math.round(todayAttendance.length / employees.length * 100) : 0}%` },
     { label: "มาสายวันนี้", value: todayAttendance.filter(a => checkLate(a.check_in, settings?.work_start, settings?.late_grace_minutes)?.late).length, icon: AlertCircle, color: "#dc2626", bg: "#fef2f2", trend: "นับเฉพาะวันนี้" },
     { label: "รออนุมัติลา", value: pendingLeaves, icon: Umbrella, color: "#d97706", bg: "#fef3c7", trend: pendingLeaves > 0 ? "ต้องดำเนินการ" : "ไม่มี" },
@@ -8571,7 +9030,8 @@ export default function HRApp() {
     if (window.location.hash === "#finance" || window.location.hash === "#payroll") {
       window.history.replaceState(null, "", window.location.pathname);
     }
-    if (key === "teacherEval" && !isExecutiveUser(actingUser)) {
+    setEvalFocus("");
+    if ((key === "teacherEval" || key === "execDash") && !isExecutiveUser(actingUser)) {
       setActivePage("dashboard");
       setSidebarOpen(false);
       return;
@@ -8584,8 +9044,8 @@ export default function HRApp() {
 
   if (activePage === "payrollStandalone" && currentUser.role === "admin") {
     return loading ? (
-      <div style={{ fontFamily: "'Sarabun', 'Noto Sans Thai', sans-serif", background: "#f8fafc", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b" }}>
-        <style>{`@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap'); @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <div style={{ fontFamily: "'Anuphan', 'Sarabun', 'Noto Sans Thai', sans-serif", background: "#F3F8FD", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b" }}>
+        <style>{`@import url('https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600;700&family=Sarabun:wght@400;600;700&display=swap'); @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
         <div style={{ textAlign: "center" }}>
           <RefreshCw size={32} style={{ animation: "spin 1s linear infinite", margin: "0 auto 1rem" }} />
           <div>กำลังโหลดเว็บเงินเดือน...</div>
@@ -8608,11 +9068,11 @@ export default function HRApp() {
   }
 
   return (
-    <div style={{ fontFamily: "'Sarabun', 'Noto Sans Thai', sans-serif", background: "#f8fafc", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap'); * { box-sizing: border-box; margin: 0; padding: 0; } @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+    <div style={{ fontFamily: "'Anuphan', 'Sarabun', 'Noto Sans Thai', sans-serif", background: "#F3F8FD", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600;700&family=Sarabun:wght@400;600;700&display=swap'); * { box-sizing: border-box; margin: 0; padding: 0; } @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       <PreviewBanner />
 
-      <header style={{ background: "#fff", borderBottom: "1px solid #e2e8f0", height: 60, display: "flex", alignItems: "center", padding: "0 1rem", gap: "0.75rem", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 1px 8px rgba(0,0,0,0.06)" }}>
+      <header style={{ background: "#fff", borderBottom: "1px solid #E4EEF8", borderTop: "3px solid #008CFF", height: 60, display: "flex", alignItems: "center", padding: "0 1rem", gap: "0.75rem", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 4px 24px rgba(0,140,255,0.08)" }}>
         <button
           onClick={() => isMobile ? setSidebarOpen(open => !open) : setDesktopSidebarCollapsed(collapsed => !collapsed)}
           title={isMobile ? "เปิดเมนู" : (desktopSidebarCollapsed ? "เปิดแถบเมนู" : "พับแถบเมนู")}
@@ -8622,9 +9082,9 @@ export default function HRApp() {
           <Menu size={20} />
         </button>
         <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", minWidth: 0, flex: isMobile ? 1 : "0 0 auto" }}>
-          <div style={{ width: 34, height: 34, borderRadius: "10px", background: "linear-gradient(135deg, #2563eb, #1d4ed8)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Shield size={18} color="#fff" /></div>
+          <div style={{ width: 34, height: 34, borderRadius: "10px", background: "linear-gradient(135deg, #008CFF, #0072D9)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Shield size={18} color="#fff" /></div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#0f172a", lineHeight: 1.1 }}>HR System</div>
+            <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#233862", lineHeight: 1.1 }}>HR System</div>
             <div style={{ fontSize: "0.65rem", color: "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>โรงเรียนนิมิตศึกษา</div>
           </div>
         </div>
@@ -8632,7 +9092,7 @@ export default function HRApp() {
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginLeft: "auto" }}>
           {!isMobile && (
             <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#0f172a" }}>{actingUser.name}</div>
+              <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#233862" }}>{actingUser.name}</div>
               <div style={{ fontSize: "0.7rem", color: "#64748b" }}>
                 {actingUser.role === "admin" ? "👑 Admin" : "พนักงาน"} • {actingUser.department}
               </div>
@@ -8649,12 +9109,12 @@ export default function HRApp() {
                 if (["employee", "finance", "report", "settings"].includes(activePage)) setActivePage("dashboard");
                 setTeacherPreview(true);
               }}
-              style={{ background: teacherPreview ? "#dbeafe" : "#eff6ff", border: "1.5px solid #93c5fd", borderRadius: "10px", padding: "0.4rem 0.7rem", cursor: "pointer", color: "#1d4ed8", fontFamily: "inherit", fontSize: "0.78rem", fontWeight: 800, whiteSpace: "nowrap" }}
+              style={{ background: teacherPreview ? "#DCEFFF" : "#EAF5FF", border: "1.5px solid #8FD0FF", borderRadius: "10px", padding: "0.4rem 0.7rem", cursor: "pointer", color: "#0072D9", fontFamily: "inherit", fontSize: "0.78rem", fontWeight: 800, whiteSpace: "nowrap" }}
             >
               {teacherPreview ? "กลับหน้าแอดมิน" : "ดูหน้าครู"}
             </button>
           )}
-          <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #2563eb, #7c3aed)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "0.9rem", flexShrink: 0 }}>{actingUser.name?.[0]}</div>
+          <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #008CFF, #FF9A3C)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "0.9rem", flexShrink: 0 }}>{actingUser.name?.[0]}</div>
           <button onClick={handleLogout} title="ออกจากระบบ" style={{ background: "#fef2f2", border: "1.5px solid #fca5a5", borderRadius: "10px", padding: "0.45rem 0.65rem", cursor: "pointer", color: "#dc2626", display: "flex", alignItems: "center", gap: "0.3rem", fontFamily: "inherit", fontSize: "0.78rem", fontWeight: 600 }}>
             <LogOut size={14} />
           </button>
@@ -8685,26 +9145,26 @@ export default function HRApp() {
           transition: "left 0.3s ease, width 0.25s ease, padding 0.25s ease",
           boxShadow: isMobile && sidebarOpen ? "4px 0 20px rgba(0,0,0,0.15)" : "none"
         }}>
-          <div style={{ background: "linear-gradient(135deg, #eff6ff, #f0f9ff)", border: "1px solid #bfdbfe", borderRadius: "12px", padding: "0.85rem", marginBottom: "0.75rem", textAlign: "center" }}>
-            <div style={{ fontSize: "1.6rem", fontWeight: 800, color: "#1d4ed8" }}>{currentTime.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Bangkok" })}</div>
-            <div style={{ fontSize: "0.75rem", color: "#64748b" }}>{currentTime.toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Bangkok" })}</div>
+          <div style={{ background: "linear-gradient(135deg, #008CFF, #3EBFFB)", borderRadius: "18px", padding: "0.95rem", marginBottom: "0.75rem", textAlign: "center", boxShadow: "0 8px 22px rgba(0,140,255,0.25)" }}>
+            <div style={{ fontSize: "1.6rem", fontWeight: 700, color: "#fff" }}>{currentTime.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Bangkok" })}</div>
+            <div style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.88)" }}>{currentTime.toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Bangkok" })}</div>
           </div>
 
           {isMobile && (
             <div style={{ background: "#f8fafc", borderRadius: "10px", padding: "0.65rem", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg, #2563eb, #7c3aed)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "0.85rem" }}>{currentUser.name?.[0]}</div>
+              <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg, #008CFF, #FF9A3C)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "0.85rem" }}>{currentUser.name?.[0]}</div>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{actingUser.name}</div>
+                <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#233862", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{actingUser.name}</div>
                 <div style={{ fontSize: "0.7rem", color: "#64748b" }}>{actingUser.role === "admin" ? "👑 Admin" : "พนักงาน"}</div>
               </div>
             </div>
           )}
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", marginBottom: "1rem" }}>
-            <button onClick={() => { openCheckIn(); setSidebarOpen(false); }} style={{ background: "linear-gradient(135deg, #2563eb, #1d4ed8)", border: "none", borderRadius: "12px", padding: "0.85rem 0.5rem", color: "#fff", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.35rem", boxShadow: "0 4px 14px rgba(37,99,235,0.3)", fontFamily: "inherit" }}>
+            <button onClick={() => { openCheckIn(); setSidebarOpen(false); }} style={{ background: "linear-gradient(135deg, #008CFF, #0072D9)", border: "none", borderRadius: "12px", padding: "0.85rem 0.5rem", color: "#fff", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.35rem", boxShadow: "0 4px 14px rgba(0,140,255,0.3)", fontFamily: "inherit" }}>
               <LogIn size={20} /> เข้างาน
             </button>
-            <button onClick={() => { openCheckOut(); setSidebarOpen(false); }} style={{ background: "linear-gradient(135deg, #f59e0b, #d97706)", border: "none", borderRadius: "12px", padding: "0.85rem 0.5rem", color: "#fff", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.35rem", boxShadow: "0 4px 14px rgba(245,158,11,0.3)", fontFamily: "inherit" }}>
+            <button onClick={() => { openCheckOut(); setSidebarOpen(false); }} style={{ background: "linear-gradient(90deg, #FF7106, #FF9A3C)", border: "none", borderRadius: "14px", padding: "0.85rem 0.5rem", color: "#fff", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.35rem", boxShadow: "0 4px 14px rgba(255,113,6,0.3)", fontFamily: "inherit" }}>
               <LogOut size={20} /> กลับบ้าน
             </button>
           </div>
@@ -8721,8 +9181,9 @@ export default function HRApp() {
                 padding: "0.85rem 0.85rem",
                 borderRadius: "12px",
                 border: "none",
-                background: isActive ? "linear-gradient(135deg, #eff6ff, #dbeafe)" : "transparent",
-                color: isActive ? "#1d4ed8" : "#475569",
+                background: isActive ? "linear-gradient(90deg, #008CFF, #3EBFFB)" : "transparent",
+                color: isActive ? "#fff" : "#464646",
+                boxShadow: isActive ? "0 6px 16px rgba(0,140,255,0.25)" : "none",
                 cursor: "pointer",
                 fontSize: "0.95rem",
                 fontWeight: isActive ? 700 : 600,
@@ -8731,7 +9192,7 @@ export default function HRApp() {
                 transition: "all 0.15s",
                 minHeight: 48
               }}
-                onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = "#f8fafc"; }}
+                onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = "#EAF5FF"; }}
                 onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = "transparent"; }}
               >
                 <Icon size={20} />
@@ -8766,7 +9227,7 @@ export default function HRApp() {
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                               <Umbrella size={18} color="#7c3aed" />
-                              <div style={{ fontWeight: 700, color: "#0f172a", fontSize: "0.95rem" }}>การลารออนุมัติ</div>
+                              <div style={{ fontWeight: 700, color: "#233862", fontSize: "0.95rem" }}>การลารออนุมัติ</div>
                             </div>
                             <span style={{ background: "#fef3c7", color: "#d97706", fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.6rem", borderRadius: "20px" }}>{leaves.filter(l => l.status === "pending").length} รายการ</span>
                           </div>
@@ -8778,7 +9239,7 @@ export default function HRApp() {
                                 <div key={l.id} style={{ background: "#f8fafc", borderRadius: "10px", padding: "0.75rem", display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
                                   <Avatar name={l.employees?.name} index={i} />
                                   <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ fontWeight: 600, fontSize: "0.85rem", color: "#0f172a" }}>{l.employees?.name}</div>
+                                    <div style={{ fontWeight: 600, fontSize: "0.85rem", color: "#233862" }}>{l.employees?.name}</div>
                                     <div style={{ fontSize: "0.75rem", color: "#64748b" }}>{l.leave_type} • {l.duration_type} • {l.hours} ชม.</div>
                                     <div style={{ fontSize: "0.72rem", color: "#94a3b8" }}>{fmtDate(l.start_date)} → {fmtDate(l.end_date)}</div>
                                     {l.reason && <div style={{ fontSize: "0.72rem", color: "#475569", marginTop: "0.25rem", fontStyle: "italic" }}>"{l.reason.slice(0, 50)}{l.reason.length > 50 ? "..." : ""}"</div>}
@@ -8802,7 +9263,7 @@ export default function HRApp() {
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                               <ArrowRightLeft size={18} color="#d97706" />
-                              <div style={{ fontWeight: 700, color: "#0f172a", fontSize: "0.95rem" }}>ออกนอกสถานที่ — ขณะนี้</div>
+                              <div style={{ fontWeight: 700, color: "#233862", fontSize: "0.95rem" }}>ออกนอกสถานที่ — ขณะนี้</div>
                             </div>
                             <span style={{ background: "#fef2f2", color: "#dc2626", fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.6rem", borderRadius: "20px" }}>{outings.filter(o => o.status === "out").length} คน</span>
                           </div>
@@ -8814,7 +9275,7 @@ export default function HRApp() {
                                 <div key={o.id} style={{ background: "#fef9e7", border: "1px solid #fde68a", borderRadius: "10px", padding: "0.75rem", display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
                                   <Avatar name={o.employees?.name} index={i} />
                                   <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ fontWeight: 600, fontSize: "0.85rem", color: "#0f172a" }}>{o.employees?.name}</div>
+                                    <div style={{ fontWeight: 600, fontSize: "0.85rem", color: "#233862" }}>{o.employees?.name}</div>
                                     <div style={{ fontSize: "0.75rem", color: "#64748b" }}>📍 {o.destination || "ไม่ระบุ"}</div>
                                     <div style={{ fontSize: "0.72rem", color: "#d97706", fontWeight: 600 }}>ออกเมื่อ {fmtTime(o.out_time)} น.</div>
                                     {o.reason && <div style={{ fontSize: "0.72rem", color: "#475569", marginTop: "0.25rem", fontStyle: "italic" }}>"{o.reason.slice(0, 40)}{o.reason.length > 40 ? "..." : ""}"</div>}
@@ -8834,7 +9295,7 @@ export default function HRApp() {
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                             <AlertCircle size={18} color="#dc2626" />
-                            <div style={{ fontWeight: 700, color: "#0f172a", fontSize: "0.95rem" }}>มาสายวันนี้</div>
+                            <div style={{ fontWeight: 700, color: "#233862", fontSize: "0.95rem" }}>มาสายวันนี้</div>
                           </div>
                           <span style={{ background: "#fef2f2", color: "#dc2626", fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.6rem", borderRadius: "20px" }}>{todayAttendance.filter(a => checkLate(a.check_in, settings?.work_start)?.late).length} คน</span>
                         </div>
@@ -8877,7 +9338,7 @@ export default function HRApp() {
 
                   <Card>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}><Activity size={18} color="#2563eb" /><div style={{ fontWeight: 700, color: "#0f172a", fontSize: "0.95rem" }}>กิจกรรมล่าสุด</div></div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}><Activity size={18} color="#008CFF" /><div style={{ fontWeight: 700, color: "#233862", fontSize: "0.95rem" }}>กิจกรรมล่าสุด</div></div>
                       <button onClick={fetchData} style={{ background: "none", border: "1.5px solid #e2e8f0", borderRadius: "8px", padding: "0.35rem 0.75rem", fontSize: "0.78rem", color: "#475569", cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: "0.4rem" }}>
                         <RefreshCw size={13} /> รีเฟรช
                       </button>
@@ -8900,7 +9361,7 @@ export default function HRApp() {
                                 <td style={{ padding: "0.65rem 0.75rem" }}>
                                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                                     <Avatar name={row.employees?.name} index={i} />
-                                    <span style={{ fontWeight: 600, color: "#0f172a" }}>{row.employees?.name || "-"}</span>
+                                    <span style={{ fontWeight: 600, color: "#233862" }}>{row.employees?.name || "-"}</span>
                                   </div>
                                 </td>
                                 <td style={{ padding: "0.65rem 0.75rem", color: "#64748b" }}>{row.employees?.department || "-"}</td>
@@ -8924,7 +9385,8 @@ export default function HRApp() {
               {activePage === "schedule" && <SchedulePage employees={employees} currentUser={actingUser} onRefresh={fetchData} />}
               {activePage === "academic" && <AcademicPage employees={employees} currentUser={actingUser} />}
               {activePage === "activityPlan" && <ActivityPlanPage employees={employees} currentUser={actingUser} />}
-              {activePage === "teacherEval" && (isExecutiveUser(actingUser) ? <TeacherEvalPage employees={employees} currentUser={actingUser} /> : <NoAccessCard />)}
+              {activePage === "execDash" && (isExecutiveUser(actingUser) ? <ExecutiveDashboard employees={employees} leaves={leaves} settings={settings} currentUser={actingUser} onOpenEval={id => { setEvalFocus(String(id)); setActivePage("teacherEval"); }} onOpenLeave={() => openNavItem("leave")} /> : <NoAccessCard />)}
+              {activePage === "teacherEval" && (isExecutiveUser(actingUser) ? <TeacherEvalPage employees={employees} currentUser={actingUser} initialSelected={evalFocus} /> : <NoAccessCard />)}
               {activePage === "settings" && <SettingsPage settings={settings} onRefresh={fetchData} />}
             </>
           )}

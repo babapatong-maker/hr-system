@@ -587,6 +587,74 @@ function getDeviceId() {
   return id;
 }
 
+// ─── LOGIN SESSIONS (สูงสุด 3 เครื่องต่อคน) ─────────────────────────────────────
+// แถวพิเศษใน teaching_schedule: class_room "__LOGIN_SESSION__", subject = JSON {device_id, device_name, login_at, last_seen}
+const LOGIN_SESSION_ROOM = "__LOGIN_SESSION__";
+const MAX_LOGIN_DEVICES = 3;
+const SESSION_STALE_DAYS = 30;
+const KICKED_MESSAGE = "⚠️ บัญชีนี้ถูกออกจากระบบบนเครื่องนี้ เนื่องจากมีการเข้าสู่ระบบจากเครื่องอื่น (เข้าได้พร้อมกันสูงสุด 3 เครื่อง) กรุณาเข้าสู่ระบบใหม่";
+
+function parseSessionRow(row) {
+  let body = {};
+  try { body = JSON.parse(row.subject || "{}"); } catch { /* ignore */ }
+  return { id: row.id, ...body };
+}
+
+async function fetchLoginSessions(employeeId) {
+  const { data, error } = await supabase.from("teaching_schedule").select("id, subject").eq("class_room", LOGIN_SESSION_ROOM).eq("employee_id", employeeId);
+  if (error) throw error;
+  return (data || []).map(parseSessionRow);
+}
+
+async function registerLoginSession(employeeId) {
+  const deviceId = getDeviceId();
+  const now = new Date().toISOString();
+  const sessions = await fetchLoginSessions(employeeId);
+  const mine = sessions.filter(x => x.device_id === deviceId);
+  const body = { device_id: deviceId, device_name: getDeviceName(), login_at: now, last_seen: now };
+  const payload = { employee_id: employeeId, day_of_week: 0, period: 1, class_room: LOGIN_SESSION_ROOM, start_time: "00:00:00", end_time: null, subject: JSON.stringify(body) };
+  if (mine.length) {
+    await supabase.from("teaching_schedule").update(payload).eq("id", mine[0].id);
+    if (mine.length > 1) await supabase.from("teaching_schedule").delete().in("id", mine.slice(1).map(x => x.id));
+  } else {
+    await supabase.from("teaching_schedule").insert(payload);
+  }
+  try { localStorage.setItem("hr_session_device", `${employeeId}|${deviceId}`); } catch { /* ignore */ }
+  // ลบเครื่องที่ไม่ได้ใช้นานเกิน 30 วัน และเกิน 3 เครื่องให้ออกเครื่องที่ใช้ล่าสุดนานที่สุด
+  const staleBefore = Date.now() - SESSION_STALE_DAYS * 86400000;
+  const others = sessions.filter(x => x.device_id !== deviceId)
+    .sort((a, b) => new Date(b.last_seen || b.login_at || 0) - new Date(a.last_seen || a.login_at || 0));
+  const remove = others.filter((x, i) => i >= MAX_LOGIN_DEVICES - 1 || new Date(x.last_seen || x.login_at || 0).getTime() < staleBefore);
+  if (remove.length) await supabase.from("teaching_schedule").delete().in("id", remove.map(x => x.id));
+}
+
+// คืนค่า "ok" | "kicked" | "unknown" (เน็ตหลุด/ผิดพลาด = ไม่เตะออก)
+async function touchLoginSession(employeeId) {
+  try {
+    const deviceId = getDeviceId();
+    const sessions = await fetchLoginSessions(employeeId);
+    const mine = sessions.find(x => x.device_id === deviceId);
+    if (!mine) {
+      // เครื่องที่ล็อกอินไว้ก่อนมีระบบนี้ (ยังไม่เคยลงทะเบียน) ให้ลงทะเบียนเลย ไม่เตะออก
+      if (localStorage.getItem("hr_session_device") !== `${employeeId}|${deviceId}`) { await registerLoginSession(employeeId); return "ok"; }
+      return "kicked";
+    }
+    const { id, ...body } = mine;
+    await supabase.from("teaching_schedule").update({ subject: JSON.stringify({ ...body, last_seen: new Date().toISOString() }) }).eq("id", id);
+    return "ok";
+  } catch { return "unknown"; }
+}
+
+async function removeLoginSession(employeeId) {
+  try {
+    const deviceId = getDeviceId();
+    const sessions = await fetchLoginSessions(employeeId);
+    const ids = sessions.filter(x => x.device_id === deviceId).map(x => x.id);
+    localStorage.removeItem("hr_session_device");
+    if (ids.length) await supabase.from("teaching_schedule").delete().in("id", ids);
+  } catch { /* ignore */ }
+}
+
 function getDeviceName() {
   const ua = navigator.userAgent;
   let device = "Unknown";
@@ -806,7 +874,7 @@ function LoginPage({ onLogin }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(() => { try { return sessionStorage.getItem("hr_kicked_msg") || ""; } catch { return ""; } });
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
@@ -826,58 +894,9 @@ function LoginPage({ onLogin }) {
 
     const user = data[0];
 
-    // เว็บทดลองบนเครื่องนี้ไม่ผูกเครื่อง เพื่อไม่ไปล็อกบัญชีครูจริง
-    if (user.role === "admin" || isLocalPreview()) {
-      setLoading(false);
-      localStorage.setItem("hr_user", JSON.stringify(user));
-      onLogin(user);
-      return;
-    }
-
-    // 3. เช็ค Device
-    const deviceId = getDeviceId();
-    const deviceName = getDeviceName();
-
-    // ดู device ที่ผูกกับ user นี้
-    const { data: userDevice } = await supabase
-      .from("user_devices")
-      .select("*")
-      .eq("employee_id", user.id)
-      .limit(1);
-
-    // ดูว่า device นี้ผูกกับ user คนอื่นหรือยัง
-    const { data: deviceOwner } = await supabase
-      .from("user_devices")
-      .select("*, employees(name)")
-      .eq("device_id", deviceId)
-      .limit(1);
-
-    if (userDevice && userDevice.length > 0) {
-      // user มี device ผูกแล้ว
-      if (userDevice[0].device_id !== deviceId) {
-        setLoading(false);
-        setError("⚠️ บัญชีนี้ถูกผูกกับเครื่องอื่นแล้ว กรุณาติดต่อ Admin เพื่อปลดล็อก");
-        return;
-      }
-      // อัปเดต last seen
-      await supabase.from("user_devices").update({ device_name: deviceName }).eq("employee_id", user.id);
-    } else {
-      // user ยังไม่มี device — ผูกครั้งแรก
-      if (deviceOwner && deviceOwner.length > 0) {
-        setLoading(false);
-        setError(`⚠️ เครื่องนี้ผูกกับ "${deviceOwner[0].employees?.name}" แล้ว ไม่สามารถใช้งานข้ามบัญชีได้`);
-        return;
-      }
-      // ผูก device ใหม่
-      const { error: insErr } = await supabase.from("user_devices").insert({
-        employee_id: user.id, device_id: deviceId, device_name: deviceName
-      });
-      if (insErr) {
-        setLoading(false);
-        setError("เกิดข้อผิดพลาด: " + insErr.message);
-        return;
-      }
-    }
+    // ครู 1 คนเข้าได้พร้อมกันสูงสุด 3 เครื่อง ไม่ล็อกบัญชี — เครื่องที่ 4 จะเตะเครื่องที่ไม่ได้ใช้นานที่สุดออก
+    try { await registerLoginSession(user.id); } catch (e) { console.warn("login session", e); }
+    try { sessionStorage.removeItem("hr_kicked_msg"); } catch { /* ignore */ }
 
     setLoading(false);
     localStorage.setItem("hr_user", JSON.stringify(user));
@@ -2828,7 +2847,7 @@ async function writeSupervisionPlan(employeeId, dateKey, plan, existingId, dayOf
 
 // ─── SCHEDULE PAGE ────────────────────────────────────────────────────────────
 // ─── ตารางสอนรายสัปดาห์ (ครูกรอกเอง · ผู้บริหาร/แอดมินดูได้ทั้งหมด) ───────────────
-const TIMETABLE_SPECIAL_ROOMS = [SUPERVISION_SCHEDULE_ROOM, STUDENT_ROLL_ROOM, ACADEMIC_RECORD_ROOM, ACTIVITY_PLAN_ROOM, "__TEACHER_EVAL__", "__CLEANING_DUTY__"];
+const TIMETABLE_SPECIAL_ROOMS = [SUPERVISION_SCHEDULE_ROOM, STUDENT_ROLL_ROOM, ACADEMIC_RECORD_ROOM, ACTIVITY_PLAN_ROOM, "__TEACHER_EVAL__", "__CLEANING_DUTY__", "__LOGIN_SESSION__"];
 const TIMETABLE_PERIODS = [1, 2, 3, 4, 5, 6, 7, 8];
 const TIMETABLE_DEFAULT_TIMES = [["08:30", "09:20"], ["09:20", "10:10"], ["10:20", "11:10"], ["11:10", "12:00"], ["13:00", "13:50"], ["13:50", "14:40"], ["14:40", "15:30"], ["15:30", "16:20"]];
 const isTimetableRow = row => row && row.day_of_week >= 1 && row.day_of_week <= 5 && !String(row.class_room || "").startsWith("__") && !TIMETABLE_SPECIAL_ROOMS.includes(row.class_room);
@@ -6408,7 +6427,7 @@ function ExecSection({ title, icon: Icon, right, children }) {
 }
 
 // ─── ตารางสอนรายคาบ (หน้าผู้บริหาร) ─────────────────────────────────────────
-const EXEC_SPECIAL_ROOMS = new Set([SUPERVISION_SCHEDULE_ROOM, STUDENT_ROLL_ROOM, ACADEMIC_RECORD_ROOM, ACTIVITY_PLAN_ROOM, "__TEACHER_EVAL__", "__CLEANING_DUTY__"]);
+const EXEC_SPECIAL_ROOMS = new Set([SUPERVISION_SCHEDULE_ROOM, STUDENT_ROLL_ROOM, ACADEMIC_RECORD_ROOM, ACTIVITY_PLAN_ROOM, "__TEACHER_EVAL__", "__CLEANING_DUTY__", "__LOGIN_SESSION__"]);
 const EXEC_DEFAULT_PERIOD_TIMES = [["08:30", "09:20"], ["09:20", "10:10"], ["10:20", "11:10"], ["11:10", "12:00"], ["13:00", "13:50"], ["13:50", "14:40"]];
 
 function execNowMinutes() {
@@ -10372,6 +10391,26 @@ export default function HRApp() {
     }
   }, [currentUser, activePage]);
 
+  // ตรวจว่าเครื่องนี้ยังอยู่ใน 3 เครื่องล่าสุด ตอนเปิดหน้า และทุก 60 วินาที
+  const currentUserId = currentUser?.id;
+  useEffect(() => {
+    if (!currentUserId) return;
+    let stopped = false;
+    const check = async () => {
+      const result = await touchLoginSession(currentUserId);
+      if (stopped || result !== "kicked") return;
+      try { sessionStorage.setItem("hr_kicked_msg", KICKED_MESSAGE); } catch { /* ignore */ }
+      localStorage.removeItem("hr_user");
+      setCurrentUser(null);
+      setActivePage("dashboard");
+    };
+    check();
+    const t = setInterval(check, 60000);
+    const onVisible = () => { if (document.visibilityState === "visible") check(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { stopped = true; clearInterval(t); document.removeEventListener("visibilitychange", onVisible); };
+  }, [currentUserId]);
+
   useEffect(() => { const t = setInterval(() => setCurrentTime(new Date()), 1000); return () => clearInterval(t); }, []);
   useEffect(() => { if (currentUser) fetchData(); }, [currentUser]);
 
@@ -10393,6 +10432,7 @@ export default function HRApp() {
   }
 
   const handleLogout = () => {
+    if (currentUser?.id) removeLoginSession(currentUser.id);
     localStorage.removeItem("hr_user");
     if (window.location.hash === "#finance" || window.location.hash === "#payroll") {
       window.history.replaceState(null, "", window.location.pathname);

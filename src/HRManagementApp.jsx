@@ -3584,7 +3584,7 @@ function WeekPeriodEditor({ period, disabled, onChange, onPickFile, onPickWorksh
   );
 }
 
-function SupervisionPeriodRead({ period, defaultOpen = false, adminSlot = null }) {
+function SupervisionPeriodRead({ period, defaultOpen = false, adminSlot = null, hidePostNote = false }) {
   const [open, setOpen] = useState(defaultOpen);
   const choice = selectedPlanParts(period);
   const planLabel = choice.plan ? choice.plan.title : "";
@@ -3663,7 +3663,7 @@ function SupervisionPeriodRead({ period, defaultOpen = false, adminSlot = null }
               <YoutubeGrid links={period.youtube_links} />
             </div>
           )}
-          {postNoteHasData(period.post_note) && (
+          {!hidePostNote && postNoteHasData(period.post_note) && (
             <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: "0.45rem" }}>
               <div style={{ fontWeight: 800, color: "#233862", marginBottom: "0.3rem" }}>บันทึกหลังสอน</div>
               <PostNoteRead note={period.post_note} />
@@ -7618,21 +7618,49 @@ function CleaningDutyInner({ currentUser }) {
   );
 }
 
-// ─── ดูแผนสำหรับสอนแทน (อ่านอย่างเดียว ยกเว้นความเห็นผู้บริหาร) ──────────────
+// ─── ดูแผนสอนแทน (ครูทุกคนดูได้ · อ่านอย่างเดียว ยกเว้นความเห็นผู้บริหาร) ──────────────
+// เลือกครู → สัปดาห์ → วัน → คาบ (ค่าเริ่มต้น = วันนี้) · ดึงตารางสอนของครูคนนั้นมาแสดงคาบของวันที่เลือก
+// แสดงเฉพาะชื่อ/กลุ่มสาระของครู ไม่ดึงเงินเดือนหรือผลประเมินใด ๆ · บันทึกหลังสอนแสดงเฉพาะผู้บริหาร
+function substituteDefaultDay() {
+  const today = todayISO();
+  const dow = new Date(`${today}T00:00:00`).getDay();
+  if (dow >= 1 && dow <= 5) return { weekStart: mondayOf(today), day: dow };
+  return { weekStart: shiftDateKey(mondayOf(today), 7), day: 1 }; // เสาร์–อาทิตย์ → วันจันทร์ถัดไป
+}
+
 function SubstitutePlanView({ employees, currentUser }) {
   const isAdmin = isExecutiveUser(currentUser);
-  const teachers = (employees || []).filter(emp => emp.id !== currentUser?.id);
+  const canSeeTestTeacher = isTestTeacherOwner(currentUser) || isTestTeacher(currentUser);
+  const teachers = (employees || [])
+    .filter(emp => emp?.id && (!isTestTeacher(emp) || canSeeTestTeacher))
+    .map(emp => ({ id: emp.id, name: emp.name || "", department: emp.department || "" })) // ใช้เฉพาะชื่อ/กลุ่มสาระ
+    .sort((a, b) => a.name.localeCompare(b.name, "th"));
+  // ผู้ใช้ที่ถูกซ่อนจากรายชื่อรวม (เช่น ครูทดลองระบบ) ยังดูแผนของตัวเองได้
+  if (currentUser?.id && !teachers.some(emp => String(emp.id) === String(currentUser.id))) teachers.unshift({ id: currentUser.id, name: `${currentUser.name || "ตัวเอง"} (ตัวเอง)`, department: "" });
+  const initial = substituteDefaultDay();
   const [teacherId, setTeacherId] = useState("");
-  const [date, setDate] = useState(() => todayISO());
+  const [weekStart, setWeekStart] = useState(initial.weekStart);
+  const [day, setDay] = useState(initial.day);
   const [periodNo, setPeriodNo] = useState("");
+  const [timetable, setTimetable] = useState([]);
+  const [timetableError, setTimetableError] = useState("");
   const [row, setRow] = useState(null);
   const [plan, setPlan] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [drafts, setDrafts] = useState({});
-  const weekStart = mondayOf(date);
-  const day = new Date(`${date}T00:00:00`).getDay();
+  const date = shiftDateKey(weekStart, day - 1);
+
+  useEffect(() => {
+    if (!teacherId) { setTimetable([]); return undefined; }
+    let active = true;
+    setTimetableError("");
+    fetchTimetableRows(teacherId)
+      .then(rows => { if (active) setTimetable(rows); })
+      .catch(err => { if (active) { setTimetable([]); setTimetableError(err.message || "โหลดตารางสอนไม่สำเร็จ"); } });
+    return () => { active = false; };
+  }, [teacherId]);
 
   useEffect(() => {
     if (!teacherId) { setPlan(null); setRow(null); return undefined; }
@@ -7656,10 +7684,15 @@ function SubstitutePlanView({ employees, currentUser }) {
     return () => { active = false; };
   }, [teacherId, weekStart]);
 
-  const periods = (plan?.periods || [])
-    .filter(period => period.teach_date === date && (!periodNo || String(period.period_no) === periodNo))
+  const dayPlanPeriods = (plan?.periods || []).filter(period => period.teach_date === date);
+  const periods = dayPlanPeriods
+    .filter(period => !periodNo || String(period.period_no) === periodNo)
     .sort((a, b) => a.period_no - b.period_no);
-  const teacher = (employees || []).find(emp => emp.id === teacherId);
+  const daySlots = timetable.filter(row => Number(row.day_of_week) === day).sort((a, b) => a.period - b.period);
+  const slotOf = no => daySlots.find(row => Number(row.period) === Number(no));
+  const periodChoices = [...new Set([...daySlots.map(row => Number(row.period)), ...dayPlanPeriods.map(period => Number(period.period_no))])].filter(Boolean).sort((a, b) => a - b);
+  const chip = active => ({ border: `1px solid ${active ? "#008CFF" : "#d6e4f2"}`, background: active ? "linear-gradient(135deg, #008CFF, #0072D9)" : "#fff", color: active ? "#fff" : "#233862", borderRadius: 10, padding: "0.35rem 0.65rem", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", fontFamily: "inherit", textAlign: "left", minHeight: 40 });
+  const teacher = teachers.find(emp => String(emp.id) === String(teacherId));
 
   const saveAdminComment = async (periodId) => {
     if (!row || !plan) return;
@@ -7681,43 +7714,65 @@ function SubstitutePlanView({ employees, currentUser }) {
   return (
     <div style={{ display: "grid", gap: "1rem" }}>
       <Card>
-        <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#233862", marginBottom: "0.75rem" }}>ดูแผนสำหรับสอนแทน</div>
+        <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#233862", marginBottom: "0.75rem" }}>ดูแผนสอนแทน</div>
         <div style={periodGrid}>
           <Field label="ครูเจ้าของแผน">
-            <select value={teacherId} onChange={event => setTeacherId(event.target.value)} style={periodSelect}>
+            <select aria-label="ครูเจ้าของแผน" value={teacherId} onChange={event => { setTeacherId(event.target.value); setPeriodNo(""); }} style={periodSelect}>
               <option value="">-- เลือกครู --</option>
               {teachers.map(emp => <option key={emp.id} value={emp.id}>{emp.name}{emp.department ? ` — ${emp.department}` : ""}</option>)}
             </select>
           </Field>
-          <Field label="วันที่สอนแทน">
-            <input type="date" value={date} onChange={event => setDate(event.target.value)} style={periodInput} />
+          <Field label="วัน">
+            <select aria-label="วันที่สอนแทน" value={day} onChange={event => { setDay(Number(event.target.value)); setPeriodNo(""); }} style={periodSelect}>
+              {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{formatThaiDateKey(shiftDateKey(weekStart, n - 1))}</option>)}
+            </select>
           </Field>
           <Field label="คาบ">
-            <select value={periodNo} onChange={event => setPeriodNo(event.target.value)} style={periodSelect}>
-              <option value="">ทุกคาบ</option>
-              {[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={String(n)}>คาบที่ {n}</option>)}
+            <select aria-label="คาบ" value={periodNo} onChange={event => setPeriodNo(event.target.value)} style={periodSelect}>
+              <option value="">ทุกคาบของวัน</option>
+              {(periodChoices.length ? periodChoices : TIMETABLE_PERIODS).map(n => <option key={n} value={String(n)}>คาบที่ {n}{slotOf(n) ? ` · ${timetableSlotLabel(slotOf(n))}` : ""}</option>)}
             </select>
           </Field>
         </div>
-        <div style={{ fontSize: "0.8rem", color: "#64748b", marginTop: "0.6rem" }}>ดูได้อย่างเดียว เฉพาะเจ้าของแผนเท่านั้นที่แก้ไขแผนได้{isAdmin ? " · ผู้บริหารเขียนความเห็นท้ายบันทึกหลังสอนได้" : ""}</div>
+        <div style={{ marginTop: "0.75rem" }}>
+          <WeekSwitcher weekStart={weekStart} onChange={value => { setWeekStart(value); setPeriodNo(""); }} />
+        </div>
+        {teacherId && (
+          <div style={{ marginTop: "0.75rem", display: "grid", gap: "0.4rem" }}>
+            <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "#233862" }}>ตารางสอน {formatThaiDateKey(date)}</div>
+            {timetableError ? <div style={{ fontSize: "0.8rem", color: "#b45309" }}>⚠️ {timetableError}</div> : daySlots.length === 0 ? (
+              <div style={{ fontSize: "0.8rem", color: "#94a3b8" }}>ครูคนนี้ยังไม่ได้กรอกตารางสอนของวัน{DAY_NAMES[day]}</div>
+            ) : (
+              <div role="group" aria-label="คาบในตารางสอน" style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
+                <button type="button" aria-pressed={!periodNo} onClick={() => setPeriodNo("")} style={chip(!periodNo)}>ทุกคาบ</button>
+                {daySlots.map(row => (
+                  <button key={row.id} type="button" aria-pressed={periodNo === String(row.period)} onClick={() => setPeriodNo(String(row.period))} style={chip(periodNo === String(row.period))}>
+                    คาบ {row.period}{row.start_time ? ` (${clockLabel(row.start_time)})` : ""} · {timetableSlotLabel(row) || "-"}
+                    {dayPlanPeriods.some(period => Number(period.period_no) === Number(row.period) && periodHasDetail(period)) ? " ✓" : ""}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        <div style={{ fontSize: "0.8rem", color: "#64748b", marginTop: "0.6rem" }}>ดูได้อย่างเดียว เฉพาะเจ้าของแผนเท่านั้นที่แก้ไขแผนได้ · ✓ = คาบที่มีแผนแล้ว{isAdmin ? " · ผู้บริหารเขียนความเห็นท้ายบันทึกหลังสอนได้" : ""}</div>
       </Card>
       {error && <ErrorBox>{error}</ErrorBox>}
       {message && <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", borderRadius: "10px", padding: "0.75rem 1rem", color: "#166534", fontWeight: 700 }}>{message}</div>}
       {!teacherId ? null : loading ? (
         <Card><div style={{ textAlign: "center", color: "#64748b", padding: "1.5rem" }}>กำลังโหลดแผน...</div></Card>
-      ) : day === 0 || day === 6 ? (
-        <Card><div style={{ textAlign: "center", color: "#64748b", padding: "1.5rem" }}>วันที่เลือกเป็นวันหยุด เลือกวันจันทร์ถึงศุกร์</div></Card>
       ) : periods.length === 0 ? (
         <Card><div style={{ textAlign: "center", color: "#64748b", padding: "1.5rem" }}>{teacher?.name || "ครู"} ยังไม่มีแผน{periodNo ? `คาบที่ ${periodNo} ` : ""}ของ{formatThaiDateKey(date)}</div></Card>
       ) : (
         <Card>
-          <div style={{ fontWeight: 800, color: "#233862", marginBottom: "0.6rem" }}>แผนของ {teacher?.name} · วัน{DAY_NAMES[day]} {formatThaiDateKey(date)}</div>
+          <div style={{ fontWeight: 800, color: "#233862", marginBottom: "0.6rem" }}>แผนของ {teacher?.name} · {formatThaiDateKey(date)}</div>
           <div style={{ display: "grid", gap: "0.5rem" }}>
             {periods.map(period => (
               <SupervisionPeriodRead
                 key={period.id}
                 period={period}
                 defaultOpen={periods.length === 1}
+                hidePostNote={!isAdmin}
                 adminSlot={isAdmin && row ? (
                   <div style={{ display: "grid", gap: "0.5rem", borderTop: "1px solid #e2e8f0", paddingTop: "0.5rem" }}>
                     <Field label="ความเห็นผู้บริหาร/หัวหน้างานวิชาการ">
@@ -7740,6 +7795,7 @@ function SubstitutePlanView({ employees, currentUser }) {
 
 const ACADEMIC_TABS = [
   { key: "plan", label: "ส่งแผนรายสัปดาห์" },
+  { key: "substitute", label: "ดูแผนสอนแทน" },
   { key: "roll", label: "เช็คชื่อนักเรียน/สถิติ" },
   ...ACADEMIC_EXTRA_TABS,
 ];

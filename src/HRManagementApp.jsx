@@ -613,12 +613,12 @@ async function registerLoginSession(employeeId) {
   const mine = sessions.filter(x => x.device_id === deviceId);
   const body = { device_id: deviceId, device_name: getDeviceName(), login_at: now, last_seen: now };
   const payload = { employee_id: employeeId, day_of_week: 0, period: 1, class_room: LOGIN_SESSION_ROOM, start_time: "00:00:00", end_time: null, subject: JSON.stringify(body) };
-  if (mine.length) {
-    await supabase.from("teaching_schedule").update(payload).eq("id", mine[0].id);
-    if (mine.length > 1) await supabase.from("teaching_schedule").delete().in("id", mine.slice(1).map(x => x.id));
-  } else {
-    await supabase.from("teaching_schedule").insert(payload);
-  }
+  // บันทึกไม่สำเร็จ (เน็ตหลุด/สิทธิ์) = ไม่ตั้งธง จะได้ไม่ถูกเตะออกเพราะหาแถวของตัวเองไม่เจอ
+  const { error: saveErr } = mine.length
+    ? await supabase.from("teaching_schedule").update(payload).eq("id", mine[0].id)
+    : await supabase.from("teaching_schedule").insert(payload);
+  if (saveErr) throw saveErr;
+  if (mine.length > 1) await supabase.from("teaching_schedule").delete().in("id", mine.slice(1).map(x => x.id));
   try { localStorage.setItem("hr_session_device", `${employeeId}|${deviceId}`); } catch { /* ignore */ }
   // ลบเครื่องที่ไม่ได้ใช้นานเกิน 30 วัน และเกิน 3 เครื่องให้ออกเครื่องที่ใช้ล่าสุดนานที่สุด
   const staleBefore = Date.now() - SESSION_STALE_DAYS * 86400000;
@@ -8393,7 +8393,7 @@ function StudentStatsFormCard({ rows, employees }) {
         </div>
         <div style={{ fontSize: "0.85rem", color: "#233862" }}>รวมทั้งสิ้น: เต็ม {all.boys + all.girls} คน (ช {all.boys} ญ {all.girls}) · มา {all.boysPresent + all.girlsPresent} · ไม่มา {all.boys + all.girls - all.boysPresent - all.girlsPresent}</div>
         {stats.unmapped.length > 0 && <div style={{ color: "#b45309", fontSize: "0.8rem" }}>⚠️ ห้องที่จับคู่ชั้นในแบบฟอร์มไม่ได้ (ตั้งชื่อห้องเป็น เช่น ป.2/1, อ.1, ม.3, เตรียมอนุบาล): {stats.unmapped.join(", ")}</div>}
-        {unknownSex.length > 0 && <div style={{ color: "#b45309", fontSize: "0.8rem" }}>⚠️ ยังไม่ระบุเพศ {unknownSex.length} คน (ไม่ถูกนับในช่อง ชาย/หญิง): {unknownSex.slice(0, 8).join(", ")}{unknownSex.length > 8 ? " ..." : ""}</div>}
+        {unknownSex.length > 0 && <div role="alert" style={{ color: "#b45309", background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 8, padding: "0.5rem 0.7rem", fontSize: "0.8rem" }}><div style={{ fontWeight: 800 }}>⚠️ ยังไม่ระบุเพศ {unknownSex.length} คน (ไม่ถูกนับในช่อง ชาย/หญิง) — ระบบเดาจากคำนำหน้าชื่อไม่ได้</div><div style={{ marginTop: 2 }}>แก้ได้ที่หน้าเช็คชื่อนักเรียน: กดปุ่มหน้าชื่อ (? → ช → ญ) ให้ถูกต้อง</div><ul style={{ margin: "0.3rem 0 0", paddingLeft: "1.2rem", maxHeight: 160, overflowY: "auto" }}>{unknownSex.map((label, idx) => <li key={idx}>{label}</li>)}</ul></div>}
         {unchecked.length > 0 && <div style={{ color: "#b45309", fontSize: "0.8rem" }}>⚠️ ชั้นที่ยังไม่ได้เช็คชื่อวันนี้ (นับเป็นไม่มาเรียน): {unchecked.join(", ")}</div>}
         <details>
           <summary style={{ cursor: "pointer", fontWeight: 800, color: "#92400e" }}>🥛 เช็คนม: คนไม่มา/ลา และผู้ดื่มแทน ({milkRows.length})</summary>

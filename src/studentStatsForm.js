@@ -36,8 +36,8 @@ export function classLevelKey(className) {
   return "";
 }
 
-const MALE_PREFIX = /^(เด็กชาย|ด\.ช\.?|ดช\.?|นาย|ช\.)\s*/;
-const FEMALE_PREFIX = /^(เด็กหญิง|ด\.ญ\.?|ดญ\.?|นางสาว|น\.ส\.?|ญ\.)\s*/;
+const MALE_PREFIX = /^(เด็ก\s*ชาย|ด\.\s*ช\.?|ดช\.?|นาย|ช\.)\s*/;
+const FEMALE_PREFIX = /^(เด็ก\s*หญิง|ด\.\s*ญ\.?|ดญ\.?|นางสาว|น\.\s*ส\.?|ญ\.)\s*/;
 
 // เพศ: ใช้ค่าที่ครูกำหนด (sex = "M"/"F") ก่อน ถ้าไม่มีเดาจากคำนำหน้าชื่อ
 export function studentSex(student) {

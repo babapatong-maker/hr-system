@@ -170,33 +170,50 @@ export function upcomingEvents(today = new Date().toLocaleDateString("en-CA", { 
   return inRange.length >= min ? inRange : all.slice(0, Math.max(min, inRange.length));
 }
 
+// ปฏิทินรายเดือนแบบย่อ (ใช้ในหน้าผู้บริหาร)
+const SHORT_DAYS = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
 export function UpcomingCalendarCard({ onOpen, today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }) }) {
-  const events = upcomingEvents(today);
-  const curKey = today.slice(0, 7);
-  const month = ACADEMIC_CALENDAR_2_2569.find(m => m.month === curKey) || ACADEMIC_CALENDAR_2_2569.find(m => m.month > curKey);
-  const beforeTerm = today < ACADEMIC_CALENDAR_2_2569[0].events[0].date;
+  const [index, setIndex] = useState(() => defaultMonthIndex(today));
+  const month = ACADEMIC_CALENDAR_2_2569[index];
+  const byDate = new Map();
+  month.events.forEach(ev => byDate.set(ev.date, [...(byDate.get(ev.date) || []), ev]));
+  const last = ACADEMIC_CALENDAR_2_2569.length - 1;
+  const nav = (dis) => ({ padding: "0.2rem 0.55rem", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: dis ? "#cbd5e1" : "#334155", fontWeight: 700, cursor: dis ? "default" : "pointer", fontFamily: "inherit", fontSize: "0.85rem" });
+  const line = "1px solid #cbd5e1";
   return (
-    <div style={{ background: "#fff", borderRadius: 18, padding: "1rem 1.2rem", boxShadow: "0 2px 12px rgba(15,23,42,0.06)", border: "1px solid #e2e8f0" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-        <div style={{ fontWeight: 800, fontSize: "1.05rem" }}>📅 ปฏิทินการศึกษา — กิจกรรมที่กำลังจะมาถึง</div>
-        <button onClick={onOpen} style={{ background: "#2563eb", color: "#fff", border: 0, borderRadius: 10, padding: "0.4rem 0.8rem", fontWeight: 700, cursor: "pointer" }}>เปิดปฏิทินเต็ม</button>
+    <div style={{ background: "#fff", borderRadius: 16, padding: "0.75rem", border: "1px solid #E4EEF8", boxShadow: "0 2px 12px rgba(15,23,42,0.05)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+        <div style={{ fontWeight: 800, fontSize: "0.95rem", color: "#233862" }}>📅 ปฏิทินการศึกษา 2/2569</div>
+        <button onClick={onOpen} style={{ background: "#0072D9", color: "#fff", border: 0, borderRadius: 8, padding: "0.25rem 0.65rem", fontWeight: 700, cursor: "pointer", fontSize: "0.8rem", fontFamily: "inherit" }}>เปิดปฏิทินเต็ม</button>
       </div>
-      {month && <div style={{ fontSize: "0.85rem", color: "#475569", marginBottom: 8 }}>
-        {beforeTerm ? "ก่อนเปิดภาคเรียน 2/2569 · " : ""}{monthLabel(month.month)}{month.studyDays ? ` · เวลาเรียน ${month.studyDays} วัน` : ""}
-      </div>}
-      {events.length === 0 ? <div style={{ color: "#64748b" }}>ไม่มีกิจกรรมที่กำลังจะมาถึง</div> : (
-        <div style={{ display: "grid", gap: 6 }}>
-          {events.map((e, i) => {
-            const c = COLORS[e.color] || "#0f172a";
-            return (
-              <div key={i} style={{ display: "flex", gap: 10, alignItems: "baseline", padding: "0.35rem 0.5rem", borderRadius: 8, background: e.color === "red" ? "#fef2f2" : e.color === "blue" ? "#eff6ff" : "#f8fafc" }}>
-                <div style={{ minWidth: 170, fontSize: "0.8rem", color: "#64748b" }}>{formatDate(e.date)}</div>
-                <div style={{ flex: 1, color: c, fontWeight: 600 }}>{e.title}{e.teacher && <span style={{ color: "#7c3aed", fontWeight: 500, fontSize: "0.8rem" }}> · {e.teacher}</span>}</div>
-              </div>
-            );
-          })}
+      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 6 }}>
+        <button style={nav(index === 0)} disabled={index === 0} onClick={() => setIndex(i => Math.max(0, i - 1))} aria-label="เดือนก่อน">‹</button>
+        <div style={{ flex: 1, textAlign: "center", background: HEAD_BG[index], borderRadius: 6, padding: "0.25rem", fontWeight: 800, fontSize: "0.82rem", color: "#1e293b" }}>
+          {monthLabel(month.month)}{month.studyDays ? ` · เวลาเรียน ${month.studyDays} วัน` : ""}
         </div>
-      )}
+        <button style={nav(index === last)} disabled={index === last} onClick={() => setIndex(i => Math.min(last, i + 1))} aria-label="เดือนถัดไป">›</button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", borderTop: line, borderLeft: line, fontSize: "0.62rem" }}>
+        {SHORT_DAYS.map(d => <div key={d} style={{ padding: "2px 0", textAlign: "center", fontWeight: 700, borderRight: line, borderBottom: line, background: "#f8fafc" }}>{d}</div>)}
+        {monthCells(month.month).map((date, i) => {
+          const events = date ? byDate.get(date) || [] : [];
+          const dayColor = events.find(ev => ev.color)?.color;
+          const isToday = date === today;
+          return (
+            <div key={i} title={events.map(ev => ev.title + (ev.teacher ? ` (${ev.teacher})` : "")).join("\n") || undefined}
+              style={{ minHeight: 40, padding: "1px 2px", overflow: "hidden", borderRight: line, borderBottom: line, background: isToday ? "#EAF5FF" : "#fff", boxShadow: isToday ? "inset 0 0 0 2px #0072D9" : "none" }}>
+              {date && <div style={{ fontWeight: 700, fontSize: "0.7rem", color: COLORS[dayColor] || "#1e293b" }}>{Number(date.slice(8))}</div>}
+              {events.map((ev, k) => (
+                <div key={k} style={{ lineHeight: 1.15, color: COLORS[ev.color] || "#1e293b", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", wordBreak: "break-word" }}>
+                  {ev.title}
+                  {ev.teacher && <div style={{ fontSize: "0.55rem", color: "#7c3aed", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>👤{ev.teacher.replace(/^ครู/, "")}</div>}
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ marginTop: 4, fontSize: "0.6rem", color: "#64748b" }}>แดง = หยุด/ชดเชย/สอบ · น้ำเงิน = ค่ายลูกเสือ · แตะค้างดูรายละเอียด</div>
     </div>
   );
 }

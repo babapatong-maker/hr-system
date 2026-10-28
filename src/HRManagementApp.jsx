@@ -4,6 +4,7 @@ import { AcademicExtra, ACADEMIC_EXTRA_TABS, ACADEMIC_RECORD_ROOM, TEACHING_GRAD
 import { read as readWorkbook, utils as xlsxUtils, writeFile as writeWorkbookFile } from "xlsx";
 import { supabase } from "./supabase.js";
 import { AcademicCalendarPage, UpcomingCalendarCard } from "./academicCalendar.jsx";
+import { KgShortPlanPage, KG_SHORT_PLAN_ROOM, isKgTeacher } from "./kgShortPlan.jsx";
 import { MILK_RECORD_TEMPLATE_URL, buildMilkRecord, fillMilkRecordWorkbook, milkRecordPrintHtml, milkClassLine } from "./milkRecordForm.js";
 import { STUDENT_STATS_TEMPLATE_URL, STUDENT_STATS_LEVELS, MILK_OTHER, MILK_NONE, buildStudentStats, fillStudentStatsWorkbook, statsTotals, studentSex, remarkName, formDateLine } from "./studentStatsForm.js";
 import {
@@ -795,6 +796,7 @@ function canAccessNavItem(item, user) {
   if (!item || !user) return false;
   if (item.key === "finance") return isSalaryOwner(user);
   if (item.key === "teacherEval" || item.key === "execDash" || item.key === "cleaningDuty") return isExecutiveUser(user);
+  if (item.key === "kgShortPlan") return isKgTeacher(user) || isExecutiveUser(user);
   return item.roles.includes(hasAdminRights(user) ? "admin" : "employee");
 }
 
@@ -811,6 +813,7 @@ const navItems = [
   { icon: BookOpen, label: "งานวิชาการ", key: "academic", roles: ["admin", "employee"] },
   { icon: Calendar, label: "ปฏิทินการศึกษา", key: "academicCalendar", roles: ["admin", "employee"] },
   { icon: FileText, label: "แผนการจัดกิจกรรม", key: "activityPlan", roles: ["admin", "employee"] },
+  { icon: BookOpen, label: "แผนระยะสั้น (อนุบาล)", key: "kgShortPlan", roles: ["admin", "employee"] },
   { icon: TrendingUp, label: "ประเมินครู", key: "teacherEval", roles: ["admin"], executiveOnly: true },
   { icon: CheckCircle, label: "เวรความสะอาด / เวรพื้นที่", key: "cleaningDuty", roles: ["admin"], executiveOnly: true },
   { icon: Umbrella, label: "การลา", key: "leave", roles: ["admin", "employee"] },
@@ -2878,7 +2881,7 @@ async function writeSupervisionPlan(employeeId, dateKey, plan, existingId, dayOf
 
 // ─── SCHEDULE PAGE ────────────────────────────────────────────────────────────
 // ─── ตารางสอนรายสัปดาห์ (ครูกรอกเอง · ผู้บริหาร/แอดมินดูได้ทั้งหมด) ───────────────
-const TIMETABLE_SPECIAL_ROOMS = [SUPERVISION_SCHEDULE_ROOM, STUDENT_ROLL_ROOM, ACADEMIC_RECORD_ROOM, ACTIVITY_PLAN_ROOM, "__TEACHER_EVAL__", "__CLEANING_DUTY__", "__LOGIN_SESSION__", "__WORK_HOURS__"];
+const TIMETABLE_SPECIAL_ROOMS = [SUPERVISION_SCHEDULE_ROOM, STUDENT_ROLL_ROOM, ACADEMIC_RECORD_ROOM, ACTIVITY_PLAN_ROOM, "__TEACHER_EVAL__", "__CLEANING_DUTY__", "__LOGIN_SESSION__", "__WORK_HOURS__", KG_SHORT_PLAN_ROOM];
 const TIMETABLE_PERIODS = [1, 2, 3, 4, 5, 6, 7, 8];
 const TIMETABLE_DEFAULT_TIMES = [["08:30", "09:20"], ["09:20", "10:10"], ["10:20", "11:10"], ["11:10", "12:00"], ["13:00", "13:50"], ["13:50", "14:40"], ["14:40", "15:30"], ["15:30", "16:20"]];
 const isTimetableRow = row => row && row.day_of_week >= 1 && row.day_of_week <= 5 && !String(row.class_room || "").startsWith("__") && !TIMETABLE_SPECIAL_ROOMS.includes(row.class_room);
@@ -5120,6 +5123,13 @@ function dedupeRollRows(data) {
   return [...latest.values()];
 }
 
+// รายชื่อนักเรียนของครูประจำชั้น (จากสมุดเช็คชื่อ) ใช้ในแบบประเมินพัฒนาการอนุบาล
+async function fetchKgStudents(employeeId) {
+  const row = dedupeRollRows(await fetchRollRows(employeeId))[0];
+  if (!row) return [];
+  return parseRollBook(row.subject).students.filter(s => String(s.name || "").trim()).map(s => ({ id: s.id, name: s.name }));
+}
+
 async function writeRollBook(employeeId, book, existingId) {
   const subject = JSON.stringify({ ...book, version: 1, updated_at: new Date().toISOString() });
   if (subject.length > SUPERVISION_JSON_LIMIT) throw new Error("ข้อมูลเช็คชื่อยาวเกินที่ระบบเก็บได้");
@@ -6461,7 +6471,7 @@ function ExecSection({ title, icon: Icon, right, children }) {
 }
 
 // ─── ตารางสอนรายคาบ (หน้าผู้บริหาร) ─────────────────────────────────────────
-const EXEC_SPECIAL_ROOMS = new Set([SUPERVISION_SCHEDULE_ROOM, STUDENT_ROLL_ROOM, ACADEMIC_RECORD_ROOM, ACTIVITY_PLAN_ROOM, "__TEACHER_EVAL__", "__CLEANING_DUTY__", "__LOGIN_SESSION__", "__WORK_HOURS__"]);
+const EXEC_SPECIAL_ROOMS = new Set([SUPERVISION_SCHEDULE_ROOM, STUDENT_ROLL_ROOM, ACADEMIC_RECORD_ROOM, ACTIVITY_PLAN_ROOM, "__TEACHER_EVAL__", "__CLEANING_DUTY__", "__LOGIN_SESSION__", "__WORK_HOURS__", KG_SHORT_PLAN_ROOM]);
 const EXEC_DEFAULT_PERIOD_TIMES = [["08:30", "09:20"], ["09:20", "10:10"], ["10:20", "11:10"], ["11:10", "12:00"], ["13:00", "13:50"], ["13:50", "14:40"]];
 
 function execNowMinutes() {
@@ -11042,6 +11052,7 @@ export default function HRApp() {
               {activePage === "teacherEval" && (isExecutiveUser(actingUser) ? <TeacherEvalPage employees={employees} currentUser={actingUser} initialSelected={evalFocus} /> : <NoAccessCard />)}
               {activePage === "settings" && <SettingsPage settings={settings} onRefresh={fetchData} />}
               {activePage === "academicCalendar" && <AcademicCalendarPage />}
+              {activePage === "kgShortPlan" && ((isKgTeacher(actingUser) || isExecutiveUser(actingUser)) ? <KgShortPlanPage employees={employees} currentUser={actingUser} canReview={isExecutiveUser(actingUser)} fetchStudents={fetchKgStudents} /> : <NoAccessCard />)}
             </>
           )}
         </main>

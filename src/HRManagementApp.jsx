@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import { AcademicExtra, ACADEMIC_EXTRA_TABS, ACADEMIC_RECORD_ROOM, TEACHING_GRADE_GROUPS, loadAssignedPlanLevels, loadTeachingGrades, saveTeachingGrade } from "./academicRecords.jsx";
 import { read as readWorkbook, utils as xlsxUtils, writeFile as writeWorkbookFile } from "xlsx";
 import { supabase } from "./supabase.js";
+import { AcademicCalendarPage } from "./academicCalendar.jsx";
 import { MILK_RECORD_TEMPLATE_URL, buildMilkRecord, fillMilkRecordWorkbook, milkRecordPrintHtml, milkClassLine } from "./milkRecordForm.js";
 import { STUDENT_STATS_TEMPLATE_URL, STUDENT_STATS_LEVELS, MILK_OTHER, MILK_NONE, buildStudentStats, fillStudentStatsWorkbook, statsTotals, studentSex, remarkName, formDateLine } from "./studentStatsForm.js";
 import {
@@ -672,6 +673,35 @@ function getDeviceName() {
   return `${device} • ${browser}`;
 }
 
+// ─── เวลาทำงานรายบุคคล (กรณีต่างหาก) ─────────────────────────────
+// แถวพิเศษใน teaching_schedule: class_room "__WORK_HOURS__", employee_id = ครู, day_of_week 0, period 0,
+// start_time = เวลาเข้า, end_time = เวลาเลิก (ไม่ต้องแก้โครงสร้างฐานข้อมูล)
+const WORK_HOURS_ROOM = "__WORK_HOURS__";
+let WORK_HOURS_OVERRIDES = {};
+function setWorkHourOverrides(rows) {
+  const next = {};
+  (rows || []).forEach(row => {
+    const start = /^\d{2}:\d{2}/.test(row?.start_time || "") ? String(row.start_time).slice(0, 5) : "";
+    const end = /^\d{2}:\d{2}/.test(row?.end_time || "") ? String(row.end_time).slice(0, 5) : "";
+    if (row?.employee_id && (start || end)) next[String(row.employee_id)] = { id: row.id, start, end };
+  });
+  WORK_HOURS_OVERRIDES = next;
+  return next;
+}
+async function loadWorkHourOverrides() {
+  try {
+    const { data, error } = await supabase.from("teaching_schedule").select("id, employee_id, start_time, end_time").eq("class_room", WORK_HOURS_ROOM);
+    if (!error) return setWorkHourOverrides(data);
+  } catch { /* ใช้ค่าเดิม */ }
+  return WORK_HOURS_OVERRIDES;
+}
+function wsOf(employeeId, fallback) {
+  return WORK_HOURS_OVERRIDES[String(employeeId)]?.start || fallback;
+}
+function weOf(employeeId, fallback) {
+  return WORK_HOURS_OVERRIDES[String(employeeId)]?.end || fallback;
+}
+
 function checkLate(checkInTime, workStart, grace = 0) {
   if (!checkInTime || !workStart) return null;
   const ci = new Date(checkInTime);
@@ -779,6 +809,7 @@ const navItems = [
   { icon: Clock, label: "ลงเวลาเข้า-ออก", key: "attendance", roles: ["admin", "employee"] },
   { icon: Calendar, label: "ตารางสอน", key: "schedule", roles: ["admin", "employee"] },
   { icon: BookOpen, label: "งานวิชาการ", key: "academic", roles: ["admin", "employee"] },
+  { icon: Calendar, label: "ปฏิทินการศึกษา", key: "academicCalendar", roles: ["admin", "employee"] },
   { icon: FileText, label: "แผนการจัดกิจกรรม", key: "activityPlan", roles: ["admin", "employee"] },
   { icon: TrendingUp, label: "ประเมินครู", key: "teacherEval", roles: ["admin"], executiveOnly: true },
   { icon: CheckCircle, label: "เวรความสะอาด / เวรพื้นที่", key: "cleaningDuty", roles: ["admin"], executiveOnly: true },
@@ -1377,10 +1408,10 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
 
       let late = 0, early = 0;
       (atts || []).forEach(a => {
-        const l = checkLate(a.check_in, settings?.work_start, settings?.late_grace_minutes);
+        const l = checkLate(a.check_in, wsOf(a.employee_id, settings?.work_start), settings?.late_grace_minutes);
         if (l?.late) late++;
         if (a.check_out) {
-          const e = checkEarly(a.check_out, settings?.work_end);
+          const e = checkEarly(a.check_out, weOf(a.employee_id, settings?.work_end));
           if (e?.early) early++;
         }
       });
@@ -1507,12 +1538,12 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
     // คำนวณสถานะครั้งเดียว
     let quoteType, info;
     if (mode === "in") {
-      info = checkLate(now.toISOString(), settings?.work_start, settings?.late_grace_minutes);
+      info = checkLate(now.toISOString(), wsOf(selectedEmp, settings?.work_start), settings?.late_grace_minutes);
       if (info?.late) quoteType = "late";
       else if (info?.early) quoteType = "early";
       else quoteType = "onTime";
     } else {
-      info = checkEarly(now.toISOString(), settings?.work_end);
+      info = checkEarly(now.toISOString(), weOf(selectedEmp, settings?.work_end));
       if (info?.early) quoteType = "leaveEarly";
       else if (info?.late) quoteType = "stayLate";
       else quoteType = "onTimeLeave";
@@ -1864,11 +1895,11 @@ function AttendancePage({ employees, activityLog, currentUser, settings, onRefre
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
         <button onClick={() => setShowIn(true)} style={{ background: "linear-gradient(135deg, #008CFF, #0072D9)", border: "none", borderRadius: "1rem", padding: "1.5rem", color: "#fff", cursor: "pointer", fontFamily: "inherit", boxShadow: "0 8px 24px rgba(0,140,255,0.3)", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
           <LogIn size={32} /><div style={{ fontSize: "1.1rem", fontWeight: 800 }}>ลงเวลาเข้างาน</div>
-          <div style={{ fontSize: "0.75rem", opacity: 0.9 }}>เวลาทำงาน: {settings?.work_start?.slice(0,5)} น.</div>
+          <div style={{ fontSize: "0.75rem", opacity: 0.9 }}>เวลาทำงาน: {wsOf(currentUser?.id, settings?.work_start)?.slice(0,5)} น.</div>
         </button>
         <button onClick={() => setShowOut(true)} style={{ background: "linear-gradient(135deg, #f59e0b, #d97706)", border: "none", borderRadius: "1rem", padding: "1.5rem", color: "#fff", cursor: "pointer", fontFamily: "inherit", boxShadow: "0 8px 24px rgba(245,158,11,0.3)", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
           <LogOut size={32} /><div style={{ fontSize: "1.1rem", fontWeight: 800 }}>ลงเวลากลับบ้าน</div>
-          <div style={{ fontSize: "0.75rem", opacity: 0.9 }}>เวลาเลิก: {settings?.work_end?.slice(0,5)} น.</div>
+          <div style={{ fontSize: "0.75rem", opacity: 0.9 }}>เวลาเลิก: {weOf(currentUser?.id, settings?.work_end)?.slice(0,5)} น.</div>
         </button>
       </div>
 
@@ -1887,8 +1918,8 @@ function AttendancePage({ employees, activityLog, currentUser, settings, onRefre
                 <tr><td colSpan={7} style={{ padding: "2rem", textAlign: "center", color: "#94a3b8" }}>ไม่มีข้อมูล</td></tr>
               ) : filtered.map((row, i) => {
                 const hours = row.check_out ? ((new Date(row.check_out) - new Date(row.check_in)) / 3600000).toFixed(1) : null;
-                const lateInfo = checkLate(row.check_in, settings?.work_start, settings?.late_grace_minutes);
-                const earlyInfo = row.check_out ? checkEarly(row.check_out, settings?.work_end) : null;
+                const lateInfo = checkLate(row.check_in, wsOf(row.employee_id, settings?.work_start), settings?.late_grace_minutes);
+                const earlyInfo = row.check_out ? checkEarly(row.check_out, weOf(row.employee_id, settings?.work_end)) : null;
                 const isTraining = row.work_activity === "training";
                 return (
                   <tr key={row.id} style={{ borderBottom: "1px solid #f8fafc", background: i % 2 === 0 ? "#fff" : "#fafafa" }}>
@@ -2131,10 +2162,10 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
 
   const summaryRows = empList.map(emp => {
     const attDays = attendance.filter(a => a.employee_id === emp.id && inMonth(a.check_in));
-    const lateCount = attDays.filter(a => checkLate(a.check_in, settings?.work_start)?.late).length;
-    const earlyArrival = attDays.filter(a => checkLate(a.check_in, settings?.work_start)?.early).length;
-    const earlyDeparture = attDays.filter(a => a.check_out && checkEarly(a.check_out, settings?.work_end)?.early).length;
-    const overtime = attDays.filter(a => a.check_out && checkEarly(a.check_out, settings?.work_end)?.late).length;
+    const lateCount = attDays.filter(a => checkLate(a.check_in, wsOf(a.employee_id, settings?.work_start))?.late).length;
+    const earlyArrival = attDays.filter(a => checkLate(a.check_in, wsOf(a.employee_id, settings?.work_start))?.early).length;
+    const earlyDeparture = attDays.filter(a => a.check_out && checkEarly(a.check_out, weOf(a.employee_id, settings?.work_end))?.early).length;
+    const overtime = attDays.filter(a => a.check_out && checkEarly(a.check_out, weOf(a.employee_id, settings?.work_end))?.late).length;
     const leaveHours = leaves.filter(l => l.employee_id === emp.id && l.status === "approved" && inMonth(l.start_date)).reduce((s, l) => s + (l.hours || 8), 0);
     const outingCount = outings.filter(o => o.employee_id === emp.id && inMonth(o.out_time)).length;
     const totalHours = attDays.reduce((s, a) => s + (a.check_out ? (new Date(a.check_out) - new Date(a.check_in)) / 3600000 : 0), 0);
@@ -2148,8 +2179,8 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
       .sort((a, b) => new Date(a.check_in) - new Date(b.check_in));
     const firstRow = rows[0];
     const lastRowWithCheckOut = [...rows].reverse().find(row => row.check_out);
-    const lateInfo = firstRow ? checkLate(firstRow.check_in, settings?.work_start) : null;
-    const earlyInfo = lastRowWithCheckOut ? checkEarly(lastRowWithCheckOut.check_out, settings?.work_end) : null;
+    const lateInfo = firstRow ? checkLate(firstRow.check_in, wsOf(firstRow.employee_id, settings?.work_start)) : null;
+    const earlyInfo = lastRowWithCheckOut ? checkEarly(lastRowWithCheckOut.check_out, weOf(lastRowWithCheckOut.employee_id, settings?.work_end)) : null;
     const lateMinutes = lateInfo?.late ? lateInfo.minutes : 0;
     const earlyMinutes = earlyInfo?.early ? earlyInfo.minutes : 0;
     const totalHours = rows.reduce((sum, row) => sum + (row.check_out ? (new Date(row.check_out) - new Date(row.check_in)) / 3600000 : 0), 0);
@@ -2190,8 +2221,8 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
       csv += csvRow(["รายละเอียดเวลาเข้า-ออก"]);
       csv += csvRow(["พนักงาน", "แผนก", "วันที่", "เวลาเข้า", "เวลาออก", "รวม(ชม.)", "สถานะเข้า", "สถานะกลับ"]);
       attendanceRows.forEach(a => {
-        const li = checkLate(a.check_in, settings?.work_start);
-        const ei = a.check_out ? checkEarly(a.check_out, settings?.work_end) : null;
+        const li = checkLate(a.check_in, wsOf(a.employee_id, settings?.work_start));
+        const ei = a.check_out ? checkEarly(a.check_out, weOf(a.employee_id, settings?.work_end)) : null;
         const hours = a.check_out ? ((new Date(a.check_out) - new Date(a.check_in)) / 3600000).toFixed(1) : "-";
         csv += csvRow([
           a.employees?.name || "-",
@@ -2207,8 +2238,8 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
     } else if (reportType === "attendance") {
       csv = csvRow(["พนักงาน", "วันที่", "เข้างาน", "กลับบ้าน", "รวม(ชม.)", "สถานะเข้า", "สถานะกลับ"]);
       attendanceRows.forEach(a => {
-        const li = checkLate(a.check_in, settings?.work_start);
-        const ei = a.check_out ? checkEarly(a.check_out, settings?.work_end) : null;
+        const li = checkLate(a.check_in, wsOf(a.employee_id, settings?.work_start));
+        const ei = a.check_out ? checkEarly(a.check_out, weOf(a.employee_id, settings?.work_end)) : null;
         const hours = a.check_out ? ((new Date(a.check_out) - new Date(a.check_in)) / 3600000).toFixed(1) : "-";
         csv += csvRow([a.employees?.name || "-", fmtDate(a.check_in), fmtTime(a.check_in), a.check_out ? fmtTime(a.check_out) : "-", hours, li?.late ? "สาย " + li.minutes + " น." : li?.early ? "เข้าก่อน " + li.minutes + " น." : "ตรงเวลา", ei ? (ei.early ? "ก่อน " + ei.minutes + " น." : ei.late ? "ช้า " + ei.minutes + " น." : "ตรงเวลา") : "-"]);
       });
@@ -2226,13 +2257,13 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
     } else if (reportType === "late") {
       csv = csvRow(["พนักงาน", "วันที่", "เวลาเข้า", "สาย(นาที)"]);
       attendanceRows.forEach(a => {
-        const li = checkLate(a.check_in, settings?.work_start);
+        const li = checkLate(a.check_in, wsOf(a.employee_id, settings?.work_start));
         if (li?.late) csv += csvRow([a.employees?.name || "-", fmtDate(a.check_in), fmtTime(a.check_in), li.minutes]);
       });
     } else if (reportType === "earlyLeave") {
       csv = csvRow(["พนักงาน", "วันที่", "เวลากลับ", "กลับก่อน(นาที)"]);
       attendanceRows.filter(a => a.check_out).forEach(a => {
-        const ei = checkEarly(a.check_out, settings?.work_end);
+        const ei = checkEarly(a.check_out, weOf(a.employee_id, settings?.work_end));
         if (ei?.early) csv += csvRow([a.employees?.name || "-", fmtDate(a.check_in), fmtTime(a.check_out), ei.minutes]);
       });
     } else if (reportType === "leave") {
@@ -2369,8 +2400,8 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
                 </thead>
                 <tbody>
                   {attendance.filter(a => inMonth(a.check_in) && (!empFilter || a.employee_id === empFilter)).map((a, i) => {
-                    const li = checkLate(a.check_in, settings?.work_start);
-                    const ei = a.check_out ? checkEarly(a.check_out, settings?.work_end) : null;
+                    const li = checkLate(a.check_in, wsOf(a.employee_id, settings?.work_start));
+                    const ei = a.check_out ? checkEarly(a.check_out, weOf(a.employee_id, settings?.work_end)) : null;
                     const hours = a.check_out ? ((new Date(a.check_out) - new Date(a.check_in)) / 3600000).toFixed(1) : "-";
                     return (
                       <tr key={a.id} style={{ borderBottom: "1px solid #f8fafc", background: i % 2 === 0 ? "#fff" : "#fafafa" }}>
@@ -2457,8 +2488,8 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {attendance.filter(a => inMonth(a.check_in) && (!empFilter || a.employee_id === empFilter)).filter(a => checkLate(a.check_in, settings?.work_start)?.late).map((a, i) => {
-                    const li = checkLate(a.check_in, settings?.work_start);
+                  {attendance.filter(a => inMonth(a.check_in) && (!empFilter || a.employee_id === empFilter)).filter(a => checkLate(a.check_in, wsOf(a.employee_id, settings?.work_start))?.late).map((a, i) => {
+                    const li = checkLate(a.check_in, wsOf(a.employee_id, settings?.work_start));
                     return (
                       <tr key={a.id} style={{ borderBottom: "1px solid #f8fafc", background: i % 2 === 0 ? "#fff" : "#fafafa" }}>
                         <td style={{ padding: "0.6rem 0.75rem", fontWeight: 600 }}>{a.employees?.name || "-"}</td>
@@ -2847,7 +2878,7 @@ async function writeSupervisionPlan(employeeId, dateKey, plan, existingId, dayOf
 
 // ─── SCHEDULE PAGE ────────────────────────────────────────────────────────────
 // ─── ตารางสอนรายสัปดาห์ (ครูกรอกเอง · ผู้บริหาร/แอดมินดูได้ทั้งหมด) ───────────────
-const TIMETABLE_SPECIAL_ROOMS = [SUPERVISION_SCHEDULE_ROOM, STUDENT_ROLL_ROOM, ACADEMIC_RECORD_ROOM, ACTIVITY_PLAN_ROOM, "__TEACHER_EVAL__", "__CLEANING_DUTY__", "__LOGIN_SESSION__"];
+const TIMETABLE_SPECIAL_ROOMS = [SUPERVISION_SCHEDULE_ROOM, STUDENT_ROLL_ROOM, ACADEMIC_RECORD_ROOM, ACTIVITY_PLAN_ROOM, "__TEACHER_EVAL__", "__CLEANING_DUTY__", "__LOGIN_SESSION__", "__WORK_HOURS__"];
 const TIMETABLE_PERIODS = [1, 2, 3, 4, 5, 6, 7, 8];
 const TIMETABLE_DEFAULT_TIMES = [["08:30", "09:20"], ["09:20", "10:10"], ["10:20", "11:10"], ["11:10", "12:00"], ["13:00", "13:50"], ["13:50", "14:40"], ["14:40", "15:30"], ["15:30", "16:20"]];
 const isTimetableRow = row => row && row.day_of_week >= 1 && row.day_of_week <= 5 && !String(row.class_room || "").startsWith("__") && !TIMETABLE_SPECIAL_ROOMS.includes(row.class_room);
@@ -4851,7 +4882,8 @@ function parseRollBook(subject) {
         Object.entries(day?.milk_note && typeof day.milk_note === "object" ? day.milk_note : {}).forEach(([id, note]) => {
           if (milk[id] === MILK_OTHER) milkNote[id] = String(note || "").slice(0, 80);
         });
-        days[date] = { saved_at: day?.saved_at || null, marks, health, milk, milk_note: milkNote };
+        const recordedBy = day?.recorded_by && typeof day.recorded_by === "object" && day.recorded_by.name ? { id: String(day.recorded_by.id || ""), name: String(day.recorded_by.name).slice(0, 80) } : null;
+        days[date] = { saved_at: day?.saved_at || null, marks, health, milk, milk_note: milkNote, ...(recordedBy ? { recorded_by: recordedBy } : {}) };
       });
     }
     // ย้ายรายชื่อที่เคยติดอยู่ในข้อมูลรายวัน (days[date].students / roster) ขึ้นเป็นรายชื่อถาวร
@@ -5824,6 +5856,7 @@ async function writeEvalRow(employeeId, period, body, rowId) {
 
 async function loadEval2Store(currentUser) {
   const local = readEval2Local();
+  await loadWorkHourOverrides();
   let workStart = "08:00";
   try {
     const { data } = await supabase.from("settings").select("work_start").eq("id", 1).single();
@@ -5932,8 +5965,9 @@ function computeAutoEntries(teacherId, sources, range, settings) {
   workDays.forEach(date => {
     const checkIn = firstCheckIn.get(date);
     if (checkIn) {
-      const late = checkLate(checkIn, settings.work_start);
-      if (late?.late) add("late_checkin", date, `เข้า ${fmtTime(checkIn)} เกินเวลา ${settings.work_start} ไป ${late.minutes} นาที`);
+      const startAt = wsOf(id, settings.work_start);
+      const late = checkLate(checkIn, startAt);
+      if (late?.late) add("late_checkin", date, `เข้า ${fmtTime(checkIn)} เกินเวลา ${startAt} ไป ${late.minutes} นาที`);
     } else if (!presentDays.has(date) && !leaveDays.has(date)) {
       add("no_checkin", date, "ไม่ลงเวลาเข้า (ไม่มีวันลาที่อนุมัติ)");
     }
@@ -6427,7 +6461,7 @@ function ExecSection({ title, icon: Icon, right, children }) {
 }
 
 // ─── ตารางสอนรายคาบ (หน้าผู้บริหาร) ─────────────────────────────────────────
-const EXEC_SPECIAL_ROOMS = new Set([SUPERVISION_SCHEDULE_ROOM, STUDENT_ROLL_ROOM, ACADEMIC_RECORD_ROOM, ACTIVITY_PLAN_ROOM, "__TEACHER_EVAL__", "__CLEANING_DUTY__", "__LOGIN_SESSION__"]);
+const EXEC_SPECIAL_ROOMS = new Set([SUPERVISION_SCHEDULE_ROOM, STUDENT_ROLL_ROOM, ACADEMIC_RECORD_ROOM, ACTIVITY_PLAN_ROOM, "__TEACHER_EVAL__", "__CLEANING_DUTY__", "__LOGIN_SESSION__", "__WORK_HOURS__"]);
 const EXEC_DEFAULT_PERIOD_TIMES = [["08:30", "09:20"], ["09:20", "10:10"], ["10:20", "11:10"], ["11:10", "12:00"], ["13:00", "13:50"], ["13:50", "14:40"]];
 
 function execNowMinutes() {
@@ -6725,7 +6759,7 @@ function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEv
   const onLeave = new Set(leaveOn(date).map(row => String(row.employee_id)));
   const attRows = people.map(emp => {
     const row = firstRow.get(String(emp.id));
-    const late = row && row.work_activity !== "training" ? checkLate(row.check_in, workStart, grace) : null;
+    const late = row && row.work_activity !== "training" ? checkLate(row.check_in, wsOf(row.employee_id, workStart), grace) : null;
     return { emp, row, late: late?.late ? late.minutes : 0 };
   });
   const checkedIn = attRows.filter(item => item.row).sort((a, b) => a.row.check_in.localeCompare(b.row.check_in));
@@ -7851,14 +7885,70 @@ function AcademicPage({ employees, currentUser, planFocus = null }) {
 }
 
 function StudentRollPage({ employees, currentUser }) {
-  if (isExecutiveUser(currentUser)) return <StudentRollAdmin employees={employees} />;
-  return <StudentRollTeacher currentUser={currentUser} />;
+  const [view, setView] = useState("overview");
+  if (!isExecutiveUser(currentUser)) return <StudentRollTeacher currentUser={currentUser} />;
+  const tabBtn = (key, label) => (
+    <button type="button" onClick={() => setView(key)} aria-pressed={view === key} style={{ ...btnSecondary, flex: "none", minHeight: 40, fontWeight: 800, background: view === key ? "linear-gradient(135deg, #008CFF, #0072D9)" : "#fff", color: view === key ? "#fff" : "#233862", border: view === key ? "none" : "1px solid #cbd5e1" }}>{label}</button>
+  );
+  return (
+    <div style={{ display: "grid", gap: "0.9rem", minWidth: 0 }}>
+      <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+        {tabBtn("overview", "ภาพรวมทุกห้อง")}
+        {tabBtn("proxy", "เช็คชื่อแทนครูประจำชั้น")}
+      </div>
+      {view === "proxy" ? <StudentRollProxy employees={employees} currentUser={currentUser} /> : <StudentRollAdmin employees={employees} />}
+    </div>
+  );
+}
+
+// ผู้บริหารเช็คชื่อ/เช็คนมแทนครูประจำชั้นที่ไม่มา: บันทึกลงห้องของครูคนนั้นเหมือนครูทำเอง พร้อมหมายเหตุ "บันทึกแทนโดย"
+function StudentRollProxy({ employees, currentUser }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [teacherId, setTeacherId] = useState("");
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const data = dedupeRollRows(await fetchRollRows(null));
+        if (active) setRows(data);
+      } catch (err) {
+        if (active) setError(err.message || "โหลดรายชื่อห้องไม่สำเร็จ");
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, []);
+  const options = rows
+    .map(row => ({ row, book: parseRollBook(row.subject), teacher: (employees || []).find(emp => String(emp.id) === String(row.employee_id)) }))
+    .filter(item => item.teacher && item.book.students.length > 0)
+    .sort((a, b) => {
+      const rank = name => { const t = String(name || ""); const i = ["เตรียม", "อ.", "ป.", "ม."].findIndex(p => t.startsWith(p)); return i < 0 ? 9 : i; };
+      return rank(a.book.class_name) - rank(b.book.class_name) || String(a.book.class_name || "").localeCompare(String(b.book.class_name || ""), "th", { numeric: true });
+    });
+  const picked = options.find(item => String(item.teacher.id) === teacherId) || null;
+  return (
+    <div style={{ display: "grid", gap: "0.9rem", minWidth: 0 }}>
+      <Card padding="0.85rem">
+        <div style={{ fontWeight: 800, color: "#233862", fontSize: "1.05rem" }}>เช็คชื่อ / เช็คนม แทนครูประจำชั้น</div>
+        <div style={{ color: "#64748b", fontSize: "0.82rem", marginTop: "0.25rem", lineHeight: 1.55 }}>ใช้เมื่อครูประจำชั้นไม่มาปฏิบัติงาน เลือกห้องแล้วเช็คชื่อได้ตามปกติ ข้อมูลจะบันทึกเข้าห้องของครูคนนั้นทันที (สถิติ บันทึกดื่มนม และไฟล์ส่งออกจะนับรวม) พร้อมหมายเหตุว่าบันทึกแทนโดย {currentUser?.name}</div>
+        {error && <div style={{ marginTop: "0.5rem" }}><ErrorBox>{error}</ErrorBox></div>}
+        <select aria-label="เลือกห้องที่จะเช็คชื่อแทน" value={teacherId} disabled={loading} onChange={event => setTeacherId(event.target.value)} style={{ ...inputStyle, marginTop: "0.65rem", width: "100%", maxWidth: 420, fontSize: "16px" }}>
+          <option value="">{loading ? "กำลังโหลด..." : "— เลือกห้อง / ครูประจำชั้น —"}</option>
+          {options.map(item => <option key={item.teacher.id} value={String(item.teacher.id)}>{item.book.class_name || "ไม่ระบุห้อง"} · {item.teacher.name} ({item.book.students.length} คน)</option>)}
+        </select>
+      </Card>
+      {picked && <StudentRollTeacher key={picked.teacher.id} currentUser={picked.teacher} recordedBy={currentUser} />}
+    </div>
+  );
 }
 
 const rollTh = { padding: "0.3rem 0.35rem", fontWeight: 800, fontSize: "0.75rem", textAlign: "center", whiteSpace: "nowrap", borderBottom: "1px solid #e2e8f0" };
 const rollTd = { padding: "0.2rem 0.35rem", textAlign: "center", verticalAlign: "middle" };
 
-function StudentRollTeacher({ currentUser }) {
+function StudentRollTeacher({ currentUser, recordedBy = null }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -7874,7 +7964,7 @@ function StudentRollTeacher({ currentUser }) {
   const [health, setHealth] = useState({});
   const [milk, setMilk] = useState({});
   const [milkNote, setMilkNote] = useState({});
-  const rollLocalKey = `hr_student_roll_${currentUser.id}`;
+  const rollLocalKey = recordedBy ? `hr_student_roll_proxy_${currentUser.id}` : `hr_student_roll_${currentUser.id}`;
 
   useEffect(() => {
     let active = true;
@@ -7886,7 +7976,7 @@ function StudentRollTeacher({ currentUser }) {
         try {
           rows = await fetchRollRows(currentUser.id);
         } catch (loadErr) {
-          const raw = localStorage.getItem(`hr_student_roll_${currentUser.id}`);
+          const raw = recordedBy ? null : localStorage.getItem(`hr_student_roll_${currentUser.id}`);
           if (!raw) throw loadErr;
           const local = parseRollBook(raw);
           if (!active) return;
@@ -7900,7 +7990,7 @@ function StudentRollTeacher({ currentUser }) {
         const row = rows[0];
         let loaded = row ? parseRollBook(row.subject) : emptyRollBook();
         let localRaw = null;
-        try { localRaw = localStorage.getItem(`hr_student_roll_${currentUser.id}`); } catch { /* ignore */ }
+        try { if (!recordedBy) localRaw = localStorage.getItem(`hr_student_roll_${currentUser.id}`); } catch { /* ignore */ }
         let localRemoved = [];
         try { const parsedLocal = JSON.parse(localRaw || "{}"); if (Array.isArray(parsedLocal.removed_ids)) localRemoved = parsedLocal.removed_ids; } catch { /* ignore */ }
         const removed = new Set([...localRemoved, ...(loaded.removed_ids || [])]);
@@ -8010,7 +8100,7 @@ function StudentRollTeacher({ currentUser }) {
     const nextBook = {
       ...book,
       students,
-      days: { ...book.days, [date]: { saved_at: new Date().toISOString(), marks: clean } },
+      days: { ...book.days, [date]: { saved_at: new Date().toISOString(), marks: clean, ...(recordedBy ? { recorded_by: { id: String(recordedBy.id || ""), name: String(recordedBy.name || "").slice(0, 80) } } : {}) } },
     };
     const cleanHealth = {};
     Object.keys(clean).forEach(id => { if (clean[id] === "sick") cleanHealth[id] = cleanSickHealth(health[id]); });
@@ -8064,6 +8154,7 @@ function StudentRollTeacher({ currentUser }) {
         <Card><div style={{ color: "#64748b" }}>กำลังโหลดรายชื่อ...</div></Card>
       ) : (
         <>
+          {recordedBy && <div style={{ background: "#fff7ed", border: "1px solid #fdba74", borderRadius: 10, padding: "0.6rem 0.85rem", color: "#9a3412", fontWeight: 700, fontSize: "0.85rem" }}>กำลังเช็คชื่อแทน {currentUser?.name}{className ? ` (ห้อง ${className})` : ""} · บันทึกแทนโดย {recordedBy.name}</div>}
           <RollModeSwitch mode={mode} onChange={setMode} />
           {mode === "stats" ? (
             <RollStatsPanel book={book} month={month} onMonth={setMonth} title={className ? `สถิติห้อง ${className}` : "สถิติห้องของฉัน"} />
@@ -8079,7 +8170,7 @@ function StudentRollTeacher({ currentUser }) {
                     <div style={{ fontWeight: 800, color: "#233862", fontSize: "1.05rem" }}>เช็คชื่อ{className ? ` ${className}` : ""}</div>
                     <div style={{ color: "#64748b", fontSize: "0.8rem" }}>{formatThaiDateKey(date)} · นักเรียน {namedStudents.length} คน</div>
                   </div>
-                  {baseline.days[date]?.saved_at && <span style={{ background: "#dcfce7", color: "#166534", fontWeight: 800, fontSize: "0.75rem", borderRadius: 20, padding: "0.25rem 0.6rem" }}>บันทึกแล้ว {fmtTime(baseline.days[date].saved_at)}</span>}
+                  {baseline.days[date]?.saved_at && <span style={{ background: "#dcfce7", color: "#166534", fontWeight: 800, fontSize: "0.75rem", borderRadius: 20, padding: "0.25rem 0.6rem" }}>บันทึกแล้ว {fmtTime(baseline.days[date].saved_at)}{baseline.days[date]?.recorded_by?.name ? ` · บันทึกแทนโดย ${baseline.days[date].recorded_by.name}` : ""}</span>}
                 </div>
                 <div style={{ color: "#64748b", fontSize: "0.84rem", lineHeight: 1.55 }}>ติ๊กช่องละ 1 อย่างต่อคน ถ้าลาป่วยจะมีช่องคัดกรองอาการให้กรอก · ถ้าไม่มาหรือลา จะมีช่องเลือกคนดื่มนมแทน · ปุ่ม ช/ญ หน้าชื่อใช้นับในแบบฟอร์มสถิติ (กดสลับได้)</div>
                 <RollDateBar date={date} onChange={changeDate} />
@@ -8815,7 +8906,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
     const attendanceDateKeys = new Set(employeeAttendance.flatMap(row => getAttendanceWorkDateKeys(row, month)));
     const attendanceDays = attendanceDateKeys.size;
     const dutyCounts = DUTY_OPTIONS.reduce((acc, dutyName) => ({ ...acc, [dutyName]: 0 }), {});
-    const lateCount = employeeAttendance.filter(row => checkLate(row.check_in, settings?.work_start, settings?.late_grace_minutes)?.late).length;
+    const lateCount = employeeAttendance.filter(row => checkLate(row.check_in, wsOf(row.employee_id, settings?.work_start), settings?.late_grace_minutes)?.late).length;
     const employeeLeaves = monthLeaves.filter(row => row.employee_id === emp.id);
     const employeeConfig = config.employeeConfigs[emp.id] || defaultEmployeePayrollConfig();
     const leaveTypes = employeeConfig.leave_deduct_types || "ลาป่วย,ลากิจ";
@@ -10023,6 +10114,79 @@ function SettingsPage({ settings, onRefresh }) {
           </button>
         </div>
       </Card>
+      <WorkHourOverridesCard onRefresh={onRefresh} />
+    </div>
+  );
+}
+
+function WorkHourOverridesCard({ onRefresh }) {
+  const [people, setPeople] = useState([]);
+  const [rows, setRows] = useState({});
+  const [form, setForm] = useState({ employee_id: "", start: "07:40", end: "15:40" });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const reload = async () => {
+    setRows({ ...(await loadWorkHourOverrides()) });
+    const { data } = await supabase.from("employees").select("id, name, role").order("name");
+    setPeople((data || []).filter(emp => emp.role !== "admin"));
+  };
+  useEffect(() => { reload(); }, []);
+  const save = async () => {
+    if (!form.employee_id || !form.start || !form.end) { setMsg("เลือกครูและกรอกเวลาให้ครบ"); return; }
+    if (form.start >= form.end) { setMsg("เวลาเลิกต้องหลังเวลาเข้า"); return; }
+    setBusy(true); setMsg("");
+    const payload = { employee_id: form.employee_id, day_of_week: 0, period: 0, class_room: WORK_HOURS_ROOM, start_time: `${form.start}:00`, end_time: `${form.end}:00`, subject: JSON.stringify({ kind: "work_hours", updated_at: new Date().toISOString() }) };
+    const existing = rows[String(form.employee_id)]?.id;
+    const result = existing
+      ? await supabase.from("teaching_schedule").update(payload).eq("id", existing)
+      : await supabase.from("teaching_schedule").insert(payload);
+    setBusy(false);
+    if (result.error) { setMsg(`บันทึกไม่สำเร็จ: ${result.error.message}`); return; }
+    setMsg("บันทึกแล้ว");
+    await reload();
+    onRefresh?.();
+  };
+  const remove = async (employeeId) => {
+    const id = rows[String(employeeId)]?.id;
+    if (!id || !window.confirm("ลบเวลาเฉพาะของครูคนนี้ กลับไปใช้เวลาโรงเรียน?")) return;
+    setBusy(true);
+    const { error } = await supabase.from("teaching_schedule").delete().eq("id", id);
+    setBusy(false);
+    setMsg(error ? `ลบไม่สำเร็จ: ${error.message}` : "ลบแล้ว กลับไปใช้เวลาโรงเรียน");
+    await reload();
+    onRefresh?.();
+  };
+  const nameOf = id => people.find(emp => String(emp.id) === String(id))?.name || id;
+  const btn = { padding: "0.35rem 0.75rem", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontFamily: "inherit" };
+  return (
+    <div style={{ marginTop: "1rem" }}>
+    <Card>
+      <div style={{ display: "flex", flexDirection: "column", gap: "1rem", maxWidth: 560 }}>
+        <div style={{ fontWeight: 800 }}>เวลาทำงานรายบุคคล (กรณีต่างหาก)</div>
+        <div style={{ fontSize: "0.8rem", color: "#64748b" }}>ครูที่ตั้งไว้ตรงนี้ ระบบจะคิดมาสาย/กลับก่อน และหักคะแนนลงเวลาสาย ตามเวลานี้แทนเวลาโรงเรียน</div>
+        {Object.keys(rows).length === 0 ? <div style={{ fontSize: "0.85rem", color: "#94a3b8" }}>ยังไม่มีครูที่ตั้งเวลาเฉพาะ</div> : Object.entries(rows).map(([id, item]) => (
+          <div key={id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem", padding: "0.5rem 0.75rem", border: "1px solid #e2e8f0", borderRadius: 8 }}>
+            <span>{nameOf(id)} · เข้า {item.start || "-"} น. · เลิก {item.end || "-"} น.</span>
+            <span style={{ display: "flex", gap: "0.4rem" }}>
+              <button disabled={busy} onClick={() => setForm({ employee_id: id, start: item.start || "07:40", end: item.end || "15:40" })} style={btn}>แก้</button>
+              <button disabled={busy} onClick={() => remove(id)} style={{ ...btn, color: "#b91c1c" }}>ลบ</button>
+            </span>
+          </div>
+        ))}
+        <Field label="ครู">
+          <select value={form.employee_id} onChange={e => setForm(f => ({ ...f, employee_id: e.target.value }))} style={inputStyle}>
+            <option value="">เลือกครู</option>
+            {people.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+          </select>
+        </Field>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+          <Field label="เวลาเข้า"><input type="time" value={form.start} onChange={e => setForm(f => ({ ...f, start: e.target.value }))} style={inputStyle} /></Field>
+          <Field label="เวลาเลิก"><input type="time" value={form.end} onChange={e => setForm(f => ({ ...f, end: e.target.value }))} style={inputStyle} /></Field>
+        </div>
+        {msg && <div style={{ fontSize: "0.85rem", color: msg.startsWith("บันทึกแล้ว") || msg.startsWith("ลบแล้ว") ? "#15803d" : "#b91c1c" }}>{msg}</div>}
+        <button disabled={busy} onClick={save} style={{ padding: "0.75rem", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #008CFF, #0072D9)", color: "#fff", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>{busy ? "กำลังบันทึก..." : "บันทึกเวลาเฉพาะครู"}</button>
+      </div>
+    </Card>
     </div>
   );
 }
@@ -10425,6 +10589,7 @@ export default function HRApp() {
     const { data: outs } = await supabase.from("outings").select("*, employees(name, department)").order("out_time", { ascending: false });
     if (outs) setOutings(outs);
 
+    await loadWorkHourOverrides();
     const { data: stg } = await supabase.from("settings").select("*").eq("id", 1).single();
     if (stg) setSettings(stg);
 
@@ -10463,11 +10628,11 @@ export default function HRApp() {
   const stats = hasAdminRights(actingUser) ? [
     { label: "พนักงานทั้งหมด", value: employees.length, icon: Users, color: "#008CFF", bg: "#EAF5FF", trend: "ข้อมูลจริง" },
     { label: "ลงเวลาวันนี้", value: todayAttendance.length, icon: CheckCircle, color: "#059669", bg: "#ecfdf5", trend: `${employees.length > 0 ? Math.round(todayAttendance.length / employees.length * 100) : 0}%` },
-    { label: "มาสายวันนี้", value: todayAttendance.filter(a => checkLate(a.check_in, settings?.work_start, settings?.late_grace_minutes)?.late).length, icon: AlertCircle, color: "#dc2626", bg: "#fef2f2", trend: "นับเฉพาะวันนี้" },
+    { label: "มาสายวันนี้", value: todayAttendance.filter(a => checkLate(a.check_in, wsOf(a.employee_id, settings?.work_start), settings?.late_grace_minutes)?.late).length, icon: AlertCircle, color: "#dc2626", bg: "#fef2f2", trend: "นับเฉพาะวันนี้" },
     { label: "รออนุมัติลา", value: pendingLeaves, icon: Umbrella, color: "#d97706", bg: "#fef3c7", trend: pendingLeaves > 0 ? "ต้องดำเนินการ" : "ไม่มี" },
   ] : (() => {
-    const myLateInfo = myAttToday ? checkLate(myAttToday.check_in, settings?.work_start, settings?.late_grace_minutes) : null;
-    const myEarlyInfo = myAttToday?.check_out ? checkEarly(myAttToday.check_out, settings?.work_end) : null;
+    const myLateInfo = myAttToday ? checkLate(myAttToday.check_in, wsOf(myAttToday.employee_id, settings?.work_start), settings?.late_grace_minutes) : null;
+    const myEarlyInfo = myAttToday?.check_out ? checkEarly(myAttToday.check_out, weOf(myAttToday.employee_id, settings?.work_end)) : null;
     return [
       {
         label: "วันนี้",
@@ -10783,9 +10948,9 @@ export default function HRApp() {
                             <AlertCircle size={18} color="#dc2626" />
                             <div style={{ fontWeight: 700, color: "#233862", fontSize: "0.95rem" }}>มาสายวันนี้</div>
                           </div>
-                          <span style={{ background: "#fef2f2", color: "#dc2626", fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.6rem", borderRadius: "20px" }}>{todayAttendance.filter(a => checkLate(a.check_in, settings?.work_start)?.late).length} คน</span>
+                          <span style={{ background: "#fef2f2", color: "#dc2626", fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.6rem", borderRadius: "20px" }}>{todayAttendance.filter(a => checkLate(a.check_in, wsOf(a.employee_id, settings?.work_start))?.late).length} คน</span>
                         </div>
-                        {todayAttendance.filter(a => checkLate(a.check_in, settings?.work_start)?.late).length === 0 ? (
+                        {todayAttendance.filter(a => checkLate(a.check_in, wsOf(a.employee_id, settings?.work_start))?.late).length === 0 ? (
                           <div style={{ textAlign: "center", padding: "1.5rem", color: "#94a3b8", fontSize: "0.85rem" }}>ไม่มีพนักงานมาสายวันนี้ 🎉</div>
                         ) : (
                           <div style={{ overflowX: "auto" }}>
@@ -10798,8 +10963,8 @@ export default function HRApp() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {todayAttendance.filter(a => checkLate(a.check_in, settings?.work_start)?.late).map((a, i) => {
-                                  const li = checkLate(a.check_in, settings?.work_start);
+                                {todayAttendance.filter(a => checkLate(a.check_in, wsOf(a.employee_id, settings?.work_start))?.late).map((a, i) => {
+                                  const li = checkLate(a.check_in, wsOf(a.employee_id, settings?.work_start));
                                   return (
                                     <tr key={a.id} style={{ borderBottom: "1px solid #f8fafc" }}>
                                       <td style={{ padding: "0.65rem 0.75rem" }}>
@@ -10875,6 +11040,7 @@ export default function HRApp() {
               {activePage === "cleaningDuty" && (isExecutiveUser(actingUser) ? <CleaningDutyPage currentUser={actingUser} /> : <NoAccessCard />)}
               {activePage === "teacherEval" && (isExecutiveUser(actingUser) ? <TeacherEvalPage employees={employees} currentUser={actingUser} initialSelected={evalFocus} /> : <NoAccessCard />)}
               {activePage === "settings" && <SettingsPage settings={settings} onRefresh={fetchData} />}
+              {activePage === "academicCalendar" && <AcademicCalendarPage />}
             </>
           )}
         </main>

@@ -1,0 +1,162 @@
+import { useState } from "react";
+
+// ปฏิทินการศึกษา ภาคเรียนที่ 2/2569 (ตามเอกสารโรงเรียน) — แก้ข้อมูลที่ค่าคงที่นี้
+// color: "red" = วันหยุด/เรียนชดเชย/สอบ (ตัวแดงตามกระดาษ), "blue" = ค่ายลูกเสือ, ไม่ระบุ = ปกติ
+export const ACADEMIC_CALENDAR_2_2569 = [
+  { month: "2026-11", studyDays: 25, note: "กิจกรรมวันลอยกระทง - ครูธนัตถ์ / วันวชิราวุธ - ครูขนิษฐา", events: [
+    { date: "2026-11-02", title: "เปิดภาคเรียน" },
+    { date: "2026-11-07", title: "เรียนชดเชย 1", color: "red" },
+    { date: "2026-11-09", title: "ทัศนศึกษามัธยม" },
+    { date: "2026-11-10", title: "ทัศนศึกษา ป.ปลาย" },
+    { date: "2026-11-11", title: "ทัศนศึกษา ป.ต้น/อ." },
+    { date: "2026-11-14", title: "เรียนชดเชย 2", color: "red" },
+    { date: "2026-11-21", title: "เรียนชดเชย 3", color: "red" },
+    { date: "2026-11-24", title: "วันลอยกระทง", teacher: "ครูธนัตถ์" },
+    { date: "2026-11-25", title: "วันวชิราวุธ", teacher: "ครูขนิษฐา" },
+    { date: "2026-11-28", title: "เรียนชดเชย 4", color: "red" },
+  ] },
+  { month: "2026-12", studyDays: 20, note: "กิจกรรมวันพ่อ - ครูศิริรัตน์ / กิจกรรมวันคริสต์มาส/กิจกรรมวันขึ้นปีใหม่ - ครูนพรัตน์", events: [
+    { date: "2026-12-04", title: "กิจกรรมวันพ่อแห่งชาติ", teacher: "ครูศิริรัตน์" },
+    { date: "2026-12-05", title: "วันพ่อแห่งชาติ", color: "red", teacher: "ครูศิริรัตน์" },
+    { date: "2026-12-07", title: "หยุดชดเชยวันพ่อ", color: "red" },
+    { date: "2026-12-10", title: "วันรัฐธรรมนูญ", color: "red" },
+    { date: "2026-12-12", title: "เรียนชดเชย 5", color: "red" },
+    { date: "2026-12-16", title: "หยุดกรณีพิเศษ", color: "red" },
+    { date: "2026-12-19", title: "เรียนชดเชย 6", color: "red" },
+    { date: "2026-12-25", title: "เข้าค่ายลูกเสือ", color: "blue" },
+    { date: "2026-12-26", title: "เข้าค่ายลูกเสือ", color: "blue" },
+    { date: "2026-12-30", title: "กิจกรรมวันขึ้นปีใหม่ / วันคริสต์มาส", teacher: "ครูนพรัตน์" },
+    { date: "2026-12-31", title: "วันสิ้นปี", color: "red" },
+  ] },
+  { month: "2027-01", studyDays: 21, note: "กิจกรรมวันเด็ก - ครูเบญจวรรณ", events: [
+    { date: "2027-01-01", title: "วันขึ้นปีใหม่", color: "red" },
+    { date: "2027-01-08", title: "กิจกรรมวันเด็ก", teacher: "ครูเบญจวรรณ" },
+    { date: "2027-01-09", title: "วันเด็ก", teacher: "ครูเบญจวรรณ" },
+    { date: "2027-01-16", title: "วันครู" },
+    { date: "2027-01-23", title: "เรียนชดเชย 7", color: "red" },
+    { date: "2027-01-30", title: "สอบโอเน็ต ป.6", color: "red" },
+  ] },
+  { month: "2027-02", studyDays: 22, note: "", events: [
+    ...[1, 2, 3, 4, 5].map(d => ({ date: `2027-02-0${d}`, title: "สอบโอเน็ต ม.3", color: "red" })),
+    { date: "2027-02-06", title: "เรียนชดเชย 8", color: "red" },
+    { date: "2027-02-13", title: "เรียนชดเชย 9", color: "red" },
+    { date: "2027-02-21", title: "วันมาฆบูชา", color: "red" },
+    { date: "2027-02-22", title: "หยุดชดเชยวันมาฆบูชา", color: "red" },
+    { date: "2027-02-27", title: "เรียนชดเชย 10", color: "red" },
+  ] },
+  { month: "2027-03", studyDays: 12, note: "กิจกรรมบัณฑิตน้อย - ครูธนัตถ์ / กิจกรรม Open House - ครูนพรัตน์/ครูจุฑารัตน์", events: [
+    { date: "2027-03-05", title: "บัณฑิตน้อย", teacher: "ครูธนัตถ์" },
+    { date: "2027-03-09", title: "Open House", teacher: "ครูนพรัตน์/ครูจุฑารัตน์" },
+    { date: "2027-03-15", title: "สอบปลายภาค" },
+    { date: "2027-03-16", title: "สอบปลายภาค" },
+    { date: "2027-03-24", title: "เรียน summer" },
+    { date: "2027-03-31", title: "อนุมัติผลการเรียน", color: "red" },
+  ] },
+  { month: "2027-04", studyDays: null, note: "", events: [
+    { date: "2027-04-23", title: "สิ้นสุด summer" },
+  ] },
+];
+
+const TH_MONTHS = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+const TH_DAYS = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
+const HEAD_BG = ["#fde047", "#a3e635", "#f9a8d4", "#7dd3fc", "#fbbf24", "#fbbf24"];
+const COLORS = { red: "#dc2626", blue: "#2563eb" };
+
+export function monthLabel(key) {
+  const [y, m] = key.split("-").map(Number);
+  return `${TH_MONTHS[m - 1]} ${y + 543}`;
+}
+
+// ช่องปฏิทินแบบ อาทิตย์–เสาร์ (null = ช่องว่าง)
+export function monthCells(key) {
+  const [y, m] = key.split("-").map(Number);
+  const first = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();
+  const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const cells = Array(first).fill(null);
+  for (let d = 1; d <= days; d++) cells.push(`${key}-${String(d).padStart(2, "0")}`);
+  while (cells.length % 7) cells.push(null);
+  return cells;
+}
+
+export function defaultMonthIndex(today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })) {
+  const key = today.slice(0, 7);
+  const idx = ACADEMIC_CALENDAR_2_2569.findIndex(item => item.month === key);
+  if (idx >= 0) return idx;
+  return key < ACADEMIC_CALENDAR_2_2569[0].month ? 0 : ACADEMIC_CALENDAR_2_2569.length - 1;
+}
+
+function formatDate(date) {
+  const [y, m, d] = date.split("-").map(Number);
+  const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return `${TH_DAYS[dow]} ${d} ${TH_MONTHS[m - 1]} ${y + 543}`;
+}
+
+export function AcademicCalendarPage() {
+  const [index, setIndex] = useState(() => defaultMonthIndex());
+  const [view, setView] = useState("grid");
+  const month = ACADEMIC_CALENDAR_2_2569[index];
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
+  const byDate = new Map();
+  month.events.forEach(ev => byDate.set(ev.date, [...(byDate.get(ev.date) || []), ev]));
+  const btn = (active) => ({ padding: "0.45rem 0.9rem", borderRadius: 10, border: "1.5px solid #cbd5e1", background: active ? "#0072D9" : "#fff", color: active ? "#fff" : "#334155", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" });
+  const allEvents = ACADEMIC_CALENDAR_2_2569.flatMap(item => item.events.map(ev => ({ ...ev, month: item.month })));
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1rem" }}>
+        <h2 style={{ margin: 0, color: "#233862" }}>ปฏิทินการศึกษา ภาคเรียนที่ 2/2569</h2>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <button style={btn(view === "grid")} onClick={() => setView("grid")}>ปฏิทินรายเดือน</button>
+          <button style={btn(view === "list")} onClick={() => setView("list")}>รายการกิจกรรม</button>
+        </div>
+      </div>
+      {view === "grid" ? (
+        <div style={{ background: "#fff", borderRadius: 18, padding: "1rem", border: "1px solid #E4EEF8" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
+            <button style={btn(false)} disabled={index === 0} onClick={() => setIndex(i => Math.max(0, i - 1))}>‹ เดือนก่อน</button>
+            <div style={{ flex: 1, textAlign: "center", background: HEAD_BG[index], borderRadius: 8, padding: "0.5rem", fontWeight: 800, color: "#1e293b" }}>
+              ปฏิทินงานเดือน{monthLabel(month.month)}{month.studyDays ? `   เวลาเรียน ${month.studyDays} วัน` : ""}
+            </div>
+            <button style={btn(false)} disabled={index === ACADEMIC_CALENDAR_2_2569.length - 1} onClick={() => setIndex(i => Math.min(ACADEMIC_CALENDAR_2_2569.length - 1, i + 1))}>เดือนถัดไป ›</button>
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(84px, 1fr))", border: "1px solid #94a3b8", minWidth: 600 }}>
+              {TH_DAYS.map(d => <div key={d} style={{ padding: "0.4rem", textAlign: "center", fontWeight: 700, borderRight: "1px solid #94a3b8", borderBottom: "1px solid #94a3b8", background: "#f8fafc" }}>{d}</div>)}
+              {monthCells(month.month).map((date, i) => {
+                const events = date ? byDate.get(date) || [] : [];
+                const dayColor = events.find(ev => ev.color)?.color;
+                return (
+                  <div key={i} style={{ minHeight: 78, padding: "0.35rem", textAlign: "center", borderRight: "1px solid #94a3b8", borderBottom: "1px solid #94a3b8", background: date === today ? "#EAF5FF" : "#fff" }}>
+                    {date && <div style={{ fontWeight: 700, color: COLORS[dayColor] || "#1e293b" }}>{Number(date.slice(8))}</div>}
+                    {events.map((ev, k) => (
+                      <div key={k} style={{ fontSize: "0.78rem", lineHeight: 1.3, color: COLORS[ev.color] || "#1e293b", marginTop: 2 }}>
+                        {ev.title}
+                        {ev.teacher && <div style={{ fontSize: "0.7rem", color: "#7c3aed" }}>👤 {ev.teacher}</div>}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          {month.note && <div style={{ marginTop: "0.6rem", fontSize: "0.85rem", color: "#334155" }}><b>ผู้รับผิดชอบ:</b> {month.note}</div>}
+          <div style={{ marginTop: "0.4rem", fontSize: "0.75rem", color: "#64748b" }}>ตัวแดง = วันหยุด/เรียนชดเชย/สอบ · ตัวน้ำเงิน = เข้าค่ายลูกเสือ</div>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          {ACADEMIC_CALENDAR_2_2569.map(item => (
+            <div key={item.month} style={{ background: "#fff", borderRadius: 14, padding: "0.9rem 1rem", border: "1px solid #E4EEF8" }}>
+              <div style={{ fontWeight: 800, marginBottom: "0.4rem" }}>{monthLabel(item.month)}{item.studyDays ? ` · เวลาเรียน ${item.studyDays} วัน` : ""}</div>
+              {allEvents.filter(ev => ev.month === item.month).map((ev, k) => (
+                <div key={k} style={{ display: "flex", gap: "0.75rem", padding: "0.3rem 0", borderTop: k ? "1px solid #f1f5f9" : "none", fontSize: "0.88rem" }}>
+                  <span style={{ minWidth: 190, color: "#64748b" }}>{formatDate(ev.date)}</span>
+                  <span style={{ color: COLORS[ev.color] || "#1e293b", fontWeight: 600 }}>{ev.title}{ev.teacher && <span style={{ color: "#7c3aed", fontWeight: 500 }}> · ผู้รับผิดชอบ {ev.teacher}</span>}</span>
+                </div>
+              ))}
+              {item.note && <div style={{ marginTop: "0.4rem", fontSize: "0.8rem", color: "#475569" }}>หมายเหตุ: {item.note}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import { AcademicExtra, ACADEMIC_EXTRA_TABS, ACADEMIC_RECORD_ROOM, TEACHING_GRADE_GROUPS, loadAssignedPlanLevels, loadTeachingGrades, saveTeachingGrade } from "./academicRecords.jsx";
 import { read as readWorkbook, utils as xlsxUtils, writeFile as writeWorkbookFile } from "xlsx";
 import { supabase } from "./supabase.js";
-import { AcademicCalendarPage } from "./academicCalendar.jsx";
+import { AcademicCalendarPage, UpcomingCalendarCard } from "./academicCalendar.jsx";
 import { MILK_RECORD_TEMPLATE_URL, buildMilkRecord, fillMilkRecordWorkbook, milkRecordPrintHtml, milkClassLine } from "./milkRecordForm.js";
 import { STUDENT_STATS_TEMPLATE_URL, STUDENT_STATS_LEVELS, MILK_OTHER, MILK_NONE, buildStudentStats, fillStudentStatsWorkbook, statsTotals, studentSex, remarkName, formDateLine } from "./studentStatsForm.js";
 import {
@@ -6680,7 +6680,7 @@ function ExecPlanModal({ teacher, weekStart, onClose, focus = null }) {
   );
 }
 
-function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEval, onOpenLeave }) {
+function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEval, onOpenLeave, onOpenCalendar }) {
   const [date, setDate] = useState(() => todayISO());
   const [attendance, setAttendance] = useState([]);
   const [attLoading, setAttLoading] = useState(true);
@@ -6806,6 +6806,7 @@ function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEv
         <div style={{ fontSize: "0.85rem", opacity: 0.9 }}>สวัสดี {currentUser?.name} · ภาพรวมวันที่ {formatThaiDateKey(today)}</div>
       </div>
       {error && <ErrorBox>{error}</ErrorBox>}
+      <UpcomingCalendarCard onOpen={onOpenCalendar} />
       <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 1fr))" }}>
         <ExecSection title="การประเมินครู" icon={TrendingUp} right={<span style={{ fontSize: "0.75rem", color: "#64748b" }}>{evalNote}</span>}>
           {!evalRows ? <div style={{ color: "#64748b" }}>กำลังคำนวณคะแนน...</div> : (
@@ -11036,7 +11037,7 @@ export default function HRApp() {
               {activePage === "schedule" && <SchedulePage employees={employees} currentUser={actingUser} onOpenPlan={focus => { setPlanFocus({ ...focus, at: Date.now() }); setActivePage("academic"); }} />}
               {activePage === "academic" && <AcademicPage employees={employees} currentUser={actingUser} planFocus={planFocus} />}
               {activePage === "activityPlan" && <ActivityPlanPage employees={employees} currentUser={actingUser} />}
-              {activePage === "execDash" && (isExecutiveUser(actingUser) ? <ExecutiveDashboard employees={employees} leaves={leaves} settings={settings} currentUser={actingUser} onOpenEval={id => { setEvalFocus(String(id)); setActivePage("teacherEval"); }} onOpenLeave={() => openNavItem("leave")} /> : <NoAccessCard />)}
+              {activePage === "execDash" && (isExecutiveUser(actingUser) ? <ExecutiveDashboard employees={employees} leaves={leaves} settings={settings} currentUser={actingUser} onOpenEval={id => { setEvalFocus(String(id)); setActivePage("teacherEval"); }} onOpenLeave={() => openNavItem("leave")} onOpenCalendar={() => openNavItem("academicCalendar")} /> : <NoAccessCard />)}
               {activePage === "cleaningDuty" && (isExecutiveUser(actingUser) ? <CleaningDutyPage currentUser={actingUser} /> : <NoAccessCard />)}
               {activePage === "teacherEval" && (isExecutiveUser(actingUser) ? <TeacherEvalPage employees={employees} currentUser={actingUser} initialSelected={evalFocus} /> : <NoAccessCard />)}
               {activePage === "settings" && <SettingsPage settings={settings} onRefresh={fetchData} />}

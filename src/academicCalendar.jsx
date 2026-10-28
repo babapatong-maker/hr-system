@@ -160,3 +160,43 @@ export function AcademicCalendarPage() {
     </div>
   );
 }
+
+// รายการกิจกรรมที่กำลังจะมาถึง (ใช้ในหน้าผู้บริหาร)
+export function upcomingEvents(today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }), days = 30, min = 5) {
+  const all = ACADEMIC_CALENDAR_2_2569.flatMap(m => m.events).filter(e => e.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+  const end = new Date(today + "T00:00:00"); end.setDate(end.getDate() + days);
+  const endKey = end.toLocaleDateString("en-CA");
+  const inRange = all.filter(e => e.date <= endKey);
+  return inRange.length >= min ? inRange : all.slice(0, Math.max(min, inRange.length));
+}
+
+export function UpcomingCalendarCard({ onOpen, today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }) }) {
+  const events = upcomingEvents(today);
+  const curKey = today.slice(0, 7);
+  const month = ACADEMIC_CALENDAR_2_2569.find(m => m.month === curKey) || ACADEMIC_CALENDAR_2_2569.find(m => m.month > curKey);
+  const beforeTerm = today < ACADEMIC_CALENDAR_2_2569[0].events[0].date;
+  return (
+    <div style={{ background: "#fff", borderRadius: 18, padding: "1rem 1.2rem", boxShadow: "0 2px 12px rgba(15,23,42,0.06)", border: "1px solid #e2e8f0" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+        <div style={{ fontWeight: 800, fontSize: "1.05rem" }}>📅 ปฏิทินการศึกษา — กิจกรรมที่กำลังจะมาถึง</div>
+        <button onClick={onOpen} style={{ background: "#2563eb", color: "#fff", border: 0, borderRadius: 10, padding: "0.4rem 0.8rem", fontWeight: 700, cursor: "pointer" }}>เปิดปฏิทินเต็ม</button>
+      </div>
+      {month && <div style={{ fontSize: "0.85rem", color: "#475569", marginBottom: 8 }}>
+        {beforeTerm ? "ก่อนเปิดภาคเรียน 2/2569 · " : ""}{monthLabel(month.month)}{month.studyDays ? ` · เวลาเรียน ${month.studyDays} วัน` : ""}
+      </div>}
+      {events.length === 0 ? <div style={{ color: "#64748b" }}>ไม่มีกิจกรรมที่กำลังจะมาถึง</div> : (
+        <div style={{ display: "grid", gap: 6 }}>
+          {events.map((e, i) => {
+            const c = COLORS[e.color] || "#0f172a";
+            return (
+              <div key={i} style={{ display: "flex", gap: 10, alignItems: "baseline", padding: "0.35rem 0.5rem", borderRadius: 8, background: e.color === "red" ? "#fef2f2" : e.color === "blue" ? "#eff6ff" : "#f8fafc" }}>
+                <div style={{ minWidth: 170, fontSize: "0.8rem", color: "#64748b" }}>{formatDate(e.date)}</div>
+                <div style={{ flex: 1, color: c, fontWeight: 600 }}>{e.title}{e.teacher && <span style={{ color: "#7c3aed", fontWeight: 500, fontSize: "0.8rem" }}> · {e.teacher}</span>}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

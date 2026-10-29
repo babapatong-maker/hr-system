@@ -4224,10 +4224,40 @@ function TeachingSupervisionPage({ employees, currentUser, planFocus = null }) {
     });
     return () => { active = false; };
   }, [currentUser?.id, isExec]);
-  if (isExec) return <SupervisionAdmin employees={employees} currentUser={currentUser} />;
+  if (isExec) return <ExecutiveSupervisionSwitch employees={employees} currentUser={currentUser} planFocus={planFocus} />;
   if (level === null) return <Card><div style={{ textAlign: "center", color: "#64748b", padding: "1.5rem" }}>กำลังโหลดแผนสัปดาห์...</div></Card>;
   if (level === "อนุบาล") return <KindergartenSupervisionTeacher currentUser={currentUser} />;
   return <SupervisionTeacher currentUser={currentUser} planFocus={planFocus} />;
+}
+
+// ผู้บริหารที่มีคาบสอนประจำ: เห็นทั้ง "ตรวจแผนครู" และ "แผนการสอนของฉัน" (ส่งแผนเหมือนครู กฎ draft/ส่ง/ล็อกเดียวกัน)
+function ExecutiveSupervisionSwitch({ employees, currentUser, planFocus = null }) {
+  const [hasPeriods, setHasPeriods] = useState(false);
+  const [view, setView] = useState(planFocus?.date ? "mine" : "review");
+  useEffect(() => {
+    let active = true;
+    if (isNonTeachingStaff(currentUser)) { setHasPeriods(false); return undefined; }
+    fetchTimetableRows(currentUser.id)
+      .then(list => { if (active) setHasPeriods((list || []).length > 0); })
+      .catch(() => { if (active) setHasPeriods(false); });
+    return () => { active = false; };
+  }, [currentUser?.id]);
+  useEffect(() => { if (planFocus?.date) setView("mine"); }, [planFocus]);
+  if (!hasPeriods) return <SupervisionAdmin employees={employees} currentUser={currentUser} />;
+  const btn = (key, label) => (
+    <button type="button" onClick={() => setView(key)} aria-pressed={view === key} style={{ ...btnSecondary, flex: "none", minHeight: 40, fontWeight: 800, background: view === key ? "linear-gradient(135deg, #008CFF, #0072D9)" : "#fff", color: view === key ? "#fff" : "#233862", border: view === key ? "none" : "1px solid #cbd5e1" }}>{label}</button>
+  );
+  return (
+    <div style={{ display: "grid", gap: "0.9rem", minWidth: 0 }}>
+      <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+        {btn("review", "ตรวจแผนครู (ผู้บริหาร)")}
+        {btn("mine", "แผนการสอนของฉัน / ส่งแผน")}
+      </div>
+      {view === "mine"
+        ? <SupervisionTeacher currentUser={currentUser} planFocus={planFocus} />
+        : <SupervisionAdmin employees={employees} currentUser={currentUser} />}
+    </div>
+  );
 }
 
 function SupervisionTeacher({ currentUser, planFocus = null }) {

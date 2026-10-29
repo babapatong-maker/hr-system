@@ -4,7 +4,7 @@ import { AcademicExtra, ACADEMIC_EXTRA_TABS, ACADEMIC_RECORD_ROOM, TEACHING_GRAD
 import { read as readWorkbook, utils as xlsxUtils, writeFile as writeWorkbookFile } from "xlsx";
 import { supabase } from "./supabase.js";
 import { AcademicCalendarPage, UpcomingCalendarCard } from "./academicCalendar.jsx";
-import { KgShortPlanPage, KG_SHORT_PLAN_ROOM, isKgTeacher } from "./kgShortPlan.jsx";
+import { KgShortPlanPage, KG_SHORT_PLAN_ROOM, isKgTeacher, kgTeacherInfo } from "./kgShortPlan.jsx";
 import { MILK_RECORD_TEMPLATE_URL, buildMilkRecord, fillMilkRecordWorkbook, milkRecordPrintHtml, milkClassLine } from "./milkRecordForm.js";
 import { STUDENT_STATS_TEMPLATE_URL, STUDENT_STATS_LEVELS, MILK_OTHER, MILK_NONE, buildStudentStats, fillStudentStatsWorkbook, statsTotals, studentSex, remarkName, formDateLine } from "./studentStatsForm.js";
 import {
@@ -781,6 +781,17 @@ function isTestTeacher(emp) {
   const raw = String(emp.name || "").normalize("NFC").replace(/\s+/g, "");
   return String(emp.username || "").toLowerCase() === "teacher.try" || raw.includes("ครูทดลองระบบ") || normalizePersonName(emp.name) === "ทดลองระบบ";
 }
+
+// เจ้าหน้าที่ที่ไม่สอน (เช่น ธุรการ) — ไม่ต้องส่งแผน ไม่มีคาบ (ยังลงเวลา/ใช้ฟีเจอร์อื่นตามปกติ)
+function isNonTeachingStaff(user) {
+  return /ธุรการ/.test(String(user?.position || "")) || /ธุรการ/.test(String(user?.department || ""));
+}
+// ครูอนุบาล (ตอ./อ.1–3) อยู่ห้องตัวเองทั้งวัน — ไม่แสดงในตารางสอนรายคาบของผู้บริหาร
+function isKgHomeroomTeacher(user) {
+  const info = kgTeacherInfo(user);
+  return !!info && !info.test;
+}
+const KG_ROOM_RE = /^\s*(ตอ\.?|อ\.?\s*[1-3])(\s|\/|$)/;
 
 function isExecutiveUser(user) {
   if (!user) return false;
@@ -4635,7 +4646,7 @@ function SupervisionAdmin({ employees, currentUser }) {
   const signedOff = (employeeId) => String(rows.find(item => item.employee_id === employeeId)?.end_time || "").startsWith("00:01");
 
   const teachers = employees
-    .filter(teacher => teacher.role !== "admin")
+    .filter(teacher => teacher.role !== "admin" && !isNonTeachingStaff(teacher))
     .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "th"));
   const visibleTeachers = teachers.filter(teacher => {
     const text = `${teacher.name || ""} ${teacher.department || ""}`.toLowerCase();
@@ -6633,7 +6644,8 @@ function ExecPeriodSection({ employees, leaves, onOpenPlan }) {
       ]);
       if (!active) return;
       if (sched.error) setError(`ตารางสอน: ${sched.error.message}`);
-      const list = (sched.data || []).filter(row => !EXEC_SPECIAL_ROOMS.has(row.class_room) && row.day_of_week >= 1 && row.day_of_week <= 5);
+      const kgIds = new Set((employees || []).filter(emp => isKgHomeroomTeacher(emp) || isNonTeachingStaff(emp)).map(emp => String(emp.id)));
+      const list = (sched.data || []).filter(row => !EXEC_SPECIAL_ROOMS.has(row.class_room) && row.day_of_week >= 1 && row.day_of_week <= 5 && !kgIds.has(String(row.employee_id)) && !KG_ROOM_RE.test(String(row.class_room || "")));
       const latest = new Map();
       (sup.data || []).forEach(row => {
         const key = String(row.employee_id);
@@ -6646,7 +6658,7 @@ function ExecPeriodSection({ employees, leaves, onOpenPlan }) {
       setRows(list);
     })().catch(err => { if (active) { setRows([]); setError(err.message || "โหลดตารางสอนไม่สำเร็จ"); } });
     return () => { active = false; };
-  }, [weekStart]);
+  }, [weekStart, employees]);
 
   const maxPeriod = Math.max(6, ...(rows || []).map(row => Number(row.period) || 0));
   const periods = Array.from({ length: maxPeriod }, (_, index) => index + 1);
@@ -6667,7 +6679,7 @@ function ExecPeriodSection({ employees, leaves, onOpenPlan }) {
   const people = employees || [];
   const nameOf = id => people.find(emp => String(emp.id) === String(id))?.name || "-";
   const teacherIds = new Set([...people.filter(emp => !isExecutiveUser(emp) && emp.role !== "admin").map(emp => String(emp.id)), ...(rows || []).map(row => String(row.employee_id))]);
-  const teachers = people.filter(emp => teacherIds.has(String(emp.id))).sort((a, b) => String(a.name).localeCompare(String(b.name), "th"));
+  const teachers = people.filter(emp => teacherIds.has(String(emp.id)) && !isKgHomeroomTeacher(emp) && !isNonTeachingStaff(emp)).sort((a, b) => String(a.name).localeCompare(String(b.name), "th"));
   const dateOfDay = shiftDateKey(weekStart, day - 1);
   const isToday = dateOfDay === todayISO();
   const onLeaveToday = new Set((leaves || []).filter(row => row.status === "approved" && row.start_date <= todayISO() && (row.end_date || row.start_date) >= todayISO()).map(row => String(row.employee_id)));
@@ -6835,6 +6847,7 @@ function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEv
   const [error, setError] = useState("");
   const people = (employees || []);
   const teachers = people.filter(emp => !isExecutiveUser(emp));
+  const planTeachers = teachers.filter(emp => !isNonTeachingStaff(emp));
   const workStart = String(settings?.work_start || "08:00").slice(0, 5);
   const grace = Number(settings?.late_grace_minutes || 0);
 
@@ -6927,7 +6940,7 @@ function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEv
     return "missing";
   };
   const planCounts = { submitted: 0, late: 0, missing: 0 };
-  if (plans) teachers.forEach(emp => { planCounts[planStatus(emp)] += 1; });
+  if (plans) planTeachers.forEach(emp => { planCounts[planStatus(emp)] += 1; });
 
   const distribution = EVAL_LEVELS.map(level => ({ ...level, count: (evalRows || []).filter(row => evalLevel(row.score).label === level.label).length }));
   const maxCount = Math.max(1, ...distribution.map(level => level.count));
@@ -7024,7 +7037,7 @@ function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEv
           </div>
           {!plans ? <div style={{ color: "#64748b" }}>กำลังโหลด...</div> : (
             <div style={listBox}>
-              {teachers.map(emp => {
+              {planTeachers.map(emp => {
                 const status = EXEC_PLAN_STATUS[planStatus(emp)];
                 return (
                   <button key={emp.id} type="button" onClick={() => setPlanTeacher(emp)} style={{ ...line, background: "none", border: "none", borderTop: "1px solid #f1f5f9", cursor: "pointer", fontFamily: "inherit", textAlign: "left", alignItems: "center" }}>

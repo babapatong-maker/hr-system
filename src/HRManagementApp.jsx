@@ -2643,6 +2643,7 @@ function emptyWeekPeriod(teachDate, periodNo) {
     homework_page: "",
     homework_file: null,
     worksheet_file: null,
+    worksheet_images: [],
     youtube_links: [],
     post_note: emptyPostNote(),
   };
@@ -2680,6 +2681,7 @@ function normalizeSupervisionPeriod(period, weekStart) {
     homework_page: source.homework_page || "",
     homework_file: source.homework_file?.dataUrl ? source.homework_file : null,
     worksheet_file: source.worksheet_file?.url || source.worksheet_file?.dataUrl ? source.worksheet_file : null,
+    worksheet_images: Array.isArray(source.worksheet_images) ? source.worksheet_images.filter(img => img && (img.url || img.dataUrl)).slice(0, 12) : [],
     youtube_links: cleanYoutubeLinks(source.youtube_links),
     post_note: cleanPostNote(source.post_note),
   };
@@ -3314,6 +3316,67 @@ function loadLocalPlan(employeeId, weekStart) {
   } catch { return null; }
 }
 
+async function uploadLessonImage(file, employeeId) {
+  const source = await readFileAsDataUrl(file);
+  const image = await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("เปิดรูปภาพไม่สำเร็จ"));
+    img.src = source;
+  });
+  const scale = Math.min(1, 1280 / Math.max(image.width, image.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(image.width * scale);
+  canvas.height = Math.round(image.height * scale);
+  const ctx = canvas.getContext("2d");
+  if (ctx) ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+  const dataUrl = ctx ? canvas.toDataURL("image/jpeg", 0.8) : source;
+  const name = file.name || "worksheet.jpg";
+  try {
+    const blob = await (await fetch(dataUrl)).blob();
+    const objectPath = `${employeeId || "unknown"}/${todayISO()}/img-${newSupervisionId()}.jpg`;
+    const { error } = await supabase.storage.from(LESSON_FILE_BUCKET).upload(objectPath, blob, { contentType: "image/jpeg", upsert: false });
+    if (!error) {
+      const { data } = supabase.storage.from(LESSON_FILE_BUCKET).getPublicUrl(objectPath);
+      if (data?.publicUrl) return { name, url: data.publicUrl, path: objectPath, storage: "supabase" };
+    }
+  } catch { /* ไม่มี bucket → เก็บแบบย่อขนาดในแผน */ }
+  return { name, dataUrl, storage: "inline" };
+}
+
+function printWorksheetImages(images, title) {
+  const list = (images || []).map(lessonFileHref).filter(Boolean);
+  if (!list.length) return;
+  const win = window.open("", "_blank");
+  if (!win) return;
+  const esc = v => String(v || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  win.document.open();
+  win.document.write(`<!doctype html><html lang="th"><head><meta charset="utf-8"><title>${esc(title)}</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:sans-serif;margin:0}h3{margin:0 0 6px}.g{display:flex;flex-wrap:wrap;gap:8px}img{max-width:48%;max-height:175mm;object-fit:contain;border:1px solid #999;page-break-inside:avoid}</style></head><body><h3>${esc(title)}</h3><div class="g">${list.map(u => `<img src="${esc(u)}">`).join("")}</div></body></html>`);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 800);
+}
+
+function WorksheetImages({ images, onRemove, title = "ใบงาน" }) {
+  const [view, setView] = useState("");
+  const list = (images || []).filter(img => lessonFileHref(img));
+  if (!list.length) return onRemove ? <div style={{ color: "#94a3b8", fontSize: "0.9rem" }}>ยังไม่ได้แนบรูปใบงาน</div> : null;
+  return (
+    <div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+        {list.map((img, index) => (
+          <div key={img.path || index} style={{ position: "relative" }}>
+            <img src={lessonFileHref(img)} alt={img.name || "ใบงาน"} onClick={() => setView(lessonFileHref(img))} style={{ width: 104, height: 104, objectFit: "cover", borderRadius: 8, border: "1px solid #cbd5e1", cursor: "zoom-in" }} />
+            {onRemove && <button type="button" title="ลบรูป" onClick={() => onRemove(index)} style={{ position: "absolute", top: 2, right: 2, background: "#dc2626", color: "#fff", border: "none", borderRadius: 999, width: 24, height: 24, cursor: "pointer", fontWeight: 800 }}>×</button>}
+          </div>
+        ))}
+      </div>
+      <button type="button" onClick={() => printWorksheetImages(list, title)} style={{ ...btnSecondary, flex: "none", marginTop: "0.5rem" }}>พิมพ์รูปใบงาน (A4 แนวนอน)</button>
+      {view && <div onClick={() => setView("")} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}><img src={view} alt="ใบงาน" style={{ maxWidth: "95vw", maxHeight: "95vh" }} /></div>}
+    </div>
+  );
+}
+
 function WorksheetLink({ file }) {
   const href = lessonFileHref(file);
   if (!href) return <div style={{ color: "#94a3b8", fontSize: "0.9rem" }}>ยังไม่ได้แนบใบงาน PDF</div>;
@@ -3446,6 +3509,7 @@ function periodHasDetail(period) {
     || period?.homework === "yes"
     || period?.homework_file?.dataUrl
     || period?.worksheet_file?.url || period?.worksheet_file?.dataUrl
+    || (period?.worksheet_images || []).length > 0
     || (period?.youtube_links || []).some(link => String(link || "").trim())
     || postNoteHasData(period?.post_note)
     || String(period?.plan_unit || "").trim()
@@ -3506,7 +3570,7 @@ function DayCard({ title, summary, children, defaultOpen = false }) {
   );
 }
 
-function WeekPeriodEditor({ period, disabled, onChange, onPickFile, onPickWorksheet, worksheetBusy, teacherName, slot = null, timetable = [], defaultOpen = false }) {
+function WeekPeriodEditor({ period, disabled, onChange, onPickFile, onPickWorksheet, worksheetBusy, onPickImages, imageBusy, imagesLocked = false, teacherName, slot = null, timetable = [], defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
   const [typing, setTyping] = useState(false);
   const subjectOptions = [...new Map((timetable || []).map(row => [timetableSlotLabel(row), row])).values()];
@@ -3588,6 +3652,43 @@ function WeekPeriodEditor({ period, disabled, onChange, onPickFile, onPickWorksh
           {lessonFileHref(period.worksheet_file) && (
             <button type="button" onClick={() => onChange({ worksheet_file: null })} style={{ ...btnSecondary, flex: "none", marginTop: "0.6rem", color: "#dc2626" }}>เอาใบงาน PDF ออก</button>
           )}
+        </Field>
+        <Field label="แนบรูปใบงาน (ถ่ายรูป/เลือกจากคลัง ได้หลายรูป)">
+          {!imagesLocked && (
+            <label style={{ ...btnSecondary, flex: "none", width: "fit-content", cursor: disabled || imageBusy ? "not-allowed" : "pointer" }}>
+              <Upload size={16} /> {imageBusy ? "กำลังอัปโหลด..." : "เพิ่มรูปใบงาน"}
+              <input type="file" accept="image/*" multiple disabled={disabled || imageBusy} onChange={onPickImages} style={{ display: "none" }} />
+            </label>
+          )}
+          {!imagesLocked && (
+            <div
+              tabIndex={0}
+              contentEditable={!disabled && !imageBusy}
+              suppressContentEditableWarning
+              onPaste={event => {
+                event.preventDefault();
+                if (disabled || imageBusy) return;
+                const files = Array.from(event.clipboardData?.items || []).filter(item => item.kind === "file" && item.type.startsWith("image/")).map(item => item.getAsFile()).filter(Boolean);
+                if (files.length) onPickImages({ target: { files, value: "" } });
+              }}
+              onDragOver={event => event.preventDefault()}
+              onDrop={event => {
+                event.preventDefault();
+                if (disabled || imageBusy) return;
+                const files = Array.from(event.dataTransfer?.files || []).filter(f => f.type.startsWith("image/"));
+                if (files.length) onPickImages({ target: { files, value: "" } });
+              }}
+              onInput={event => { event.currentTarget.textContent = ""; }}
+              data-placeholder="คลิกแล้วกด Ctrl+V เพื่อวางรูป (มือถือ: กดค้างแล้วเลือกวาง) หรือลากรูปมาวางที่นี่"
+              className="ws-paste-zone"
+              style={{ marginTop: "0.5rem", border: "2px dashed #94a3b8", borderRadius: 10, padding: "0.8rem", minHeight: 44, color: "#64748b", fontSize: "0.85rem", outline: "none", cursor: "text", background: "#f8fafc" }}
+            />
+          )}
+          <style>{`.ws-paste-zone:empty:before{content:attr(data-placeholder);color:#64748b}.ws-paste-zone:focus{border-color:#2563eb !important;background:#eff6ff !important}`}</style>
+          {imagesLocked && <div style={{ fontSize: "0.8rem", color: "#b45309" }}>ส่งแผนแล้ว แก้ไขรูปใบงานไม่ได้</div>}
+          <div style={{ marginTop: "0.6rem" }}>
+            <WorksheetImages images={period.worksheet_images} title={`ใบงาน ${teacherName || ""}`} onRemove={imagesLocked || disabled ? null : index => onChange({ worksheet_images: (period.worksheet_images || []).filter((_, i) => i !== index) })} />
+          </div>
         </Field>
         <Field label="ลิงก์ YouTube ที่ใช้สอน">
           <YoutubeLinksEditor links={period.youtube_links} disabled={disabled} onChange={links => onChange({ youtube_links: links })} />
@@ -3708,6 +3809,12 @@ function SupervisionPeriodRead({ period, defaultOpen = false, adminSlot = null, 
             <div>
               <div style={{ fontWeight: 800, color: "#233862" }}>ใบงาน (PDF)</div>
               <WorksheetLink file={period.worksheet_file} />
+            </div>
+          )}
+          {(period.worksheet_images || []).length > 0 && (
+            <div>
+              <div style={{ fontWeight: 800, color: "#233862" }}>รูปใบงาน ({period.worksheet_images.length} รูป)</div>
+              <WorksheetImages images={period.worksheet_images} />
             </div>
           )}
           {cleanYoutubeLinks(period.youtube_links).length > 0 && (
@@ -4139,6 +4246,7 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [worksheetBusy, setWorksheetBusy] = useState("");
+  const [imageBusy, setImageBusy] = useState("");
 
   const applyPlan = (plan, id) => {
     const nextPeriods = periodsForEditor(plan, plan.week_start || weekStart);
@@ -4324,6 +4432,26 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
     }
   };
 
+  const onPickImages = async (event, period) => {
+    const picked = Array.from(event.target.files || []).filter(f => !f.type || f.type.startsWith("image/"));
+    event.target.value = "";
+    if (!picked.length) return;
+    const room = 12 - (period.worksheet_images || []).length;
+    if (room <= 0) { setError("แนบรูปใบงานได้ไม่เกิน 12 รูปต่อคาบ"); return; }
+    setImageBusy(period.id);
+    try {
+      const added = [];
+      for (const f of picked.slice(0, room)) added.push(await uploadLessonImage(f, currentUser.id));
+      setPeriods(prev => prev.map(p => p.id === period.id ? { ...p, worksheet_images: [...(p.worksheet_images || []), ...added] } : p));
+      setError("");
+      setMessage(`แนบรูปใบงาน ${added.length} รูปแล้ว กดบันทึกเพื่อเก็บลงแผน`);
+    } catch (err) {
+      setError(err.message || "อัปโหลดรูปไม่สำเร็จ");
+    } finally {
+      setImageBusy("");
+    }
+  };
+
   const onPickWorksheet = async (event, periodId) => {
     const picked = event.target.files?.[0];
     event.target.value = "";
@@ -4417,6 +4545,9 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
                     onPickFile={event => onPickHomework(event, period.id)}
                     onPickWorksheet={event => onPickWorksheet(event, period.id)}
                     worksheetBusy={worksheetBusy === period.id}
+                    onPickImages={event => onPickImages(event, period)}
+                    imageBusy={imageBusy === period.id}
+                    imagesLocked={status === "submitted" || status === "late"}
                     teacherName={currentUser.name}
                   />
                 ))}
@@ -5688,23 +5819,24 @@ const EVAL_LEVELS = [
 const EVAL_POINT_OPTIONS = [0.5, 1, 2, 3, 5, 10];
 const EVAL_CATEGORIES = [
   { key: "dress", label: "การแต่งกาย", type: "deduct", points: 1 },
-  { key: "duty", label: "ไม่เข้าเวร", type: "deduct", points: 2 },
   { key: "abandon", label: "ทิ้งงานที่ได้รับมอบหมาย", type: "deduct", points: 3 },
-  { key: "complaint", label: "ถูกผู้ปกครองร้องเรียน", type: "deduct", points: 5 },
+  { key: "ethics", label: "ผิดวินัย/จรรยาบรรณ", desc: "เช่น ตีนักเรียน / ผู้ปกครองร้องเรียน", type: "deduct", points: 5 },
+  { key: "complaint", label: "ผู้ปกครองร้องเรียน", desc: "หัก 1–5 คะแนน ตามความรุนแรง", type: "deduct", points: 1, options: [1, 2, 3, 4, 5] },
+  { key: "offsite", label: "ออกนอกบริเวณโดยไม่แจ้งในระบบ", desc: "หักครั้งละ 1 คะแนน", type: "deduct", points: 1, options: [1] },
   { key: "supervision", label: "ผลนิเทศต่ำ", type: "deduct", points: 2 },
   { key: "activity", label: "จัดกิจกรรม", type: "add", points: 2 },
   { key: "award", label: "ผลงาน/รางวัล", type: "add", points: 5 },
-  { key: "project_owner", label: "เจ้าของโครงการ", type: "add", points: 1, options: [1, 2, 3, 4, 5] },
-  { key: "training", label: "เข้ารับการอบรม", type: "add", points: 1, options: [1] },
+  { key: "project_owner", label: "เจ้าของโครงการ", desc: "+1 ถึง +5 ตามผลการประเมินโครงการ", type: "add", points: 1, options: [1, 2, 3, 4, 5] },
+  { key: "training", label: "ไปอบรม", desc: "+1 ต่อครั้ง", type: "add", points: 1, options: [1] },
   { key: "other", label: "อื่นๆ", type: "deduct", points: 1 },
-  // หมวดเดิม (เลิกใช้ 14 ต.ค. 2569) เก็บไว้ให้รายการเก่ายังแสดง/คิดคะแนนเหมือนเดิม แต่ไม่ให้เลือกใหม่
-  { key: "ethics", label: "ผิดวินัย/จรรยาบรรณ (หมวดเดิม)", type: "deduct", points: 5, legacy: true },
+  // หมวดเดิม (เลิกใช้แล้ว) เก็บไว้ให้รายการเก่ายังแสดง/คิดคะแนนเหมือนเดิม แต่ไม่ให้เลือกใหม่
+  { key: "duty", label: "ไม่เข้าเวร (หมวดเดิม)", type: "deduct", points: 2, legacy: true },
 ];
 const evalPointOptions = key => EVAL_CATEGORIES.find(item => item.key === key)?.options || EVAL_POINT_OPTIONS;
 const EVAL_AUTO_RULES = [
   { key: "late_checkin", label: "ลงเวลาสาย", points: 0.5 },
   { key: "no_checkin", label: "ไม่ลงเวลาเข้า (วันทำงาน ไม่นับวันลาที่อนุมัติ)", points: 1 },
-  { key: "plan_late", label: "ส่งแผนรายสัปดาห์สาย", points: 1 },
+  { key: "plan_late", label: "ส่งแผนรายสัปดาห์เกินเวลาที่กำหนด", points: 1 },
   { key: "plan_missing", label: "ไม่ส่งแผนรายสัปดาห์", points: 2 },
   { key: "post_missing", label: "ไม่มีบันทึกหลังสอน (ต่อคาบ)", points: 0.5 },
   { key: "roll_missing", label: "ไม่เช็คชื่อนักเรียน (ต่อวัน)", points: 0.5 },
@@ -6292,7 +6424,7 @@ function TeacherDeductPage({ employees, currentUser, initialSelected = "" }) {
               </select>
             </div>
             <div style={{ display: "flex", gap: "0.45rem", marginTop: "0.45rem" }}>
-              <input value={form.reason} placeholder={form.category === "other" ? "เหตุผล (จำเป็น)" : "เหตุผล/รายละเอียด"} onChange={event => setForm(current => ({ ...current, reason: event.target.value }))} style={{ ...small, flex: 1 }} />
+              <input value={form.reason} placeholder={form.category === "other" ? "เหตุผล (จำเป็น)" : (EVAL_CATEGORIES.find(item => item.key === form.category)?.desc || "เหตุผล/รายละเอียด")} onChange={event => setForm(current => ({ ...current, reason: event.target.value }))} style={{ ...small, flex: 1 }} />
               <button type="button" onClick={addEntry} style={{ ...btnPrimary, flex: "none", padding: "0.4rem 0.9rem", background: form.type === "add" ? "linear-gradient(135deg, #16a34a, #15803d)" : "linear-gradient(135deg, #dc2626, #b91c1c)", color: "#fff", cursor: "pointer" }}><Plus size={15} /> {form.type === "add" ? `+${form.points}` : `-${form.points}`}</button>
             </div>
           </Card>

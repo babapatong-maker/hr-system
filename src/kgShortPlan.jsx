@@ -95,10 +95,17 @@ function deadlineText(monday) {
 
 // ── สิทธิ์ ─────────────────────────────────────────────────────────
 const normName = n => String(n || "").normalize("NFC").trim().replace(/^(นางสาว|นาง|นาย|น\.ส\.|ครู|ดร\.)\s*/, "").replace(/\s+/g, "");
+// บัญชี "ครูทดลองระบบ" (username teacher.try) ให้ทำงานเหมือนครูอนุบาล ใช้ทดสอบ (เห็นเฉพาะ ศักดิ์ศิริ)
+export const KG_TEST_TEACHER = { name: "ครูทดลองระบบ", level: "อ.1", test: true };
+export function isKgTestTeacher(user) {
+  if (!user) return false;
+  const raw = String(user.name || "").normalize("NFC").replace(/\s+/g, "");
+  return String(user.username || "").toLowerCase() === "teacher.try" || raw.includes("ครูทดลองระบบ") || normName(user.name) === "ทดลองระบบ";
+}
 export function kgTeacherInfo(user) {
   if (!user) return null;
   const n = normName(user.name);
-  return KG_TEACHERS.find(t => normName(t.name) === n) || null;
+  return KG_TEACHERS.find(t => normName(t.name) === n) || (isKgTestTeacher(user) ? KG_TEST_TEACHER : null);
 }
 export function isKgTeacher(user) {
   return !!kgTeacherInfo(user);
@@ -370,7 +377,7 @@ export function KgShortPlanPage({ currentUser, employees = [], canReview = false
         </label>
         {canReview && (
           <select value={teacherId} onChange={e => setTeacherId(e.target.value)} style={{ ...inp, width: "auto" }}>
-            {kgEmployees.map(e => <option key={e.id} value={String(e.id)}>{kgTeacherInfo(e)?.level} · {e.name}</option>)}
+            {kgEmployees.map(e => <option key={e.id} value={String(e.id)}>{kgTeacherInfo(e)?.level} · {e.name}{kgTeacherInfo(e)?.test ? " (ทดสอบ)" : ""}</option>)}
             {myInfo && !kgEmployees.some(e => String(e.id) === String(currentUser.id)) && <option value={String(currentUser.id)}>{currentUser.name}</option>}
           </select>
         )}
@@ -386,7 +393,7 @@ export function KgShortPlanPage({ currentUser, employees = [], canReview = false
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 8 }}>
             {overview.map(o => { const s = kgStatusLabel(o.main && o.main.status ? o.main : null); return (
               <button key={o.emp.id} onClick={() => { setTeacherId(String(o.emp.id)); setTab(1); }} style={{ textAlign: "left", border: String(o.emp.id) === String(teacherId) ? "2px solid #2563eb" : "1px solid #e2e8f0", borderRadius: 10, padding: "0.6rem", background: "#fff", cursor: "pointer", fontFamily: "inherit" }}>
-                <div style={{ fontWeight: 700 }}>{kgTeacherInfo(o.emp)?.level} · {o.emp.name}</div>
+                <div style={{ fontWeight: 700 }}>{kgTeacherInfo(o.emp)?.level} · {o.emp.name}{kgTeacherInfo(o.emp)?.test && <span style={{ marginLeft: 6, background: "#e0e7ff", color: "#4338ca", borderRadius: 999, padding: "0 0.5rem", fontSize: "0.72rem" }}>ทดสอบ</span>}</div>
                 <div style={{ fontSize: "0.8rem", color: "#64748b" }}>{o.main?.unit_name ? `หน่วย ${o.main.unit_name}` : "—"}</div>
                 <span style={{ background: s.bg, color: s.color, borderRadius: 999, padding: "0.1rem 0.6rem", fontSize: "0.78rem", fontWeight: 700 }}>{s.text}</span>
                 {o.main?.exec?.at && <span style={{ marginLeft: 6, fontSize: "0.78rem", color: "#2563eb" }}>✓ ผู้บริหารให้ความเห็นแล้ว</span>}

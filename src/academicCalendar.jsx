@@ -30,6 +30,7 @@ export const ACADEMIC_CALENDAR_2_2569 = [
   ] },
   { month: "2027-01", studyDays: 21, note: "กิจกรรมวันเด็ก - ครูเบญจวรรณ", events: [
     { date: "2027-01-01", title: "วันขึ้นปีใหม่", color: "red" },
+    { date: "2027-01-07", title: "เข้าค่ายลูกเสือสำรอง" },
     { date: "2027-01-08", title: "กิจกรรมวันเด็ก", teacher: "ครูเบญจวรรณ" },
     { date: "2027-01-09", title: "วันเด็ก", teacher: "ครูเบญจวรรณ" },
     { date: "2027-01-16", title: "วันครู" },

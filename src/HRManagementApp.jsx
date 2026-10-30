@@ -6071,6 +6071,7 @@ const EVAL_CATEGORIES = [
   { key: "award", label: "ผลงาน/รางวัล", type: "add", points: 5 },
   { key: "project_owner", label: "เจ้าของโครงการ", desc: "+1 ถึง +5 ตามผลการประเมินโครงการ", type: "add", points: 1, options: [1, 2, 3, 4, 5] },
   { key: "training", label: "ไปอบรม", desc: "+1 ต่อครั้ง", type: "add", points: 1, options: [1] },
+  { key: "sacrifice", label: "เสียสละเวลาให้กับโรงเรียน", desc: "+1 ต่อครั้ง", type: "add", points: 1, options: [1] },
   { key: "other", label: "อื่นๆ", type: "deduct", points: 1 },
   // หมวดเดิม (เลิกใช้แล้ว) เก็บไว้ให้รายการเก่ายังแสดง/คิดคะแนนเหมือนเดิม แต่ไม่ให้เลือกใหม่
   { key: "duty", label: "ไม่เข้าเวร (หมวดเดิม)", type: "deduct", points: 2, legacy: true },

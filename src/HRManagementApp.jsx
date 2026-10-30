@@ -2743,10 +2743,10 @@ function bangkokDateTimeKey(iso) {
   return `${pick("year")}-${pick("month")}-${pick("day")}T${pick("hour")}:${pick("minute")}:${pick("second")}`;
 }
 
-// กำหนดส่งแผนรายสัปดาห์: วันศุกร์ก่อนสัปดาห์สอน เวลา 17:00 (เวลาไทย)
-const SUPERVISION_DEADLINE_TIME = "17:00";
+// กำหนดส่งแผนรายสัปดาห์: วันอาทิตย์ก่อนสัปดาห์สอน ก่อนเวลา 08:00 (เวลาไทย)
+const SUPERVISION_DEADLINE_TIME = "08:00";
 function supervisionDeadlineDate(weekStart) {
-  return shiftDateKey(weekStart, -3);
+  return shiftDateKey(weekStart, -1);
 }
 
 function supervisionDeadlineStamp(weekStart) {
@@ -2754,7 +2754,7 @@ function supervisionDeadlineStamp(weekStart) {
 }
 
 function supervisionDeadlineText(weekStart) {
-  return `ส่งไม่เกิน ${formatThaiDateKey(supervisionDeadlineDate(weekStart))} เวลา ${SUPERVISION_DEADLINE_TIME} น.`;
+  return `ส่งภายในวันอาทิตย์ ${formatThaiDateKey(supervisionDeadlineDate(weekStart))} ก่อนเวลา ${SUPERVISION_DEADLINE_TIME} น.`;
 }
 
 function resolveSubmission(nextStatus, previousStatus, previousSubmittedAt, previousLate, weekStart) {
@@ -2763,7 +2763,7 @@ function resolveSubmission(nextStatus, previousStatus, previousSubmittedAt, prev
     return { status: "submitted", submitted_at: previousSubmittedAt, late: !!previousLate };
   }
   const submittedAt = new Date().toISOString();
-  return { status: "submitted", submitted_at: submittedAt, late: bangkokDateTimeKey(submittedAt) > supervisionDeadlineStamp(weekStart) };
+  return { status: "submitted", submitted_at: submittedAt, late: bangkokDateTimeKey(submittedAt) >= supervisionDeadlineStamp(weekStart) };
 }
 
 function weekDates(mondayKey) {
@@ -4774,10 +4774,10 @@ function SupervisionAdmin({ employees, currentUser }) {
       <WeekSwitcher weekStart={weekStart} onChange={setWeekStart} />
       {error && <ErrorBox>{error}</ErrorBox>}
       {reviewMessage && <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", borderRadius: "10px", padding: "0.75rem 1rem", color: "#166534", fontWeight: 700 }}>{reviewMessage}</div>}
-      <div style={{ fontSize: "0.8rem", color: "#64748b" }}>เขียว = ส่งตรงเวลา · เหลือง = สาย · แดง = ยังไม่ส่งหรือฉบับร่าง · ส่งไม่เกินวันศุกร์ก่อนสัปดาห์สอน เวลา 17:00 (ยึดเวลาส่งครั้งแรก)</div>
+      <div style={{ fontSize: "0.8rem", color: "#64748b" }}>เขียว = ส่งตรงเวลา · เหลือง = สาย · แดง = ยังไม่ส่งหรือฉบับร่าง · ส่งภายในวันอาทิตย์ก่อนสัปดาห์สอน ก่อน 08:00 น. (ยึดเวลาส่งครั้งแรก)</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.75rem" }}>
         <StatCard stat={{ label: "ส่งแล้ว", value: loading ? "..." : counts.submitted, icon: CheckCircle, color: "#16a34a", bg: "#ecfdf5", trend: "สัปดาห์นี้" }} />
-        <StatCard stat={{ label: "สาย", value: loading ? "..." : counts.late, icon: Clock, color: "#d97706", bg: "#fffbeb", trend: "หลังวันศุกร์ 17:00" }} />
+        <StatCard stat={{ label: "สาย", value: loading ? "..." : counts.late, icon: Clock, color: "#d97706", bg: "#fffbeb", trend: "ตั้งแต่วันอาทิตย์ 08:00" }} />
         <StatCard stat={{ label: "ยังไม่ส่ง", value: loading ? "..." : counts.missing, icon: AlertCircle, color: "#dc2626", bg: "#fef2f2", trend: "รวมฉบับร่าง" }} />
       </div>
 
@@ -6080,8 +6080,8 @@ const evalPointOptions = key => EVAL_CATEGORIES.find(item => item.key === key)?.
 const EVAL_AUTO_RULES = [
   { key: "late_checkin", label: "ลงเวลาสาย", points: 0.5 },
   { key: "no_checkin", label: "ไม่ลงเวลาเข้า (วันทำงาน ไม่นับวันลาที่อนุมัติ)", points: 1 },
-  { key: "plan_late", label: "ส่งแผนรายสัปดาห์เกินเวลาที่กำหนด", points: 1 },
-  { key: "plan_missing", label: "ไม่ส่งแผนรายสัปดาห์", points: 2 },
+  { key: "plan_late", label: "ส่งแผนรายสัปดาห์ช้า (กำหนดส่งภายในวันอาทิตย์ก่อนสัปดาห์สอน ก่อน 08:00 น.) ต่อสัปดาห์", points: 1 },
+  { key: "plan_missing", label: "ไม่ส่งแผนรายสัปดาห์ (เลยวันอาทิตย์ 08:00 น. แล้วยังไม่ส่ง) ต่อสัปดาห์", points: 2 },
   { key: "post_missing", label: "ไม่มีบันทึกหลังสอน (ต่อคาบ)", points: 0.5 },
   { key: "roll_missing", label: "ไม่เช็คชื่อนักเรียน (ต่อวัน)", points: 0.5 },
 ];
@@ -6358,7 +6358,7 @@ function computeAutoEntries(teacherId, sources, range, settings) {
       add("no_checkin", date, "ไม่ลงเวลาเข้า (ไม่มีวันลาที่อนุมัติ)");
     }
   });
-  // แผนรายสัปดาห์ (ครบกำหนดวันศุกร์ก่อนสัปดาห์สอน 17:00; นับเฉพาะสัปดาห์ที่เลยกำหนดแล้ว)
+  // แผนรายสัปดาห์ (ครบกำหนดวันอาทิตย์ก่อนสัปดาห์สอน 08:00; นับเฉพาะสัปดาห์ที่เลยกำหนดแล้ว)
   const nowStamp = bangkokDateTimeKey(new Date().toISOString());
   const latest = new Map();
   sources.plans.filter(row => String(row.employee_id) === id).forEach(row => {

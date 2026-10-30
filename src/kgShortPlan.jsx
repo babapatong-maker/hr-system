@@ -17,8 +17,8 @@ export const KG_TEACHERS = [
   { name: "พัชราพร การะภักดี", level: "อ.3" },
 ];
 export const KG_PLAN_RULES = {
-  deadlineDaysBeforeMonday: 3, // ส่งภายในวันศุกร์ก่อนสัปดาห์สอน (เหมือนแผนสอนเดิม)
-  deadlineTime: "17:00",
+  deadlineDaysBeforeMonday: 1, // ส่งภายในวันอาทิตย์ก่อนสัปดาห์สอน ก่อน 08:00 (เหมือนแผนสอน)
+  deadlineTime: "08:00",
   scoreDeduction: false, // ยังไม่หักคะแนนครู (เปิดใช้ภายหลังได้)
 };
 const JSON_LIMIT = 3200000;
@@ -90,7 +90,7 @@ export function kgDeadlineStamp(monday) {
   return `${shiftDateKey(monday, -KG_PLAN_RULES.deadlineDaysBeforeMonday)}T${KG_PLAN_RULES.deadlineTime}:00`;
 }
 function deadlineText(monday) {
-  return `กำหนดส่ง ${thaiDate(shiftDateKey(monday, -KG_PLAN_RULES.deadlineDaysBeforeMonday), { weekday: "short", day: "numeric", month: "short", year: "2-digit" })} เวลา ${KG_PLAN_RULES.deadlineTime} น.`;
+  return `กำหนดส่ง ${thaiDate(shiftDateKey(monday, -KG_PLAN_RULES.deadlineDaysBeforeMonday), { weekday: "short", day: "numeric", month: "short", year: "2-digit" })} ก่อนเวลา ${KG_PLAN_RULES.deadlineTime} น.`;
 }
 
 // ── สิทธิ์ ─────────────────────────────────────────────────────────
@@ -327,7 +327,7 @@ export function KgShortPlanPage({ currentUser, employees = [], canReview = false
       const miss = kgMissing(main, days);
       if (miss.length) { setErr(`ยังส่งไม่ได้ ขาด ${miss.length} ช่อง เช่น: ${miss.slice(0, 5).join(" · ")}`); return; }
       const at = new Date().toISOString();
-      next = { ...next, status: "submitted", submitted_at: at, late: bangkokStamp(at) > kgDeadlineStamp(monday) };
+      next = { ...next, status: "submitted", submitted_at: at, late: bangkokStamp(at) >= kgDeadlineStamp(monday) };
     } else if (main.status !== "submitted") next = { ...next, status: "draft" };
     setSaving(true);
     try {

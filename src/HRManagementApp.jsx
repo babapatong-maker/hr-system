@@ -4,6 +4,7 @@ import { AcademicExtra, ACADEMIC_EXTRA_TABS, ACADEMIC_RECORD_ROOM, TEACHING_GRAD
 import { read as readWorkbook, utils as xlsxUtils, writeFile as writeWorkbookFile } from "xlsx";
 import { supabase } from "./supabase.js";
 import { AcademicCalendarPage, UpcomingCalendarCard } from "./academicCalendar.jsx";
+import { RoomBookingPage, ROOM_BOOKING_ROOM, ROOM_BOOKING_ROOMS_ROOM } from "./roomBooking.jsx";
 import { KgShortPlanPage, KG_SHORT_PLAN_ROOM, isKgTeacher, kgTeacherInfo } from "./kgShortPlan.jsx";
 import { MILK_RECORD_TEMPLATE_URL, buildMilkRecord, fillMilkRecordWorkbook, milkRecordPrintHtml, milkClassLine } from "./milkRecordForm.js";
 import { STUDENT_STATS_TEMPLATE_URL, STUDENT_STATS_LEVELS, MILK_OTHER, MILK_NONE, buildStudentStats, fillStudentStatsWorkbook, statsTotals, studentSex, remarkName, formDateLine } from "./studentStatsForm.js";
@@ -823,6 +824,7 @@ const navItems = [
   { icon: Calendar, label: "ตารางสอน", key: "schedule", roles: ["admin", "employee"] },
   { icon: BookOpen, label: "งานวิชาการ", key: "academic", roles: ["admin", "employee"] },
   { icon: Calendar, label: "ปฏิทินการศึกษา", key: "academicCalendar", roles: ["admin", "employee"] },
+  { icon: Calendar, label: "จองห้องสื่อการสอน", key: "roomBooking", roles: ["admin", "employee"] },
   { icon: FileText, label: "แผนการจัดกิจกรรม", key: "activityPlan", roles: ["admin", "employee"] },
   { icon: BookOpen, label: "แผนระยะสั้น (อนุบาล)", key: "kgShortPlan", roles: ["admin", "employee"] },
   { icon: TrendingUp, label: "ประเมินครู", key: "teacherEval", roles: ["admin"], executiveOnly: true },
@@ -2894,7 +2896,7 @@ async function writeSupervisionPlan(employeeId, dateKey, plan, existingId, dayOf
 
 // ─── SCHEDULE PAGE ────────────────────────────────────────────────────────────
 // ─── ตารางสอนรายสัปดาห์ (ครูกรอกเอง · ผู้บริหาร/แอดมินดูได้ทั้งหมด) ───────────────
-const TIMETABLE_SPECIAL_ROOMS = [SUPERVISION_SCHEDULE_ROOM, STUDENT_ROLL_ROOM, ACADEMIC_RECORD_ROOM, ACTIVITY_PLAN_ROOM, "__TEACHER_EVAL__", "__CLEANING_DUTY__", "__LOGIN_SESSION__", "__WORK_HOURS__", KG_SHORT_PLAN_ROOM];
+const TIMETABLE_SPECIAL_ROOMS = [ROOM_BOOKING_ROOM, ROOM_BOOKING_ROOMS_ROOM, SUPERVISION_SCHEDULE_ROOM, STUDENT_ROLL_ROOM, ACADEMIC_RECORD_ROOM, ACTIVITY_PLAN_ROOM, "__TEACHER_EVAL__", "__CLEANING_DUTY__", "__LOGIN_SESSION__", "__WORK_HOURS__", KG_SHORT_PLAN_ROOM];
 const TIMETABLE_PERIODS = [1, 2, 3, 4, 5, 6, 7, 8];
 const TIMETABLE_DEFAULT_TIMES = [["08:30", "09:20"], ["09:20", "10:10"], ["10:20", "11:10"], ["11:10", "12:00"], ["13:00", "13:50"], ["13:50", "14:40"], ["14:40", "15:30"], ["15:30", "16:20"]];
 const isTimetableRow = row => row && row.day_of_week >= 1 && row.day_of_week <= 5 && !String(row.class_room || "").startsWith("__") && !TIMETABLE_SPECIAL_ROOMS.includes(row.class_room);
@@ -6644,7 +6646,7 @@ function ExecSection({ title, icon: Icon, right, children }) {
 }
 
 // ─── ตารางสอนรายคาบ (หน้าผู้บริหาร) ─────────────────────────────────────────
-const EXEC_SPECIAL_ROOMS = new Set([SUPERVISION_SCHEDULE_ROOM, STUDENT_ROLL_ROOM, ACADEMIC_RECORD_ROOM, ACTIVITY_PLAN_ROOM, "__TEACHER_EVAL__", "__CLEANING_DUTY__", "__LOGIN_SESSION__", "__WORK_HOURS__", KG_SHORT_PLAN_ROOM]);
+const EXEC_SPECIAL_ROOMS = new Set([ROOM_BOOKING_ROOM, ROOM_BOOKING_ROOMS_ROOM, SUPERVISION_SCHEDULE_ROOM, STUDENT_ROLL_ROOM, ACADEMIC_RECORD_ROOM, ACTIVITY_PLAN_ROOM, "__TEACHER_EVAL__", "__CLEANING_DUTY__", "__LOGIN_SESSION__", "__WORK_HOURS__", KG_SHORT_PLAN_ROOM]);
 const EXEC_DEFAULT_PERIOD_TIMES = [["08:30", "09:20"], ["09:20", "10:10"], ["10:20", "11:10"], ["11:10", "12:00"], ["13:00", "13:50"], ["13:50", "14:40"]];
 
 function execNowMinutes() {
@@ -11228,6 +11230,7 @@ export default function HRApp() {
               {activePage === "teacherEval" && (isExecutiveUser(actingUser) ? <TeacherEvalPage employees={employees} currentUser={actingUser} initialSelected={evalFocus} /> : <NoAccessCard />)}
               {activePage === "settings" && <SettingsPage settings={settings} onRefresh={fetchData} />}
               {activePage === "academicCalendar" && <AcademicCalendarPage />}
+              {activePage === "roomBooking" && <RoomBookingPage employees={employees} currentUser={actingUser} canManage={isExecutiveUser(actingUser) || isTestTeacherOwner(actingUser)} isTestTeacher={isTestTeacher} canSeeTestTeacher={isTestTeacher(actingUser)} />}
               {activePage === "kgShortPlan" && ((isKgTeacher(actingUser) || isExecutiveUser(actingUser)) ? <KgShortPlanPage employees={employees} currentUser={actingUser} canReview={isExecutiveUser(actingUser)} fetchStudents={fetchKgStudents} /> : <NoAccessCard />)}
             </>
           )}

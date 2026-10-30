@@ -5550,7 +5550,7 @@ function RollStatsPanel({ book, month, onMonth, title }) {
 const ACTIVITY_LOCAL_KEY = "hr_activity_plans";
 
 function emptyActivityPlan(currentUser) {
-  return { id: newSupervisionId(), row_id: null, title: "", description: "", date: todayISO(), materials: [], requisitions: [], organizers: currentUser?.id ? [String(currentUser.id)] : [], created_by: currentUser?.id || "", created_by_name: currentUser?.name || "", updated_at: "" };
+  return { id: newSupervisionId(), row_id: null, title: "", description: "", date: todayISO(), materials: [], requisitions: [], worksheet_images: [], organizers: currentUser?.id ? [String(currentUser.id)] : [], created_by: currentUser?.id || "", created_by_name: currentUser?.name || "", updated_at: "" };
 }
 
 function cleanActivityPlan(raw) {
@@ -5574,7 +5574,155 @@ function cleanActivityPlan(raw) {
     created_by_name: text(raw?.created_by_name, 120),
     updated_at: String(raw?.updated_at || ""),
     pending: !!raw?.pending,
+    worksheet_images: Array.isArray(raw?.worksheet_images) ? raw.worksheet_images.filter(img => img && (img.url || img.dataUrl)).slice(0, ACTIVITY_POST_IMAGE_LIMIT) : [],
+    post_record: cleanActivityPost(raw?.post_record),
   };
+}
+// บันทึกหลังกิจกรรม — เก็บในแถว JSON เดียวกับแผน (ฟิลด์ post_record) แผนเก่าที่ไม่มีฟิลด์นี้ = ยังไม่บันทึก
+const ACTIVITY_POST_IMAGE_LIMIT = 8;
+function cleanActivityPost(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const text = (value, max) => String(value || "").slice(0, max);
+  return {
+    result: text(raw.result, 5000),
+    participants: text(raw.participants, 40),
+    problems: text(raw.problems, 4000),
+    suggestions: text(raw.suggestions, 4000),
+    images: Array.isArray(raw.images) ? raw.images.filter(img => img && (img.url || img.dataUrl)).slice(0, ACTIVITY_POST_IMAGE_LIMIT) : [],
+    recorded_by: String(raw.recorded_by || ""),
+    recorded_by_name: text(raw.recorded_by_name, 120),
+    recorded_at: String(raw.recorded_at || ""),
+  };
+}
+
+function printActivityPost(plan, nameOf) {
+  const post = plan.post_record;
+  if (!post) return;
+  const win = window.open("", "_blank");
+  if (!win) return;
+  const esc = v => String(v || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])).replace(/\n/g, "<br>");
+  const block = (label, value) => `<h4>${label}</h4><div class="b">${esc(value) || "-"}</div>`;
+  const imgs = (post.images || []).map(lessonFileHref).filter(Boolean);
+  const sheets = (plan.worksheet_images || []).map(lessonFileHref).filter(Boolean);
+  win.document.open();
+  win.document.write(`<!doctype html><html lang="th"><head><meta charset="utf-8"><title>บันทึกหลังกิจกรรม ${esc(plan.title)}</title><style>@page{size:A4;margin:15mm}body{font-family:sans-serif;font-size:14px;color:#111}h2{text-align:center;margin:0 0 4px}h4{margin:12px 0 4px}.b{border:1px solid #999;border-radius:4px;padding:6px 8px;min-height:40px}.g{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}img{width:48%;max-height:80mm;object-fit:contain;border:1px solid #999;page-break-inside:avoid}.sig{margin-top:30px;display:flex;justify-content:space-around;text-align:center}</style></head><body>
+<h2>บันทึกหลังกิจกรรม</h2><div style="text-align:center">โรงเรียนนิมิตศึกษา</div>
+<p><b>กิจกรรม:</b> ${esc(plan.title)} &nbsp; <b>วันที่จัด:</b> ${esc(plan.date ? formatThaiDateKey(plan.date) : "-")}<br><b>ครูผู้จัดกิจกรรม:</b> ${esc(plan.organizers.map(nameOf).join(", ") || "-")}${post.participants ? `<br><b>จำนวนผู้เข้าร่วม:</b> ${esc(post.participants)}` : ""}</p>
+${block("1. ผลการดำเนินกิจกรรม", post.result)}${block("2. ปัญหา/อุปสรรค", post.problems)}${block("3. ข้อเสนอแนะ/แนวทางแก้ไข", post.suggestions)}
+${imgs.length ? `<h4>ภาพประกอบกิจกรรม</h4><div class="g">${imgs.map(u => `<img src="${esc(u)}">`).join("")}</div>` : ""}
+${sheets.length ? `<h4>ใบงาน</h4><div class="g">${sheets.map(u => `<img src="${esc(u)}">`).join("")}</div>` : ""}
+<div class="sig"><div>ลงชื่อ.................................ผู้บันทึก<br>(${esc(post.recorded_by_name || nameOf(post.recorded_by))})<br>${esc(post.recorded_at ? fmtDate(post.recorded_at) : "")}</div><div>ลงชื่อ.................................ผู้บริหาร<br>(.................................)</div></div>
+</body></html>`);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 800);
+}
+
+function ActivityWorksheetPicker({ images = [], onChange, setError, userId }) {
+  const [busy, setBusy] = useState(false);
+  const add = async files => {
+    const picked = Array.from(files || []).filter(f => !f.type || f.type.startsWith("image/"));
+    if (!picked.length) return;
+    const room = ACTIVITY_POST_IMAGE_LIMIT - images.length;
+    if (room <= 0) { setError(`แนบใบงานได้ไม่เกิน ${ACTIVITY_POST_IMAGE_LIMIT} รูป`); return; }
+    setBusy(true);
+    try {
+      const added = [];
+      for (const f of picked.slice(0, room)) added.push(await uploadLessonImage(f, userId));
+      onChange([...images, ...added]);
+      setError("");
+    } catch (err) { setError(err.message || "แนบใบงานไม่สำเร็จ"); }
+    setBusy(false);
+  };
+  return (
+    <div style={{ display: "grid", gap: "0.4rem" }}>
+      <span style={{ fontWeight: 800, fontSize: "0.85rem", color: "#334155" }}>5. แนบใบงาน (ไม่บังคับ สูงสุด {ACTIVITY_POST_IMAGE_LIMIT} รูป)</span>
+      <label style={{ ...btnSecondary, flex: "none", width: "fit-content", cursor: busy ? "not-allowed" : "pointer" }}>
+        <Upload size={16} /> {busy ? "กำลังเพิ่มรูป..." : "เพิ่มใบงาน"}
+        <input type="file" accept="image/*" multiple disabled={busy} onChange={e => { const files = Array.from(e.target.files || []); e.target.value = ""; add(files); }} style={{ display: "none" }} />
+      </label>
+      <div
+        tabIndex={0}
+        contentEditable={!busy}
+        suppressContentEditableWarning
+        onPaste={event => { event.preventDefault(); const files = Array.from(event.clipboardData?.items || []).filter(i => i.kind === "file" && i.type.startsWith("image/")).map(i => i.getAsFile()).filter(Boolean); if (files.length) add(files); }}
+        onDragOver={event => event.preventDefault()}
+        onDrop={event => { event.preventDefault(); add(event.dataTransfer?.files); }}
+        onInput={event => { event.currentTarget.textContent = ""; }}
+        data-placeholder="คลิกแล้วกด Ctrl+V เพื่อวางรูปใบงาน (มือถือ: กดค้างแล้วเลือกวาง) หรือลากรูปมาวางที่นี่"
+        className="ws-paste-zone"
+        style={{ border: "2px dashed #94a3b8", borderRadius: 10, padding: "0.8rem", minHeight: 44, color: "#64748b", fontSize: "0.85rem", outline: "none", cursor: "text", background: "#f8fafc" }}
+      />
+      <style>{`.ws-paste-zone:empty:before{content:attr(data-placeholder);color:#64748b}.ws-paste-zone:focus{border-color:#2563eb !important;background:#eff6ff !important}`}</style>
+      <WorksheetImages images={images} title="ใบงานกิจกรรม" onRemove={index => onChange(images.filter((_, i) => i !== index))} />
+    </div>
+  );
+}
+
+function ActivityPostForm({ plan, currentUser, saving, onCancel, onSave, setError }) {
+  const [post, setPost] = useState(() => plan.post_record || { result: "", participants: "", problems: "", suggestions: "", images: [] });
+  const [busy, setBusy] = useState(false);
+  const set = patch => setPost(current => ({ ...current, ...patch }));
+  const small = { ...inputStyle, padding: "0.45rem 0.6rem", fontSize: "0.9rem" };
+  const area = { ...small, minHeight: 90, resize: "vertical" };
+  const addImages = async files => {
+    const picked = Array.from(files || []).filter(f => !f.type || f.type.startsWith("image/"));
+    if (!picked.length) return;
+    const room = ACTIVITY_POST_IMAGE_LIMIT - (post.images || []).length;
+    if (room <= 0) { setError(`แนบรูปได้ไม่เกิน ${ACTIVITY_POST_IMAGE_LIMIT} รูป`); return; }
+    setBusy(true);
+    try {
+      const added = [];
+      for (const f of picked.slice(0, room)) added.push(await uploadLessonImage(f, currentUser?.id));
+      setPost(current => ({ ...current, images: [...(current.images || []), ...added] }));
+      setError("");
+    } catch (err) { setError(err.message || "แนบรูปไม่สำเร็จ"); }
+    setBusy(false);
+  };
+  const label = text => <span style={{ fontWeight: 800, fontSize: "0.85rem", color: "#334155" }}>{text}</span>;
+  return (
+    <Card padding="0.85rem">
+      <div style={{ display: "grid", gap: "0.6rem" }}>
+        <div style={{ fontWeight: 800, fontSize: "1.05rem", color: "#233862" }}>บันทึกหลังกิจกรรม</div>
+        <div style={{ fontSize: "0.85rem", color: "#475569" }}>{plan.title} · {plan.date ? formatThaiDateKey(plan.date) : "-"}</div>
+        {label("1. ผลการดำเนินกิจกรรม")}
+        <textarea value={post.result} placeholder="กิจกรรมเป็นอย่างไร ได้ผลอย่างไร" onChange={e => set({ result: e.target.value })} style={area} />
+        {label("จำนวนผู้เข้าร่วม (ถ้ามี)")}
+        <input value={post.participants} placeholder="เช่น นักเรียน 120 คน ครู 10 คน" onChange={e => set({ participants: e.target.value })} style={small} />
+        {label("2. ปัญหา/อุปสรรค")}
+        <textarea value={post.problems} onChange={e => set({ problems: e.target.value })} style={area} />
+        {label("3. ข้อเสนอแนะ/แนวทางแก้ไข")}
+        <textarea value={post.suggestions} onChange={e => set({ suggestions: e.target.value })} style={area} />
+        {label(`ภาพกิจกรรม (ไม่บังคับ สูงสุด ${ACTIVITY_POST_IMAGE_LIMIT} รูป)`)}
+        <label style={{ ...btnSecondary, flex: "none", width: "fit-content", cursor: busy ? "not-allowed" : "pointer" }}>
+          <Upload size={16} /> {busy ? "กำลังเพิ่มรูป..." : "เพิ่มรูป"}
+          <input type="file" accept="image/*" multiple disabled={busy} onChange={e => { const files = Array.from(e.target.files || []); e.target.value = ""; addImages(files); }} style={{ display: "none" }} />
+        </label>
+        <div
+          tabIndex={0}
+          contentEditable={!busy}
+          suppressContentEditableWarning
+          onPaste={event => { event.preventDefault(); const files = Array.from(event.clipboardData?.items || []).filter(i => i.kind === "file" && i.type.startsWith("image/")).map(i => i.getAsFile()).filter(Boolean); if (files.length) addImages(files); }}
+          onDragOver={event => event.preventDefault()}
+          onDrop={event => { event.preventDefault(); addImages(event.dataTransfer?.files); }}
+          onInput={event => { event.currentTarget.textContent = ""; }}
+          data-placeholder="คลิกแล้วกด Ctrl+V เพื่อวางรูป (มือถือ: กดค้างแล้วเลือกวาง) หรือลากรูปมาวางที่นี่"
+          className="ws-paste-zone"
+          style={{ border: "2px dashed #94a3b8", borderRadius: 10, padding: "0.8rem", minHeight: 44, color: "#64748b", fontSize: "0.85rem", outline: "none", cursor: "text", background: "#f8fafc" }}
+        />
+        <style>{`.ws-paste-zone:empty:before{content:attr(data-placeholder);color:#64748b}.ws-paste-zone:focus{border-color:#2563eb !important;background:#eff6ff !important}`}</style>
+        <WorksheetImages images={post.images} title={`ภาพกิจกรรม ${plan.title}`} onRemove={index => set({ images: (post.images || []).filter((_, i) => i !== index) })} />
+        <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>ผู้บันทึก: {currentUser?.name} · วันที่บันทึกจะใส่ให้อัตโนมัติ</div>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <button type="button" onClick={onCancel} disabled={saving} style={{ ...btnSecondary, padding: "0.55rem" }}>ยกเลิก</button>
+          <button type="button" disabled={saving || busy} onClick={() => {
+            if (!String(post.result || "").trim()) { setError("กรอกผลการดำเนินกิจกรรมก่อน"); return; }
+            onSave({ ...post, recorded_by: String(currentUser?.id || ""), recorded_by_name: currentUser?.name || "", recorded_at: new Date().toISOString() });
+          }} style={{ ...btnPrimary, padding: "0.55rem", background: "linear-gradient(135deg, #008CFF, #0072D9)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}><Save size={16} /> {saving ? "กำลังบันทึก..." : "บันทึก"}</button>
+        </div>
+      </div>
+    </Card>
+  );
 }
 
 function readActivityLocal() {
@@ -5585,7 +5733,11 @@ function readActivityLocal() {
 }
 
 function writeActivityLocal(plans, deleted) {
-  try { localStorage.setItem(ACTIVITY_LOCAL_KEY, JSON.stringify({ plans, deleted: deleted.slice(-300), saved_local_at: new Date().toISOString() })); } catch { /* ignore */ }
+  const save = list => localStorage.setItem(ACTIVITY_LOCAL_KEY, JSON.stringify({ plans: list, deleted: deleted.slice(-300), saved_local_at: new Date().toISOString() }));
+  try { save(plans); } catch {
+    // รูปบันทึกหลังกิจกรรมใหญ่เกินพื้นที่เครื่อง → สำรองเฉพาะข้อความ (ยกเว้นแผนที่ยังรอซิงก์)
+    try { save(plans.map(plan => (plan.post_record && !plan.pending ? { ...plan, post_record: { ...plan.post_record, images: [] } } : plan))); } catch { /* ignore */ }
+  }
 }
 
 async function fetchActivityRows() {
@@ -5648,6 +5800,11 @@ function ActivityPlanPage({ employees, currentUser }) {
   const [message, setMessage] = useState("");
   const nameOf = id => (employees || []).find(emp => String(emp.id) === String(id))?.name || "ไม่ทราบชื่อ";
   const canEdit = plan => isAdmin || String(plan.created_by) === String(currentUser?.id);
+  const canPost = plan => isAdmin || hasAdminRights(currentUser) || String(plan.created_by) === String(currentUser?.id) || plan.organizers.includes(String(currentUser?.id));
+  const [postFor, setPostFor] = useState(null);
+  const viewerIsTest = isTestTeacher(currentUser);
+  const testIds = new Set((employees || []).filter(isTestTeacher).map(emp => String(emp.id)));
+  const pickableEmployees = (employees || []).filter(emp => viewerIsTest || !isTestTeacher(emp));
 
   const commit = (nextPlans, nextDeleted = deleted) => {
     const sorted = [...nextPlans].sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.updated_at).localeCompare(String(a.updated_at)));
@@ -5739,9 +5896,34 @@ function ActivityPlanPage({ employees, currentUser }) {
     setSaving(false);
   };
 
+  const savePost = async post => {
+    const plan = cleanActivityPlan({ ...postFor, post_record: post, updated_at: new Date().toISOString() });
+    setSaving(true); setError(""); setMessage("");
+    try {
+      plan.row_id = await writeActivityRow(plan);
+      plan.pending = false;
+      setMessage("บันทึกหลังกิจกรรมแล้ว");
+    } catch (err) {
+      plan.pending = true;
+      setError(`${err.message || "บันทึกไม่สำเร็จ"} · เก็บไว้ในเครื่องนี้แล้ว จะซิงก์ขึ้นระบบเมื่อเปิดหน้านี้ครั้งถัดไป`);
+    }
+    commit([plan, ...plans.filter(item => item.id !== plan.id)]);
+    setPostFor(null); setOpenId(plan.id); setSaving(false);
+  };
+
   const q = query.trim().toLowerCase();
-  const shown = plans.filter(plan => !q || [plan.title, plan.description, ...plan.organizers.map(nameOf)].join(" ").toLowerCase().includes(q));
+  const visiblePlans = plans.filter(plan => viewerIsTest || !testIds.has(String(plan.created_by)));
+  const shown = visiblePlans.filter(plan => !q || [plan.title, plan.description, ...plan.organizers.map(nameOf)].join(" ").toLowerCase().includes(q));
   const small = { ...inputStyle, padding: "0.45rem 0.6rem", fontSize: "0.9rem" };
+
+  if (postFor) {
+    return (
+      <div style={{ display: "grid", gap: "0.75rem", maxWidth: 760 }}>
+        {error && <ErrorBox>{error}</ErrorBox>}
+        <ActivityPostForm plan={postFor} currentUser={currentUser} saving={saving} setError={setError} onCancel={() => { setPostFor(null); setError(""); }} onSave={savePost} />
+      </div>
+    );
+  }
 
   if (editing) {
     const set = patch => setEditing(current => ({ ...current, ...patch }));
@@ -5763,12 +5945,13 @@ function ActivityPlanPage({ employees, currentUser }) {
             <div style={{ display: "grid", gap: "0.3rem" }}>
               <span style={{ fontWeight: 800, fontSize: "0.85rem", color: "#334155" }}>4. ครูผู้จัดกิจกรรม ({editing.organizers.length} คน)</span>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "0.3rem", maxHeight: 180, overflowY: "auto" }}>
-                {(employees || []).map(emp => {
+                {pickableEmployees.map(emp => {
                   const on = editing.organizers.includes(String(emp.id));
                   return <button key={emp.id} type="button" aria-pressed={on} onClick={() => toggleOrganizer(String(emp.id))} style={{ border: `1px solid ${on ? "#0072D9" : "#cbd5e1"}`, background: on ? "#0072D9" : "#fff", color: on ? "#fff" : "#475569", borderRadius: 14, padding: "0.15rem 0.6rem", fontSize: "0.8rem", fontFamily: "inherit", cursor: "pointer" }}>{emp.name}</button>;
                 })}
               </div>
             </div>
+            <ActivityWorksheetPicker images={editing.worksheet_images || []} onChange={worksheet_images => set({ worksheet_images })} setError={setError} userId={currentUser?.id} />
             <div style={{ display: "flex", gap: "0.5rem" }}>
               <button type="button" onClick={() => { setEditing(null); setError(""); }} disabled={saving} style={{ ...btnSecondary, padding: "0.55rem" }}>ยกเลิก</button>
               <button type="button" onClick={save} disabled={saving} style={{ ...btnPrimary, padding: "0.55rem", background: "linear-gradient(135deg, #008CFF, #0072D9)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}><Save size={16} /> {saving ? "กำลังบันทึก..." : "บันทึก"}</button>
@@ -5782,7 +5965,7 @@ function ActivityPlanPage({ employees, currentUser }) {
   return (
     <div style={{ display: "grid", gap: "0.75rem", maxWidth: 900 }}>
       <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-        <div style={{ fontWeight: 800, fontSize: "1.15rem", color: "#233862", flex: 1 }}>แผนการจัดกิจกรรม <span style={{ color: "#64748b", fontSize: "0.85rem" }}>({plans.length})</span></div>
+        <div style={{ fontWeight: 800, fontSize: "1.15rem", color: "#233862", flex: 1 }}>แผนการจัดกิจกรรม <span style={{ color: "#64748b", fontSize: "0.85rem" }}>({visiblePlans.length})</span></div>
         <input value={query} placeholder="ค้นหากิจกรรม/ครู" onChange={event => setQuery(event.target.value)} style={{ ...small, width: "auto", flex: "1 1 160px", maxWidth: 260 }} />
         <button type="button" onClick={() => { setEditing(emptyActivityPlan(currentUser)); setMessage(""); setError(""); }} style={{ ...btnPrimary, flex: "none", padding: "0.5rem 0.8rem", background: "linear-gradient(135deg, #008CFF, #0072D9)", color: "#fff", cursor: "pointer" }}><Plus size={16} /> เพิ่มแผน</button>
       </div>
@@ -5791,7 +5974,7 @@ function ActivityPlanPage({ employees, currentUser }) {
       {loading ? (
         <Card><div style={{ color: "#64748b" }}>กำลังโหลดแผนกิจกรรม...</div></Card>
       ) : shown.length === 0 ? (
-        <Card><div style={{ color: "#94a3b8", textAlign: "center" }}>{plans.length ? "ไม่พบแผนที่ค้นหา" : "ยังไม่มีแผนกิจกรรม กด + เพิ่มแผน"}</div></Card>
+        <Card><div style={{ color: "#94a3b8", textAlign: "center" }}>{visiblePlans.length ? "ไม่พบแผนที่ค้นหา" : "ยังไม่มีแผนกิจกรรม กด + เพิ่มแผน"}</div></Card>
       ) : shown.map(plan => {
         const open = openId === plan.id;
         return (
@@ -5800,6 +5983,7 @@ function ActivityPlanPage({ employees, currentUser }) {
               <span style={{ fontSize: "0.78rem", color: "#0072D9", fontWeight: 800, flex: "none" }}>{plan.date ? formatThaiDateKey(plan.date) : "-"}</span>
               <span style={{ fontWeight: 800, color: "#233862", flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{plan.title}</span>
               {plan.pending && <span style={{ fontSize: "0.7rem", color: "#b45309", flex: "none" }}>รอซิงก์</span>}
+              <span style={{ fontSize: "0.68rem", fontWeight: 800, flex: "none", borderRadius: 999, padding: "0.1rem 0.45rem", background: plan.post_record ? "#dcfce7" : "#f1f5f9", color: plan.post_record ? "#15803d" : "#64748b" }}>{plan.post_record ? "บันทึกแล้ว" : "ยังไม่บันทึก"}</span>
               {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
             {!open && <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: "0.15rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>ครู: {plan.organizers.map(nameOf).join(", ") || "-"}</div>}
@@ -5827,8 +6011,23 @@ function ActivityPlanPage({ employees, currentUser }) {
                     )}
                   </div>
                 ))}
+                {(plan.worksheet_images || []).length > 0 && <div><div style={{ fontWeight: 800, color: "#334155" }}>ใบงาน ({plan.worksheet_images.length})</div><WorksheetImages images={plan.worksheet_images} title={`ใบงาน ${plan.title}`} /></div>}
                 <div><span style={{ fontWeight: 800, color: "#334155" }}>ครูผู้จัดกิจกรรม: </span>{plan.organizers.map(nameOf).join(", ") || "-"}</div>
                 <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>สร้างโดย {plan.created_by_name || nameOf(plan.created_by)}{plan.updated_at ? ` · แก้ล่าสุด ${fmtDate(plan.updated_at)} ${fmtTime(plan.updated_at)}` : ""}</div>
+                {plan.post_record && (
+                  <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: "0.55rem 0.7rem", display: "grid", gap: "0.35rem" }}>
+                    <div style={{ fontWeight: 800, color: "#15803d" }}>บันทึกหลังกิจกรรม</div>
+                    {[["ผลการดำเนินกิจกรรม", plan.post_record.result], ["จำนวนผู้เข้าร่วม", plan.post_record.participants], ["ปัญหา/อุปสรรค", plan.post_record.problems], ["ข้อเสนอแนะ/แนวทางแก้ไข", plan.post_record.suggestions]].filter(([, v]) => String(v || "").trim()).map(([label, value]) => (
+                      <div key={label}><span style={{ fontWeight: 800, color: "#334155" }}>{label}: </span><span style={{ whiteSpace: "pre-wrap" }}>{value}</span></div>
+                    ))}
+                    {(plan.post_record.images || []).length > 0 && <WorksheetImages images={plan.post_record.images} title={`ภาพกิจกรรม ${plan.title}`} />}
+                    <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>บันทึกโดย {plan.post_record.recorded_by_name || nameOf(plan.post_record.recorded_by)}{plan.post_record.recorded_at ? ` · ${fmtDate(plan.post_record.recorded_at)} ${fmtTime(plan.post_record.recorded_at)}` : ""}</div>
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+                  {canPost(plan) && <button type="button" onClick={() => { setPostFor({ ...plan }); setMessage(""); setError(""); }} disabled={saving} style={{ ...btnSecondary, flex: "none", padding: "0.35rem 0.7rem", fontSize: "0.82rem", color: "#15803d" }}><FileText size={14} /> {plan.post_record ? "แก้บันทึกหลังกิจกรรม" : "บันทึกหลังกิจกรรม"}</button>}
+                  {plan.post_record && <button type="button" onClick={() => printActivityPost(plan, nameOf)} style={{ ...btnSecondary, flex: "none", padding: "0.35rem 0.7rem", fontSize: "0.82rem" }}><Printer size={14} /> พิมพ์บันทึก</button>}
+                </div>
                 {canEdit(plan) && (
                   <div style={{ display: "flex", gap: "0.4rem" }}>
                     <button type="button" onClick={() => { setEditing({ ...plan }); setMessage(""); setError(""); }} disabled={saving} style={{ ...btnSecondary, flex: "none", padding: "0.35rem 0.7rem", fontSize: "0.82rem" }}><Edit size={14} /> แก้ไข</button>

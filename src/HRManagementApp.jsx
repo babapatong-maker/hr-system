@@ -7065,6 +7065,138 @@ function ExecPlanModal({ teacher, weekStart, onClose, focus = null }) {
   );
 }
 
+// รายงานกิจกรรม (หน้าผู้บริหาร) — อ่านจากแผนกิจกรรม (__ACTIVITY_PLAN__) ซ่อนกิจกรรมของครูทดลองระบบ
+function activityTermOf(date) {
+  if (!/^\d{4}-\d{2}/.test(date || "")) return "";
+  const y = Number(date.slice(0, 4)), m = Number(date.slice(5, 7));
+  if (m >= 5 && m <= 10) return `1/${y + 543}`;
+  return `2/${(m >= 11 ? y : y - 1) + 543}`;
+}
+function sumActivityItems(plans, key) {
+  const map = new Map();
+  plans.forEach(plan => (plan[key] || []).forEach(row => {
+    const name = String(row.name || "").trim(); if (!name) return;
+    const unit = String(row.unit || "").trim();
+    const k = `${name}|${unit}`;
+    const cur = map.get(k) || { name, unit, qty: 0, nonNumeric: [], count: 0 };
+    const n = Number(String(row.qty || "").replace(/,/g, ""));
+    if (row.qty && Number.isFinite(n)) cur.qty += n; else if (row.qty) cur.nonNumeric.push(row.qty);
+    cur.count += 1; map.set(k, cur);
+  }));
+  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, "th"));
+}
+function printActivityReport(plans, nameOf, heading) {
+  const win = window.open("", "_blank");
+  if (!win) return;
+  const esc = v => String(v ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const items = rows => rows.length ? rows.map(r => `${esc(r.name)} ${esc(r.qty || "")} ${esc(r.unit || "")}`).join("<br>") : "-";
+  const sumTable = (title, list) => `<h3>${title}</h3>${list.length ? `<table><tr><th>รายการ</th><th>รวม</th><th>หน่วย</th><th>จำนวนกิจกรรม</th></tr>${list.map(r => `<tr><td>${esc(r.name)}</td><td style="text-align:right">${r.qty || ""}${r.nonNumeric.length ? ` (+${esc(r.nonNumeric.join(", "))})` : ""}</td><td>${esc(r.unit)}</td><td style="text-align:center">${r.count}</td></tr>`).join("")}</table>` : "<div>-</div>"}`;
+  win.document.open();
+  win.document.write(`<!doctype html><html lang="th"><head><meta charset="utf-8"><title>รายงานกิจกรรม</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:sans-serif;font-size:12px}h2{text-align:center;margin:0}table{border-collapse:collapse;width:100%;margin-top:6px}th,td{border:1px solid #888;padding:3px 5px;vertical-align:top}th{background:#eef}</style></head><body>
+<h2>รายงานกิจกรรม โรงเรียนนิมิตศึกษา</h2><div style="text-align:center">${esc(heading)} · ${plans.length} กิจกรรม</div>
+<table><tr><th>#</th><th>วันที่</th><th>กิจกรรม</th><th>ครูผู้จัด</th><th>สิ่งของที่ใช้</th><th>ของที่ใช้เบิก</th><th>ใบงาน</th><th>บันทึกหลังกิจกรรม</th></tr>
+${plans.map((p, i) => `<tr><td>${i + 1}</td><td>${esc(p.date ? formatThaiDateKey(p.date) : "-")}</td><td>${esc(p.title)}</td><td>${esc(p.organizers.map(nameOf).join(", "))}</td><td>${items(p.materials)}</td><td>${items(p.requisitions)}</td><td style="text-align:center">${(p.worksheet_images || []).length}</td><td>${p.post_record ? "บันทึกแล้ว" : "ยังไม่บันทึก"}</td></tr>`).join("")}</table>
+${sumTable("สรุปของที่ใช้เบิกรวม", sumActivityItems(plans, "requisitions"))}${sumTable("สรุปสิ่งของที่ใช้รวม", sumActivityItems(plans, "materials"))}
+</body></html>`);
+  win.document.close(); win.focus(); setTimeout(() => win.print(), 600);
+}
+
+function ExecActivityReport({ employees }) {
+  const [plans, setPlans] = useState(null);
+  const [error, setError] = useState("");
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState("term");
+  const [term, setTerm] = useState(() => activityTermOf(todayISO()));
+  const [month, setMonth] = useState(() => todayISO().slice(0, 7));
+  const [query, setQuery] = useState("");
+  const [detail, setDetail] = useState("");
+  const [showSum, setShowSum] = useState(false);
+  const nameOf = id => (employees || []).find(emp => String(emp.id) === String(id))?.name || "ไม่ทราบชื่อ";
+  useEffect(() => {
+    if (!open || plans) return;
+    fetchActivityRows().then(rows => setPlans(rows), err => { setError(err.message || "โหลดไม่สำเร็จ"); setPlans([]); });
+  }, [open, plans]);
+  const testIds = new Set((employees || []).filter(isTestTeacher).map(emp => String(emp.id)));
+  const all = (plans || []).filter(p => !testIds.has(String(p.created_by)) && !(p.organizers.length && p.organizers.every(id => testIds.has(String(id)))));
+  const terms = [...new Set([activityTermOf(todayISO()), ...all.map(p => activityTermOf(p.date)).filter(Boolean)])].sort().reverse();
+  const q = query.trim().toLowerCase();
+  const shown = all
+    .filter(p => mode === "all" || (mode === "term" ? activityTermOf(p.date) === term : String(p.date).startsWith(month)))
+    .filter(p => !q || [p.title, p.description, ...p.organizers.map(nameOf), ...p.materials.map(r => r.name), ...p.requisitions.map(r => r.name)].join(" ").toLowerCase().includes(q))
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const heading = mode === "all" ? "ทุกกิจกรรม" : mode === "term" ? `ภาคเรียนที่ ${term}` : `เดือน ${new Date(`${month}-01T12:00:00Z`).toLocaleDateString("th-TH", { month: "long", year: "numeric", timeZone: "UTC" })}`;
+  const reqSum = sumActivityItems(shown, "requisitions");
+  const small = { ...inputStyle, padding: "0.35rem 0.5rem", fontSize: "0.82rem", width: "auto" };
+  const itemList = rows => rows.length ? rows.map(r => `${r.name}${r.qty ? ` ${r.qty}` : ""}${r.unit ? ` ${r.unit}` : ""}`).join(", ") : "-";
+  const sumBox = (title, list) => (
+    <div><div style={{ fontWeight: 800, color: "#334155", fontSize: "0.85rem" }}>{title}</div>
+      {list.length === 0 ? <div style={{ color: "#94a3b8", fontSize: "0.8rem" }}>-</div> : (
+        <div style={{ overflowX: "auto" }}><table style={{ borderCollapse: "collapse", fontSize: "0.8rem", width: "100%" }}><tbody>
+          {list.map(r => <tr key={r.name + r.unit} style={{ borderTop: "1px solid #f1f5f9" }}><td style={{ padding: "0.2rem 0.4rem" }}>{r.name}</td><td style={{ padding: "0.2rem 0.4rem", textAlign: "right", fontWeight: 700 }}>{r.qty || ""}{r.nonNumeric.length ? ` (+${r.nonNumeric.join(", ")})` : ""}</td><td style={{ padding: "0.2rem 0.4rem" }}>{r.unit}</td><td style={{ padding: "0.2rem 0.4rem", color: "#64748b" }}>{r.count} กิจกรรม</td></tr>)}
+        </tbody></table></div>)}
+    </div>);
+  return (
+    <ExecSection title="รายงานกิจกรรม" icon={FileText} right={<button type="button" onClick={() => setOpen(!open)} style={{ ...btnSecondary, flex: "none", padding: "0.3rem 0.7rem", fontSize: "0.8rem" }}>{open ? "ซ่อน" : "เปิดดู"}</button>}>
+      {!open ? <div style={{ color: "#64748b", fontSize: "0.85rem" }}>ดูกิจกรรมทั้งหมด ของที่ขอใช้/ขอเบิก ใบงาน และบันทึกหลังกิจกรรม</div> : plans === null ? <div style={{ color: "#64748b" }}>กำลังโหลด...</div> : (
+        <div style={{ display: "grid", gap: "0.6rem" }}>
+          {error && <ErrorBox>{error}</ErrorBox>}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", alignItems: "center" }}>
+            <select value={mode} onChange={e => setMode(e.target.value)} style={small}><option value="term">รายภาคเรียน</option><option value="month">รายเดือน</option><option value="all">ทั้งหมด</option></select>
+            {mode === "term" && <select value={term} onChange={e => setTerm(e.target.value)} style={small}>{terms.map(t => <option key={t} value={t}>ภาค {t}</option>)}</select>}
+            {mode === "month" && <input type="month" value={month} onChange={e => setMonth(e.target.value)} style={small} />}
+            <input value={query} placeholder="ค้นหากิจกรรม/ครู/สิ่งของ" onChange={e => setQuery(e.target.value)} style={{ ...small, flex: "1 1 140px" }} />
+            <button type="button" onClick={() => printActivityReport(shown, nameOf, heading)} disabled={!shown.length} style={{ ...btnSecondary, flex: "none", padding: "0.35rem 0.7rem", fontSize: "0.8rem" }}><Printer size={14} /> พิมพ์</button>
+          </div>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", fontSize: "0.8rem" }}>
+            <span style={{ background: "#EAF5FF", color: "#0072D9", borderRadius: 999, padding: "0.15rem 0.6rem", fontWeight: 700 }}>{shown.length} กิจกรรม</span>
+            <span style={{ background: "#dcfce7", color: "#15803d", borderRadius: 999, padding: "0.15rem 0.6rem", fontWeight: 700 }}>บันทึกหลังกิจกรรมแล้ว {shown.filter(p => p.post_record).length}</span>
+            <span style={{ background: "#fef3c7", color: "#b45309", borderRadius: 999, padding: "0.15rem 0.6rem", fontWeight: 700 }}>ขอเบิก {reqSum.length} รายการ</span>
+            <button type="button" onClick={() => setShowSum(!showSum)} style={{ border: "none", background: "none", color: "#0072D9", cursor: "pointer", fontFamily: "inherit", fontWeight: 700, fontSize: "0.8rem" }}>{showSum ? "ซ่อนสรุปรวม" : "ดูสรุปของรวม"}</button>
+          </div>
+          {showSum && <div style={{ background: "#f8fafc", borderRadius: 10, padding: "0.6rem", display: "grid", gap: "0.5rem" }}>{sumBox("ของที่ใช้เบิกรวม", reqSum)}{sumBox("สิ่งของที่ใช้รวม", sumActivityItems(shown, "materials"))}</div>}
+          {shown.length === 0 ? <div style={{ color: "#94a3b8", textAlign: "center", padding: "1rem" }}>ไม่มีกิจกรรมในช่วงนี้</div> : (
+            <div style={{ display: "grid", gap: "0.4rem", maxHeight: 520, overflowY: "auto" }}>
+              {shown.map(p => {
+                const isOpen = detail === p.id;
+                return (
+                  <div key={p.id} style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: "0.5rem 0.65rem" }}>
+                    <button type="button" onClick={() => setDetail(isOpen ? "" : p.id)} style={{ width: "100%", border: "none", background: "none", padding: 0, textAlign: "left", cursor: "pointer", fontFamily: "inherit" }}>
+                      <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap" }}>
+                        <span style={{ fontSize: "0.75rem", color: "#0072D9", fontWeight: 800 }}>{p.date ? formatThaiDateKey(p.date) : "-"}</span>
+                        <span style={{ fontWeight: 800, color: "#233862", flex: 1, minWidth: 120 }}>{p.title}</span>
+                        {p.approval?.status && <span style={{ fontSize: "0.68rem", fontWeight: 800, borderRadius: 999, padding: "0.1rem 0.45rem", background: "#EAF5FF", color: "#0072D9" }}>{p.approval.status}</span>}
+                        <span style={{ fontSize: "0.68rem", fontWeight: 800, borderRadius: 999, padding: "0.1rem 0.45rem", background: p.post_record ? "#dcfce7" : "#f1f5f9", color: p.post_record ? "#15803d" : "#64748b" }}>{p.post_record ? "บันทึกแล้ว" : "ยังไม่บันทึก"}</span>
+                        {(p.worksheet_images || []).length > 0 && <span style={{ fontSize: "0.68rem", color: "#64748b" }}>ใบงาน {p.worksheet_images.length}</span>}
+                      </div>
+                      <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 2 }}>ครู: {p.organizers.map(nameOf).join(", ") || "-"}</div>
+                      <div style={{ fontSize: "0.75rem", color: "#475569" }}><b>ใช้:</b> {itemList(p.materials)}</div>
+                      <div style={{ fontSize: "0.75rem", color: "#b45309" }}><b>ขอเบิก:</b> {itemList(p.requisitions)}</div>
+                    </button>
+                    {isOpen && (
+                      <div style={{ display: "grid", gap: "0.4rem", marginTop: "0.5rem", fontSize: "0.85rem", borderTop: "1px solid #f1f5f9", paddingTop: "0.5rem" }}>
+                        {p.description && <FullText value={p.description} />}
+                        {(p.worksheet_images || []).length > 0 && <div><div style={{ fontWeight: 800, color: "#334155" }}>ใบงาน</div><WorksheetImages images={p.worksheet_images} title={`ใบงาน ${p.title}`} /></div>}
+                        {p.post_record ? (
+                          <div style={{ background: "#f8fafc", borderRadius: 10, padding: "0.5rem 0.65rem", display: "grid", gap: "0.3rem" }}>
+                            <div style={{ fontWeight: 800, color: "#15803d" }}>บันทึกหลังกิจกรรม</div>
+                            {[["ผลการดำเนินกิจกรรม", p.post_record.result], ["จำนวนผู้เข้าร่วม", p.post_record.participants], ["ปัญหา/อุปสรรค", p.post_record.problems], ["ข้อเสนอแนะ/แนวทางแก้ไข", p.post_record.suggestions]].filter(([, v]) => String(v || "").trim()).map(([label, value]) => <div key={label}><b style={{ color: "#334155" }}>{label}: </b><span style={{ whiteSpace: "pre-wrap" }}>{value}</span></div>)}
+                            {(p.post_record.images || []).length > 0 && <div><div style={{ fontWeight: 800, color: "#334155" }}>ภาพกิจกรรม</div><WorksheetImages images={p.post_record.images} title={`ภาพกิจกรรม ${p.title}`} /></div>}
+                            <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>บันทึกโดย {p.post_record.recorded_by_name || nameOf(p.post_record.recorded_by)}</div>
+                            <button type="button" onClick={() => printActivityPost(p, nameOf)} style={{ ...btnSecondary, flex: "none", width: "fit-content", padding: "0.3rem 0.6rem", fontSize: "0.8rem" }}><Printer size={14} /> พิมพ์บันทึกหลังกิจกรรม</button>
+                          </div>
+                        ) : <div style={{ color: "#94a3b8" }}>ยังไม่มีบันทึกหลังกิจกรรม</div>}
+                      </div>
+                    )}
+                  </div>);
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </ExecSection>
+  );
+}
+
 function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEval, onOpenLeave, onOpenCalendar }) {
   const [date, setDate] = useState(() => todayISO());
   const [attendance, setAttendance] = useState([]);
@@ -7193,6 +7325,7 @@ function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEv
       </div>
       {error && <ErrorBox>{error}</ErrorBox>}
       <UpcomingCalendarCard onOpen={onOpenCalendar} />
+      <ExecActivityReport employees={employees} />
       <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 1fr))" }}>
         <ExecSection title="การประเมินครู" icon={TrendingUp} right={<span style={{ fontSize: "0.75rem", color: "#64748b" }}>{evalNote}</span>}>
           {!evalRows ? <div style={{ color: "#64748b" }}>กำลังคำนวณคะแนน...</div> : (

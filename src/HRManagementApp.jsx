@@ -7869,7 +7869,7 @@ function substituteDefaultDay() {
 
 function SubstitutePlanView({ employees, currentUser }) {
   const isAdmin = isExecutiveUser(currentUser);
-  const canSeeTestTeacher = isTestTeacherOwner(currentUser) || isTestTeacher(currentUser);
+  const canSeeTestTeacher = isTestTeacher(currentUser);
   const teachers = (employees || [])
     .filter(emp => emp?.id && (!isTestTeacher(emp) || canSeeTestTeacher))
     .map(emp => ({ id: emp.id, name: emp.name || "", department: emp.department || "" })) // ใช้เฉพาะชื่อ/กลุ่มสาระ
@@ -10313,8 +10313,8 @@ function WorkHourOverridesCard({ onRefresh }) {
   const [msg, setMsg] = useState("");
   const reload = async () => {
     setRows({ ...(await loadWorkHourOverrides()) });
-    const { data } = await supabase.from("employees").select("id, name, role").order("name");
-    setPeople((data || []).filter(emp => emp.role !== "admin"));
+    const { data } = await supabase.from("employees").select("id, name, role, username").order("name");
+    setPeople((data || []).filter(emp => emp.role !== "admin" && !isTestTeacher(emp)));
   };
   useEffect(() => { reload(); }, []);
   const save = async () => {
@@ -10797,8 +10797,9 @@ export default function HRApp() {
   const canUseTestTeacher = isTestTeacherOwner(currentUser);
   const previewTeacher = allEmployees.find(emp => isTestTeacher(emp) && emp.role !== "admin");
   const actingUser = canUseTestTeacher && teacherPreview && previewTeacher ? previewTeacher : currentUser;
-  // ซ่อนครูทดลองระบบจากรายชื่อ/สถิติของผู้ใช้อื่นทั้งหมด
-  const hiddenIds = canUseTestTeacher ? new Set() : new Set(allEmployees.filter(isTestTeacher).map(emp => String(emp.id)));
+  // ครูทดลองระบบมีไว้ทดสอบเท่านั้น — ไม่แสดงในรายงาน/สถิติ/รายชื่อใด ๆ (รวมถึงของผู้บริหาร)
+  // ยกเว้นตอนใช้งานในฐานะครูทดลองเอง (ล็อกอินเป็น teacher.try หรือโหมดทดลองของผู้ดูแล) เพื่อให้เห็นข้อมูลตัวเอง
+  const hiddenIds = isTestTeacher(actingUser) ? new Set() : new Set(allEmployees.filter(isTestTeacher).map(emp => String(emp.id)));
   const notHidden = row => !hiddenIds.has(String(row.employee_id));
   const employees = hiddenIds.size ? allEmployees.filter(emp => !hiddenIds.has(String(emp.id))) : allEmployees;
   const activityLog = hiddenIds.size ? allActivityLog.filter(notHidden) : allActivityLog;

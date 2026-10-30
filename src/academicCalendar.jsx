@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 // ปฏิทินการศึกษา ภาคเรียนที่ 2/2569 (ตามเอกสารโรงเรียน) — แก้ข้อมูลที่ค่าคงที่นี้
 // color: "red" = วันหยุด/เรียนชดเชย/สอบ (ตัวแดงตามกระดาษ), "blue" = ค่ายลูกเสือ, ไม่ระบุ = ปกติ
@@ -78,6 +78,44 @@ export function monthCells(key) {
   return cells;
 }
 
+// ครูเวรประจำสัปดาห์ (หมุนเวียนกลุ่ม 1→2→3→1…)
+export const DUTY_GROUP_COUNT = 3;
+export const DUTY_START = "2026-11-02"; // วันจันทร์ของสัปดาห์แรก (กลุ่ม 1)
+export const DUTY_END = "2027-04-30"; // สิ้นภาคเรียน 2/2569
+const dayNum = date => { const [y, m, d] = date.split("-").map(Number); return Date.UTC(y, m - 1, d) / 86400000; };
+const keyOf = n => new Date(n * 86400000).toISOString().slice(0, 10);
+// คืนค่า { group, monday, friday } ของสัปดาห์ที่มีวันนี้ หรือ null
+export function dutyWeek(date) {
+  if (!date) return null;
+  const n = dayNum(date);
+  const monday = n - ((new Date(n * 86400000).getUTCDay() + 6) % 7);
+  const start = dayNum(DUTY_START);
+  if (monday < start || monday > dayNum(DUTY_END)) return null;
+  const week = Math.floor((monday - start) / 7);
+  return { group: (week % DUTY_GROUP_COUNT) + 1, monday: keyOf(monday), friday: keyOf(monday + 4) };
+}
+// แบ่งช่องปฏิทินเป็นแถวรายสัปดาห์ พร้อมกลุ่มเวร
+function weekRows(cells) {
+  const rows = [];
+  for (let i = 0; i < cells.length; i += 7) {
+    const row = cells.slice(i, i + 7);
+    const any = row.slice(1, 6).find(Boolean) || row.find(Boolean);
+    rows.push({ row, start: i, duty: dutyWeek(any) });
+  }
+  return rows;
+}
+const DUTY_BG = ["#dcfce7", "#fef9c3", "#fce7f3", "#e0f2fe", "#ede9fe"];
+const DUTY_FG = ["#15803d", "#a16207", "#be185d", "#0369a1", "#6d28d9"];
+function DutyBar({ duty, compact }) {
+  if (!duty) return null;
+  const i = (duty.group - 1) % DUTY_BG.length;
+  return (
+    <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", borderBottom: compact ? "1px solid #cbd5e1" : "1px solid #94a3b8", borderRight: compact ? "1px solid #cbd5e1" : "none" }}>
+      <div style={{ gridColumn: "2 / 7", margin: compact ? "1px 2px" : "3px 4px", background: DUTY_BG[i], color: DUTY_FG[i], border: `1px solid ${DUTY_FG[i]}55`, borderRadius: 999, textAlign: "center", fontWeight: 800, fontSize: compact ? "0.6rem" : "0.8rem", padding: compact ? "0 2px" : "2px 6px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>จัดกิจกรรม ครูกลุ่ม {duty.group}</div>
+    </div>
+  );
+}
+
 export function defaultMonthIndex(today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })) {
   const key = today.slice(0, 7);
   const idx = ACADEMIC_CALENDAR_2_2569.findIndex(item => item.month === key);
@@ -121,7 +159,8 @@ export function AcademicCalendarPage() {
           <div style={{ overflowX: "auto" }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(84px, 1fr))", border: "1px solid #94a3b8", minWidth: 600 }}>
               {TH_DAYS.map(d => <div key={d} style={{ padding: "0.4rem", textAlign: "center", fontWeight: 700, borderRight: "1px solid #94a3b8", borderBottom: "1px solid #94a3b8", background: "#f8fafc" }}>{d}</div>)}
-              {monthCells(month.month).map((date, i) => {
+              {weekRows(monthCells(month.month)).map(({ row, start, duty }) => <Fragment key={start}>{row.map((date, j) => {
+                const i = start + j;
                 const events = date ? byDate.get(date) || [] : [];
                 const dayColor = events.find(ev => ev.color)?.color;
                 return (
@@ -135,23 +174,29 @@ export function AcademicCalendarPage() {
                     ))}
                   </div>
                 );
-              })}
+              })}<DutyBar duty={duty} /></Fragment>)}
             </div>
           </div>
           {month.note && <div style={{ marginTop: "0.6rem", fontSize: "0.85rem", color: "#334155" }}><b>ผู้รับผิดชอบ:</b> {month.note}</div>}
-          <div style={{ marginTop: "0.4rem", fontSize: "0.75rem", color: "#64748b" }}>ตัวแดง = วันหยุด/เรียนชดเชย/สอบ · ตัวน้ำเงิน = เข้าค่ายลูกเสือ</div>
+          <div style={{ marginTop: "0.4rem", fontSize: "0.75rem", color: "#64748b" }}>ตัวแดง = วันหยุด/เรียนชดเชย/สอบ · ตัวน้ำเงิน = เข้าค่ายลูกเสือ · แถบสี = ครูเวรประจำสัปดาห์ (หมุนเวียน {DUTY_GROUP_COUNT} กลุ่ม)</div>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
           {ACADEMIC_CALENDAR_2_2569.map(item => (
             <div key={item.month} style={{ background: "#fff", borderRadius: 14, padding: "0.9rem 1rem", border: "1px solid #E4EEF8" }}>
               <div style={{ fontWeight: 800, marginBottom: "0.4rem" }}>{monthLabel(item.month)}{item.studyDays ? ` · เวลาเรียน ${item.studyDays} วัน` : ""}</div>
-              {allEvents.filter(ev => ev.month === item.month).map((ev, k) => (
-                <div key={k} style={{ display: "flex", gap: "0.75rem", padding: "0.3rem 0", borderTop: k ? "1px solid #f1f5f9" : "none", fontSize: "0.88rem" }}>
+              {allEvents.filter(ev => ev.month === item.month).map((ev, k, arr) => {
+                const duty = dutyWeek(ev.date);
+                const prev = k ? dutyWeek(arr[k - 1].date) : null;
+                const showDuty = duty && (!prev || prev.monday !== duty.monday);
+                return (<Fragment key={k}>
+                {showDuty && <div style={{ margin: "0.35rem 0 0.15rem", fontSize: "0.78rem", fontWeight: 800, color: DUTY_FG[(duty.group - 1) % DUTY_FG.length], background: DUTY_BG[(duty.group - 1) % DUTY_BG.length], borderRadius: 999, padding: "0.1rem 0.7rem", width: "fit-content" }}>สัปดาห์ {Number(duty.monday.slice(8))}–{Number(duty.friday.slice(8))} {TH_MONTHS[Number(duty.friday.slice(5, 7)) - 1]} · จัดกิจกรรม ครูกลุ่ม {duty.group}</div>}
+                <div style={{ display: "flex", gap: "0.75rem", padding: "0.3rem 0", borderTop: k ? "1px solid #f1f5f9" : "none", fontSize: "0.88rem" }}>
                   <span style={{ minWidth: 190, color: "#64748b" }}>{formatDate(ev.date)}</span>
                   <span style={{ color: COLORS[ev.color] || "#1e293b", fontWeight: 600 }}>{ev.title}{ev.teacher && <span style={{ color: "#7c3aed", fontWeight: 500 }}> · ผู้รับผิดชอบ {ev.teacher}</span>}</span>
                 </div>
-              ))}
+                </Fragment>);
+              })}
               {item.note && <div style={{ marginTop: "0.4rem", fontSize: "0.8rem", color: "#475569" }}>หมายเหตุ: {item.note}</div>}
             </div>
           ))}
@@ -195,7 +240,8 @@ export function UpcomingCalendarCard({ onOpen, today = new Date().toLocaleDateSt
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", borderTop: line, borderLeft: line, fontSize: "0.62rem" }}>
         {SHORT_DAYS.map(d => <div key={d} style={{ padding: "2px 0", textAlign: "center", fontWeight: 700, borderRight: line, borderBottom: line, background: "#f8fafc" }}>{d}</div>)}
-        {monthCells(month.month).map((date, i) => {
+        {weekRows(monthCells(month.month)).map(({ row, start, duty }) => <Fragment key={start}>{row.map((date, j) => {
+          const i = start + j;
           const events = date ? byDate.get(date) || [] : [];
           const dayColor = events.find(ev => ev.color)?.color;
           const isToday = date === today;
@@ -211,7 +257,7 @@ export function UpcomingCalendarCard({ onOpen, today = new Date().toLocaleDateSt
               ))}
             </div>
           );
-        })}
+        })}<DutyBar duty={duty} compact /></Fragment>)}
       </div>
       <div style={{ marginTop: 4, fontSize: "0.6rem", color: "#64748b" }}>แดง = หยุด/ชดเชย/สอบ · น้ำเงิน = ค่ายลูกเสือ · แตะค้างดูรายละเอียด</div>
     </div>

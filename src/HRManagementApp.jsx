@@ -1697,6 +1697,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
             })()}
           </div>
 
+          {!isTestTeacher(currentUser) && <MyEvalScoreCard currentUser={currentUser} />}
           {/* สรุปสถิติเดือนนี้ */}
           <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.75rem", marginBottom: "1.25rem" }}>
             <div style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: 600, marginBottom: "0.5rem", textAlign: "center" }}>📊 สถิติเดือนนี้</div>
@@ -6389,6 +6390,61 @@ function computeAutoEntries(teacherId, sources, range, settings) {
     });
   }
   return entries;
+}
+
+// คะแนนประเมินของครูคนที่ลงเวลา (เฉพาะของตัวเอง) แสดงหลังลงเวลาสำเร็จ — โหลดไม่ได้ก็ซ่อนไป ไม่กระทบการลงเวลา
+function MyEvalScoreCard({ currentUser }) {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    let active = true;
+    const empId = currentUser?.id;
+    if (!empId) return undefined;
+    (async () => {
+      const store = await loadEval2Store(currentUser);
+      const sem = currentSemester();
+      const range = semesterRange(sem, store.settings);
+      const semKey = semesterKey(sem);
+      const frozen = store.locks?.[semKey]?.teachers?.[empId];
+      let entries;
+      if (frozen) entries = frozen.entries;
+      else {
+        const sources = await loadEval2Sources(range);
+        const manual = (store.books?.[`${semKey}:${empId}`]?.entries || []).filter(entry => entry.date >= range.start && entry.date <= range.end);
+        entries = [...computeAutoEntries(empId, sources, range, store.settings), ...manual];
+      }
+      const month = todayISO().slice(0, 7);
+      const groups = new Map();
+      entries.filter(entry => String(entry.date || "").startsWith(month)).forEach(entry => {
+        const key = `${entry.type}|${evalEntryLabel(entry)}`;
+        const cur = groups.get(key) || { type: entry.type, label: evalEntryLabel(entry), count: 0, points: 0 };
+        cur.count += 1; cur.points += Number(entry.points) || 0; groups.set(key, cur);
+      });
+      if (active) setData({ ...evalSummary(entries), sem, month: [...groups.values()].sort((a, b) => b.points - a.points) });
+    })().catch(() => { if (active) setData({ failed: true }); });
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id]);
+  if (!data || data.failed) return data ? null : <div style={{ fontSize: "0.75rem", color: "#94a3b8", textAlign: "center", marginBottom: "0.75rem" }}>กำลังโหลดคะแนนของคุณ...</div>;
+  const level = evalLevel(data.score);
+  const msg = data.score >= 95 ? "ยอดเยี่ยมมาก รักษามาตรฐานนี้ไว้นะคะ 🌟" : data.score >= 85 ? "ดีมากค่ะ อีกนิดเดียวก็เต็มแล้ว 💪" : data.score >= 70 ? "สู้ๆ ค่ะ มาตรงเวลาและแจ้งก่อนออกนอกบริเวณ คะแนนจะกลับมาเร็ว 🙂" : "เริ่มใหม่ได้ทุกวัน ค่อยๆ เก็บคะแนนคืนนะคะ ❤️";
+  const r = n => Math.round(n * 10) / 10;
+  return (
+    <div style={{ border: "1.5px solid #B8E0FF", background: "#F5FAFF", borderRadius: 12, padding: "0.7rem 0.8rem", marginBottom: "0.75rem", fontSize: "0.82rem" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
+        <div><div style={{ fontWeight: 800, color: "#233862" }}>คะแนนประเมินของฉัน</div><div style={{ fontSize: "0.7rem", color: "#64748b" }}>ภาคเรียน {data.sem.term}/{data.sem.year} · เต็ม 100</div></div>
+        <div style={{ textAlign: "right" }}><div style={{ fontSize: "1.6rem", fontWeight: 900, color: level.color, lineHeight: 1 }}>{data.score}</div><div style={{ fontSize: "0.7rem", fontWeight: 700, color: level.color }}>{level.label}</div></div>
+      </div>
+      <div style={{ marginTop: "0.4rem", fontSize: "0.72rem", color: "#64748b" }}>ทั้งเทอม: หัก −{data.deduct} · เพิ่ม +{data.bonus}</div>
+      <div style={{ marginTop: "0.35rem", fontWeight: 700, color: "#334155", fontSize: "0.75rem" }}>เดือนนี้</div>
+      {data.month.length === 0 ? <div style={{ color: "#15803d", fontSize: "0.75rem" }}>ยังไม่มีรายการหัก/เพิ่มคะแนน 👍</div> : data.month.slice(0, 5).map(g => (
+        <div key={g.type + g.label} style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", fontSize: "0.75rem" }}>
+          <span style={{ color: "#475569" }}>{g.label}{g.count > 1 ? ` ×${g.count}` : ""}</span>
+          <b style={{ color: g.type === "add" ? "#15803d" : "#dc2626" }}>{g.type === "add" ? "+" : "−"}{r(g.points)}</b>
+        </div>
+      ))}
+      <div style={{ marginTop: "0.4rem", fontSize: "0.75rem", color: "#0072D9", fontWeight: 600 }}>{msg}</div>
+    </div>
+  );
 }
 
 function evalSummary(entries) {

@@ -7,7 +7,7 @@ import { ACADEMIC_CALENDAR_2_2569 } from "./academicCalendar.jsx";
 // period = วันที่ YYYYMMDD, start/end_time = เวลาคาบ, subject = JSON {kind, room, date, period_no, subject, class_level, note}
 export const ROOM_BOOKING_ROOM = "__ROOM_BOOKING__";
 export const ROOM_BOOKING_ROOMS_ROOM = "__ROOM_BOOKING_ROOMS__"; // รายชื่อห้องที่แอดมินแก้ได้ (period=0)
-export const DEFAULT_MEDIA_ROOMS = ["ห้องคอมพิวเตอร์", "ห้องวิทยาศาสตร์", "ห้องสมุด", "ห้องโสตทัศนูปกรณ์/ห้องประชุม"];
+export const DEFAULT_MEDIA_ROOMS = ["ห้องสื่อ"];
 const CLASS_LEVELS = ["ตอ.", "อ.1", "อ.2", "อ.3", "ป.1", "ป.2", "ป.3", "ป.4", "ป.5", "ป.6", "ม.1", "ม.2", "ม.3"];
 const PERIOD_TIMES = [["08:30", "09:20"], ["09:20", "10:10"], ["10:20", "11:10"], ["11:10", "12:00"], ["13:00", "13:50"], ["13:50", "14:40"]];
 const DAY_LABELS = ["จ.", "อ.", "พ.", "พฤ.", "ศ."];

@@ -3995,7 +3995,7 @@ function KindergartenDayRead({ day, dayName, dateLabel }) {
 }
 
 function KindergartenSupervisionTeacher({ currentUser }) {
-  const [weekStart, setWeekStart] = useState(() => mondayOf(todayISO()));
+  const [weekStart, setWeekStart] = useState(() => defaultPlanWeek());
   const [rowId, setRowId] = useState(null);
   const [unit, setUnit] = useState("");
   const [room, setRoom] = useState("");
@@ -4299,12 +4299,12 @@ function ExecutiveSupervisionSwitch({ employees, currentUser, planFocus = null }
 }
 
 function defaultPlanWeek() {
-  // แผนต้องส่งก่อนสัปดาห์สอน: วันศุกร์-อาทิตย์ เปิดสัปดาห์หน้าเป็นค่าเริ่มต้น
-  const today = todayISO();
-  const [y, m, d] = today.split("-").map(Number);
-  const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  // หลังวันศุกร์ 18:00 น. ถึงวันอาทิตย์ (เวลาไทย) เปิดสัปดาห์ถัดไปเป็นค่าเริ่มต้น
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23", weekday: "short" }).formatToParts(new Date()).map(x => [x.type, x.value]));
+  const today = `${parts.year}-${parts.month}-${parts.day}`;
   const monday = mondayOf(today);
-  return weekday === 0 || weekday >= 5 ? shiftDateKey(monday, 7) : monday;
+  const next = (parts.weekday === "Fri" && Number(parts.hour) >= 18) || parts.weekday === "Sat" || parts.weekday === "Sun";
+  return next ? shiftDateKey(monday, 7) : monday;
 }
 
 const NO_TIMETABLE_TEXT = "ยังไม่ได้กรอกตารางสอน จึงกรอกแผนการสอนไม่ได้ กรุณากรอกตารางสอนก่อน";
@@ -4687,7 +4687,7 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
 }
 
 function SupervisionAdmin({ employees, currentUser }) {
-  const [weekStart, setWeekStart] = useState(() => mondayOf(todayISO()));
+  const [weekStart, setWeekStart] = useState(() => defaultPlanWeek());
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -7463,7 +7463,7 @@ function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEv
   const [evalRows, setEvalRows] = useState(null);
   const [evalNote, setEvalNote] = useState("");
   const [plans, setPlans] = useState(null);
-  const [planWeek, setPlanWeek] = useState(() => mondayOf(todayISO()));
+  const [planWeek, setPlanWeek] = useState(() => defaultPlanWeek());
   const [planTeacher, setPlanTeacher] = useState(null);
   const [periodPlan, setPeriodPlan] = useState(null);
   const [error, setError] = useState("");
@@ -8456,8 +8456,9 @@ function CleaningDutyInner({ currentUser }) {
 function substituteDefaultDay() {
   const today = todayISO();
   const dow = new Date(`${today}T00:00:00`).getDay();
-  if (dow >= 1 && dow <= 5) return { weekStart: mondayOf(today), day: dow };
-  return { weekStart: shiftDateKey(mondayOf(today), 7), day: 1 }; // เสาร์–อาทิตย์ → วันจันทร์ถัดไป
+  const weekStart = defaultPlanWeek();
+  if (weekStart !== mondayOf(today)) return { weekStart, day: 1 }; // ศุกร์หลัง 18:00–อาทิตย์ → วันจันทร์ถัดไป
+  return { weekStart, day: dow }; // เสาร์–อาทิตย์ → วันจันทร์ถัดไป
 }
 
 function SubstitutePlanView({ employees, currentUser }) {

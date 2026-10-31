@@ -2982,7 +2982,8 @@ function SchedulePage({ employees, currentUser, onOpenPlan }) {
   };
 
   const openPlan = (day, period) => {
-    const date = shiftDateKey(weekStart, day - 1);
+    // แผนส่งล่วงหน้า: ศุกร์-อาทิตย์ ให้เปิดแผนของสัปดาห์หน้า (เหมือนหน้าแผนการสอน) ไม่ใช่สัปดาห์ที่สอนผ่านไปแล้ว
+    const date = shiftDateKey(defaultPlanWeek(), day - 1);
     if (isMine) onOpenPlan?.({ date, period });
     else setViewPlan({ emp: viewer || { id: viewId, name: nameOf(viewId) }, focus: { date, period } });
   };
@@ -4263,8 +4264,18 @@ function ExecutiveSupervisionSwitch({ employees, currentUser, planFocus = null }
   );
 }
 
+function defaultPlanWeek() {
+  // แผนต้องส่งก่อนสัปดาห์สอน: วันศุกร์-อาทิตย์ เปิดสัปดาห์หน้าเป็นค่าเริ่มต้น
+  const today = todayISO();
+  const [y, m, d] = today.split("-").map(Number);
+  const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  const monday = mondayOf(today);
+  return weekday === 0 || weekday >= 5 ? shiftDateKey(monday, 7) : monday;
+}
+
 function SupervisionTeacher({ currentUser, planFocus = null }) {
-  const [weekStart, setWeekStart] = useState(() => mondayOf(planFocus?.date || todayISO()));
+  const [weekStart, setWeekStart] = useState(() => planFocus?.date ? mondayOf(planFocus.date) : defaultPlanWeek());
+  const [loadedStamp, setLoadedStamp] = useState(null);
   const [timetable, setTimetable] = useState([]);
   useEffect(() => {
     let active = true;
@@ -4302,6 +4313,7 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
     setStatus(plan.status || "");
     setLate(!!plan.late);
     setSubmittedAt(plan.submitted_at || null);
+    setLoadedStamp(plan.updated_at || null);
   };
 
   useEffect(() => {
@@ -4393,7 +4405,16 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
     setError("");
     setMessage("");
     try {
-      const id = await writeSupervisionPlan(currentUser.id, weekStart, plan, rowId);
+      // กันเครื่องอื่น (เช่น มือถือที่เปิดค้างไว้) บันทึกทับฉบับใหม่กว่า
+      const latest = (await fetchSupervisionRows(currentUser.id, weekStart))[0];
+      const latestStamp = latest ? (parseSupervisionPlan(latest.subject, weekStart).updated_at || null) : null;
+      if (latest && (latest.id !== rowId || latestStamp !== loadedStamp)
+        && !window.confirm(`แผนสัปดาห์ ${formatThaiDateKey(weekStart)} ถูกบันทึกจากเครื่องอื่นหลังจากที่เปิดหน้านี้ ถ้ากดตกลง ข้อมูลในหน้านี้จะทับฉบับนั้น (กดยกเลิก แล้วรีเฟรชหน้าเพื่อดูฉบับล่าสุด)`)) {
+        return;
+      }
+      const id = await writeSupervisionPlan(currentUser.id, weekStart, plan, latest?.id || rowId);
+      const savedRow = (await fetchSupervisionRows(currentUser.id, weekStart))[0];
+      setLoadedStamp(savedRow ? (parseSupervisionPlan(savedRow.subject, weekStart).updated_at || null) : null);
       const nextPeriods = periodsForEditor(plan, weekStart);
       setRowId(id);
       setPeriods(nextPeriods);

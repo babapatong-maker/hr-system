@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import { AcademicExtra, ACADEMIC_EXTRA_TABS, ACADEMIC_RECORD_ROOM, TEACHING_GRADE_GROUPS, loadAssignedPlanLevels, loadTeachingGrades, saveTeachingGrade } from "./academicRecords.jsx";
 import { read as readWorkbook, utils as xlsxUtils, writeFile as writeWorkbookFile } from "xlsx";
 import { supabase } from "./supabase.js";
+import { cached } from "./queryCache.js";
 import { AcademicCalendarPage, UpcomingCalendarCard } from "./academicCalendar.jsx";
 import { RoomBookingPage, ROOM_BOOKING_ROOM, ROOM_BOOKING_ROOMS_ROOM } from "./roomBooking.jsx";
 import { KgShortPlanPage, KG_SHORT_PLAN_ROOM, isKgTeacher, kgTeacherInfo } from "./kgShortPlan.jsx";
@@ -1151,6 +1152,19 @@ function EmployeeModal({ employee, onClose, onSave, canSeePay = false }) {
 }
 
 // ─── LEAVE MODAL ──────────────────────────────────────────────────────────────
+const LEAVE_LIST_COLUMNS = "id, employee_id, leave_type, duration_type, start_date, end_date, start_time, end_time, hours, reason, substitute_id, substitute_note, status, created_at";
+const LAZY_LEAVE_DOCUMENT = "lazy:leave-document";
+
+// รูปเอกสารลาที่เก็บเป็น base64 ในแถว: โหลดเฉพาะตอนกดดู
+async function openLeaveDocument(row) {
+  const url = row?.document_url;
+  if (url && /^https?:/i.test(url)) { window.open(url, "_blank", "noopener"); return; }
+  const win = window.open("", "_blank");
+  const { data, error } = await supabase.from("leaves").select("document_url").eq("id", row.id).single();
+  if (error || !data?.document_url) { if (win) win.close(); window.alert("โหลดเอกสารไม่สำเร็จ"); return; }
+  if (win) { win.document.title = "เอกสารลา"; win.document.body.style.margin = "0"; const img = win.document.createElement("img"); img.src = data.document_url; img.style.maxWidth = "100%"; win.document.body.appendChild(img); }
+}
+
 function LeaveModal({ employees, currentUser, onClose, onSave }) {
   const emptyPeriodSubs = Array.from({ length: SUBSTITUTE_PERIODS.length }, () => "");
   const [form, setForm] = useState({
@@ -2072,7 +2086,7 @@ function LeavePage({ employees, leaves, currentUser, onRefresh }) {
                   <td style={{ padding: "0.65rem 0.75rem" }}>
                     {row.document_url
                       ? (
-                        <a href={row.document_url} target="_blank" rel="noreferrer" style={{ background: "#EAF5FF", color: "#0072D9", fontSize: "0.72rem", fontWeight: 700, padding: "0.28rem 0.6rem", borderRadius: "20px", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
+                        <a href={row.document_url === LAZY_LEAVE_DOCUMENT ? "#" : row.document_url} onClick={event => { if (row.document_url === LAZY_LEAVE_DOCUMENT || String(row.document_url).startsWith("data:")) { event.preventDefault(); openLeaveDocument(row); } }} target="_blank" rel="noreferrer" style={{ background: "#EAF5FF", color: "#0072D9", fontSize: "0.72rem", fontWeight: 700, padding: "0.28rem 0.6rem", borderRadius: "20px", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
                           <FileText size={13} /> ใบนัดหมอ · ไม่หักลา
                         </a>
                       ) : <span style={{ color: "#94a3b8", fontSize: "0.78rem" }}>—</span>}
@@ -2875,6 +2889,15 @@ async function fetchSupervisionRows(employeeId, dateKey, dayOfWeek = 0) {
   return data || [];
 }
 
+// แผนทั้งสัปดาห์สำหรับหน้าผู้บริหาร (หลายการ์ดใช้ข้อมูลชุดเดียวกัน) แคช 60 วินาที ล้างทันทีเมื่อมีการบันทึก
+function fetchWeekPlansForExec(weekKey) {
+  return cached(`exec-week-plans:${weekKey}`, 60000, async () => {
+    const { data, error } = await supabase.from("teaching_schedule").select("id, employee_id, period, start_time, end_time, subject, created_at").eq("class_room", SUPERVISION_SCHEDULE_ROOM).eq("day_of_week", 0).eq("period", weekKey);
+    if (error) throw new Error(error.message);
+    return data || [];
+  }).then(rows => ({ data: rows.map(row => ({ ...row })), error: null }), err => ({ data: null, error: { message: err.message } }));
+}
+
 async function writeSupervisionPlan(employeeId, dateKey, plan, existingId, dayOfWeek = 0) {
   const payload = {
     employee_id: employeeId,
@@ -2902,7 +2925,11 @@ const TIMETABLE_PERIODS = [1, 2, 3, 4, 5, 6, 7, 8];
 const TIMETABLE_DEFAULT_TIMES = [["08:30", "09:20"], ["09:20", "10:10"], ["10:20", "11:10"], ["11:10", "12:00"], ["13:00", "13:50"], ["13:50", "14:40"], ["14:40", "15:30"], ["15:30", "16:20"]];
 const isTimetableRow = row => row && row.day_of_week >= 1 && row.day_of_week <= 5 && !String(row.class_room || "").startsWith("__") && !TIMETABLE_SPECIAL_ROOMS.includes(row.class_room);
 
-async function fetchTimetableRows(employeeId = null) {
+function fetchTimetableRows(employeeId = null) {
+  return cached(`timetable:${employeeId || "all"}`, 120000, () => fetchTimetableRowsRaw(employeeId)).then(rows => rows.map(row => ({ ...row })));
+}
+
+async function fetchTimetableRowsRaw(employeeId = null) {
   let query = supabase.from("teaching_schedule").select("id, employee_id, day_of_week, period, subject, class_room, start_time, end_time").gte("day_of_week", 1).lte("day_of_week", 5).order("day_of_week").order("period");
   if (employeeId) query = query.eq("employee_id", employeeId);
   const { data, error } = await query;
@@ -4730,12 +4757,7 @@ function SupervisionAdmin({ employees, currentUser }) {
     setDetail(null);
     (async () => {
       try {
-        const { data, error: loadError } = await supabase
-          .from("teaching_schedule")
-          .select("id, employee_id, start_time, end_time, created_at, subject")
-          .eq("class_room", SUPERVISION_SCHEDULE_ROOM)
-          .eq("day_of_week", 0)
-          .eq("period", weekPeriodKey(weekStart));
+        const { data, error: loadError } = await fetchWeekPlansForExec(weekPeriodKey(weekStart));
         if (loadError) throw new Error(loadError.message);
         if (!active) return;
         const latest = new Map();
@@ -5361,7 +5383,11 @@ async function readRosterWorkbook(file) {
   return { students, className };
 }
 
-async function fetchRollRows(employeeId) {
+function fetchRollRows(employeeId) {
+  return cached(`roll-rows:${employeeId || "all"}`, 120000, () => fetchRollRowsRaw(employeeId)).then(rows => rows.map(row => ({ ...row })));
+}
+
+async function fetchRollRowsRaw(employeeId) {
   let query = supabase
     .from("teaching_schedule")
     .select("id, employee_id, subject, created_at")
@@ -5939,7 +5965,11 @@ function writeActivityLocal(plans, deleted) {
   }
 }
 
-async function fetchActivityRows() {
+function fetchActivityRows() {
+  return cached("activity-rows", 300000, fetchActivityRowsRaw).then(rows => rows.map(row => ({ ...row })));
+}
+
+async function fetchActivityRowsRaw() {
   const { data, error } = await supabase
     .from("teaching_schedule")
     .select("id, employee_id, subject, created_at")
@@ -6495,7 +6525,11 @@ async function loadEval2Store(currentUser) {
   return store;
 }
 
-async function loadEval2Sources(range) {
+function loadEval2Sources(range) {
+  return cached(`eval2-sources:${range?.start}:${range?.end}`, 300000, () => loadEval2SourcesRaw(range));
+}
+
+async function loadEval2SourcesRaw(range) {
   const errors = [];
   const safe = async (label, fn) => { try { return await fn(); } catch (err) { errors.push(`${label}: ${err.message || "โหลดไม่สำเร็จ"}`); return []; } };
   const firstWeek = weekPeriodKey(mondayOf(range.start));
@@ -7127,8 +7161,8 @@ function ExecPeriodSection({ employees, leaves, onOpenPlan }) {
     let active = true;
     (async () => {
       const [sched, sup, att] = await Promise.all([
-        supabase.from("teaching_schedule").select("id, employee_id, day_of_week, period, subject, class_room, start_time, end_time").order("day_of_week").order("period"),
-        supabase.from("teaching_schedule").select("employee_id, subject, created_at").eq("class_room", SUPERVISION_SCHEDULE_ROOM).eq("day_of_week", 0).eq("period", weekPeriodKey(weekStart)),
+        supabase.from("teaching_schedule").select("id, employee_id, day_of_week, period, subject, class_room, start_time, end_time").gte("day_of_week", 1).lte("day_of_week", 5).order("day_of_week").order("period"),
+        fetchWeekPlansForExec(weekPeriodKey(weekStart)),
         supabase.from("attendance").select("employee_id").gte("check_in", `${todayISO()}T00:00:00+07:00`).lte("check_in", `${todayISO()}T23:59:59+07:00`),
       ]);
       if (!active) return;
@@ -7511,7 +7545,7 @@ function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEv
   useEffect(() => {
     let active = true;
     setPlans(null);
-    supabase.from("teaching_schedule").select("id, employee_id, period, start_time, subject, created_at").eq("class_room", SUPERVISION_SCHEDULE_ROOM).eq("day_of_week", 0).eq("period", weekPeriodKey(planWeek)).then(({ data, error: err }) => {
+    fetchWeekPlansForExec(weekPeriodKey(planWeek)).then(({ data, error: err }) => {
       if (!active) return;
       if (err) setError(`แผนการสอน: ${err.message}`);
       const latest = new Map();
@@ -11335,7 +11369,7 @@ export default function HRApp() {
     }
   }, [currentUser, activePage]);
 
-  // ตรวจว่าเครื่องนี้ยังอยู่ใน 3 เครื่องล่าสุด ตอนเปิดหน้า และทุก 60 วินาที
+  // ตรวจว่าเครื่องนี้ยังอยู่ใน 3 เครื่องล่าสุด ตอนเปิดหน้า ตอนกลับมาที่แท็บ และทุก 5 นาที (ลดการดึงข้อมูล)
   const currentUserId = currentUser?.id;
   useEffect(() => {
     if (!currentUserId) return;
@@ -11349,7 +11383,7 @@ export default function HRApp() {
       setActivePage("dashboard");
     };
     check();
-    const t = setInterval(check, 60000);
+    const t = setInterval(() => { if (document.visibilityState !== "hidden") check(); }, 300000);
     const onVisible = () => { if (document.visibilityState === "visible") check(); };
     document.addEventListener("visibilitychange", onVisible);
     return () => { stopped = true; clearInterval(t); document.removeEventListener("visibilitychange", onVisible); };
@@ -11362,10 +11396,33 @@ export default function HRApp() {
     setLoading(true);
     const { data: emps } = await supabase.from("employees").select("*").order("name");
     if (emps) setEmployees(emps);
-    const { data: att } = await supabase.from("attendance").select("*, employees(name, department)").order("check_in", { ascending: false }).limit(5000);
+    // ครูทั่วไปเห็นแค่ประวัติของตัวเอง + รายชื่อคนที่ลงเวลาวันนี้ จึงไม่ต้องดึงประวัติทั้งโรงเรียน (ลด egress)
+    let att = null;
+    if (hasAdminRights(currentUser)) {
+      ({ data: att } = await supabase.from("attendance").select("*, employees(name, department)").order("check_in", { ascending: false }).limit(5000));
+    } else {
+      const [{ data: mine }, { data: today }] = await Promise.all([
+        supabase.from("attendance").select("*, employees(name, department)").eq("employee_id", currentUser.id).order("check_in", { ascending: false }).limit(5000),
+        supabase.from("attendance").select("*, employees(name, department)").gte("check_in", `${todayISO()}T00:00:00+07:00`).order("check_in", { ascending: false }),
+      ]);
+      if (mine || today) {
+        const byId = new Map();
+        [...(mine || []), ...(today || [])].forEach(row => byId.set(String(row.id), row));
+        att = [...byId.values()].sort((x, y) => String(y.check_in || "").localeCompare(String(x.check_in || "")));
+      }
+    }
     if (att) setActivityLog(att);
-    const { data: lvs } = await supabase.from("leaves").select("*, employees!leaves_employee_id_fkey(name, department), substitute:employees!leaves_substitute_id_fkey(name)").order("created_at", { ascending: false });
-    if (lvs) setLeaves(lvs);
+    // ไม่ดึง document_url ที่เป็นรูป base64 มาทั้งก้อน (ใหญ่มาก) ดึงเฉพาะลิงก์ http สั้น ๆ ส่วนรูป base64 โหลดตอนกดดู
+    const [{ data: lvs }, { data: lvDocs }, { data: lvInline }] = await Promise.all([
+      supabase.from("leaves").select(`${LEAVE_LIST_COLUMNS}, employees!leaves_employee_id_fkey(name, department), substitute:employees!leaves_substitute_id_fkey(name)`).order("created_at", { ascending: false }),
+      supabase.from("leaves").select("id, document_url").like("document_url", "http%"),
+      supabase.from("leaves").select("id").like("document_url", "data:%"),
+    ]);
+    if (lvs) {
+      const docMap = new Map((lvDocs || []).map(row => [String(row.id), row.document_url]));
+      const inlineIds = new Set((lvInline || []).map(row => String(row.id)));
+      setLeaves(lvs.map(row => ({ ...row, document_url: docMap.get(String(row.id)) || (inlineIds.has(String(row.id)) ? LAZY_LEAVE_DOCUMENT : "") })));
+    }
     const { data: outs } = await supabase.from("outings").select("*, employees(name, department)").order("out_time", { ascending: false });
     if (outs) setOutings(outs);
 

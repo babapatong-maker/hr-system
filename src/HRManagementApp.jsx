@@ -4672,14 +4672,17 @@ function SupervisionAdmin({ employees, currentUser }) {
       try {
         const { data, error: loadError } = await supabase
           .from("teaching_schedule")
-          .select("id, employee_id, start_time, end_time, created_at")
+          .select("id, employee_id, start_time, end_time, created_at, subject")
           .eq("class_room", SUPERVISION_SCHEDULE_ROOM)
           .eq("day_of_week", 0)
           .eq("period", weekPeriodKey(weekStart));
         if (loadError) throw new Error(loadError.message);
         if (!active) return;
         const latest = new Map();
-        (data || []).forEach(row => {
+        (data || []).forEach(raw => {
+          let submittedAt = "";
+          try { submittedAt = JSON.parse(raw.subject || "{}").submitted_at || ""; } catch { submittedAt = ""; }
+          const { subject: _omit, ...row } = { ...raw, submitted_at: submittedAt };
           const current = latest.get(row.employee_id);
           if (!current || String(row.created_at || "") > String(current.created_at || "")) latest.set(row.employee_id, row);
         });
@@ -4700,7 +4703,7 @@ function SupervisionAdmin({ employees, currentUser }) {
   const signedOff = (employeeId) => String(rows.find(item => item.employee_id === employeeId)?.end_time || "").startsWith("00:01");
 
   const teachers = employees
-    .filter(teacher => teacher.role !== "admin" && !isNonTeachingStaff(teacher))
+    .filter(teacher => (teacher.role !== "admin" || rows.some(item => item.employee_id === teacher.id)) && !isNonTeachingStaff(teacher))
     .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "th"));
   const visibleTeachers = teachers.filter(teacher => {
     const text = `${teacher.name || ""} ${teacher.department || ""}`.toLowerCase();
@@ -4889,7 +4892,9 @@ function SupervisionAdmin({ employees, currentUser }) {
             <div style={{ color: "#64748b", padding: "1.25rem 0" }}>กำลังโหลดกระดาน...</div>
           ) : (
             boardGroups.map(group => {
-              const people = visibleTeachers.filter(teacher => supervisionBoardGroup(statusOf(teacher.id)) === group.key);
+              const submittedAtOf = (id) => rows.find(item => item.employee_id === id)?.submitted_at || "";
+              const people = visibleTeachers.filter(teacher => supervisionBoardGroup(statusOf(teacher.id)) === group.key)
+                .sort((a, b) => group.key === "missing" ? 0 : String(submittedAtOf(a.id) || "9").localeCompare(String(submittedAtOf(b.id) || "9")));
               return (
                 <div key={group.key} style={{ marginTop: "1rem" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>

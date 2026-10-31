@@ -4,6 +4,7 @@ import { AcademicExtra, ACADEMIC_EXTRA_TABS, ACADEMIC_RECORD_ROOM, TEACHING_GRAD
 import { read as readWorkbook, utils as xlsxUtils, writeFile as writeWorkbookFile } from "xlsx";
 import { supabase } from "./supabase.js";
 import { cached } from "./queryCache.js";
+import { uploadFileRef, compressImageBlob, signedFileUrl, refFromUrl } from "./fileStore.js";
 import { AcademicCalendarPage, UpcomingCalendarCard } from "./academicCalendar.jsx";
 import { RoomBookingPage, ROOM_BOOKING_ROOM, ROOM_BOOKING_ROOMS_ROOM } from "./roomBooking.jsx";
 import { KgShortPlanPage, KG_SHORT_PLAN_ROOM, isKgTeacher, kgTeacherInfo } from "./kgShortPlan.jsx";
@@ -543,26 +544,11 @@ async function compressImageFile(file) {
 }
 
 async function storeLeaveDocument(file, employeeId) {
-  const compressedDataUrl = await compressImageFile(file);
-  try {
-    const response = await fetch(compressedDataUrl);
-    const blob = await response.blob();
-    const uniqueId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const objectPath = `${employeeId || "unknown"}/${todayISO()}/${uniqueId}.jpg`;
-    const { error } = await supabase.storage
-      .from("leave-documents")
-      .upload(objectPath, blob, { contentType: "image/jpeg", upsert: false });
-
-    if (!error) {
-      const { data } = supabase.storage.from("leave-documents").getPublicUrl(objectPath);
-      if (data?.publicUrl) return data.publicUrl;
-    }
-  } catch {
-    // The compressed image is stored in the leave row when Storage is unavailable.
-  }
-
-  // Projects without a Storage bucket still keep the compressed image in the Supabase leave row.
-  return compressedDataUrl;
+  const blob = await compressImageBlob(file);
+  const uniqueId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const objectPath = `${employeeId || "unknown"}/${todayISO()}/${uniqueId}.jpg`;
+  const ref = await uploadFileRef("leave-documents", objectPath, blob, blob.type || "image/jpeg");
+  return ref.url; // signed URL ใช้แสดงตัวอย่าง ตอนบันทึกจะถูกแปลงเป็น sb://leave-documents/<path>
 }
 
 // ─── DEVICE FINGERPRINT ───────────────────────────────────────────────────────
@@ -1152,12 +1138,15 @@ function EmployeeModal({ employee, onClose, onSave, canSeePay = false }) {
 }
 
 // ─── LEAVE MODAL ──────────────────────────────────────────────────────────────
+const ATTENDANCE_COLUMNS = "id, employee_id, check_in, check_out, duty, work_activity, training_location, training_start_date, training_end_date, created_at";
 const LEAVE_LIST_COLUMNS = "id, employee_id, leave_type, duration_type, start_date, end_date, start_time, end_time, hours, reason, substitute_id, substitute_note, status, created_at";
 const LAZY_LEAVE_DOCUMENT = "lazy:leave-document";
 
 // รูปเอกสารลาที่เก็บเป็น base64 ในแถว: โหลดเฉพาะตอนกดดู
 async function openLeaveDocument(row) {
   const url = row?.document_url;
+  const ref = refFromUrl(url);
+  if (ref) { const win = window.open("", "_blank"); const signed = await signedFileUrl(ref.bucket, ref.path); if (win && signed) win.location.href = signed; else if (win) { win.close(); window.alert("โหลดเอกสารไม่สำเร็จ"); } return; }
   if (url && /^https?:/i.test(url)) { window.open(url, "_blank", "noopener"); return; }
   const win = window.open("", "_blank");
   const { data, error } = await supabase.from("leaves").select("document_url").eq("id", row.id).single();
@@ -1432,8 +1421,8 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
       monthStart.setHours(0, 0, 0, 0);
       const monthStartISO = monthStart.toISOString();
 
-      const { data: atts } = await supabase.from("attendance").select("*").eq("employee_id", currentUser.id).gte("check_in", monthStartISO);
-      const { data: lvs } = await supabase.from("leaves").select("*").eq("employee_id", currentUser.id).gte("start_date", monthStart.toISOString().split("T")[0]);
+      const { data: atts } = await supabase.from("attendance").select(ATTENDANCE_COLUMNS).eq("employee_id", currentUser.id).gte("check_in", monthStartISO);
+      const { data: lvs } = await supabase.from("leaves").select(LEAVE_LIST_COLUMNS).eq("employee_id", currentUser.id).gte("start_date", monthStart.toISOString().split("T")[0]);
       const { data: outs } = await supabase.from("outings").select("*").eq("employee_id", currentUser.id).gte("out_time", monthStartISO);
 
       let late = 0, early = 0;
@@ -2707,9 +2696,9 @@ function normalizeSupervisionPeriod(period, weekStart) {
     homework: source.homework === "yes" ? "yes" : "no",
     homework_what: source.homework_what || source.homework_detail || "",
     homework_page: source.homework_page || "",
-    homework_file: source.homework_file?.dataUrl ? source.homework_file : null,
-    worksheet_file: source.worksheet_file?.url || source.worksheet_file?.dataUrl ? source.worksheet_file : null,
-    worksheet_images: Array.isArray(source.worksheet_images) ? source.worksheet_images.filter(img => img && (img.url || img.dataUrl)).slice(0, 12) : [],
+    homework_file: source.homework_file?.dataUrl || source.homework_file?.path ? source.homework_file : null,
+    worksheet_file: source.worksheet_file?.url || source.worksheet_file?.dataUrl || source.worksheet_file?.path ? source.worksheet_file : null,
+    worksheet_images: Array.isArray(source.worksheet_images) ? source.worksheet_images.filter(img => img && (img.url || img.dataUrl || img.path)).slice(0, 12) : [],
     youtube_links: cleanYoutubeLinks(source.youtube_links),
     post_note: cleanPostNote(source.post_note),
   };
@@ -2891,7 +2880,7 @@ async function fetchSupervisionRows(employeeId, dateKey, dayOfWeek = 0) {
 
 // แผนทั้งสัปดาห์สำหรับหน้าผู้บริหาร (หลายการ์ดใช้ข้อมูลชุดเดียวกัน) แคช 60 วินาที ล้างทันทีเมื่อมีการบันทึก
 function fetchWeekPlansForExec(weekKey) {
-  return cached(`exec-week-plans:${weekKey}`, 60000, async () => {
+  return cached(`exec-week-plans:${weekKey}`, 600000, async () => {
     const { data, error } = await supabase.from("teaching_schedule").select("id, employee_id, period, start_time, end_time, subject, created_at").eq("class_room", SUPERVISION_SCHEDULE_ROOM).eq("day_of_week", 0).eq("period", weekKey);
     if (error) throw new Error(error.message);
     return data || [];
@@ -2926,7 +2915,7 @@ const TIMETABLE_DEFAULT_TIMES = [["08:30", "09:20"], ["09:20", "10:10"], ["10:20
 const isTimetableRow = row => row && row.day_of_week >= 1 && row.day_of_week <= 5 && !String(row.class_room || "").startsWith("__") && !TIMETABLE_SPECIAL_ROOMS.includes(row.class_room);
 
 function fetchTimetableRows(employeeId = null) {
-  return cached(`timetable:${employeeId || "all"}`, 120000, () => fetchTimetableRowsRaw(employeeId)).then(rows => rows.map(row => ({ ...row })));
+  return cached(`timetable:${employeeId || "all"}`, 600000, () => fetchTimetableRowsRaw(employeeId)).then(rows => rows.map(row => ({ ...row })));
 }
 
 async function fetchTimetableRowsRaw(employeeId = null) {
@@ -3325,22 +3314,13 @@ function lessonFileHref(file) {
 }
 
 async function uploadLessonFile(file, employeeId) {
-  const safeName = String(file.name || "worksheet.pdf").replace(/[^A-Za-z0-9._-]+/g, "_").slice(-80);
+  const isImage = String(file.type || "").startsWith("image/");
+  const body = isImage ? await compressImageBlob(file) : file;
+  if (!isImage && file.size > SUPERVISION_FILE_LIMIT) throw new Error("ไฟล์ต้องมีขนาดไม่เกิน 2.5 MB");
+  const baseName = String(file.name || (isImage ? "worksheet.jpg" : "worksheet.pdf"));
+  const safeName = (isImage ? baseName.replace(/\.[^.]+$/, "") + ".jpg" : baseName).replace(/[^A-Za-z0-9._-]+/g, "_").slice(-80);
   const objectPath = `${employeeId || "unknown"}/${todayISO()}/${newSupervisionId()}-${safeName}`;
-  try {
-    const { error } = await supabase.storage
-      .from(LESSON_FILE_BUCKET)
-      .upload(objectPath, file, { contentType: file.type || "application/pdf", upsert: false });
-    if (!error) {
-      const { data } = supabase.storage.from(LESSON_FILE_BUCKET).getPublicUrl(objectPath);
-      if (data?.publicUrl) return { name: file.name, type: file.type || "application/pdf", url: data.publicUrl, path: objectPath, storage: "supabase" };
-    }
-  } catch {
-    // Storage ยังไม่ได้ตั้ง bucket → เก็บไฟล์ในแผนแบบเดิม (dataUrl)
-  }
-  if (file.size > SUPERVISION_FILE_LIMIT) throw new Error("ยังไม่ได้ตั้ง Storage bucket \"lesson-files\" ใน Supabase จึงเก็บไฟล์ได้ไม่เกิน 2.5 MB");
-  const dataUrl = await readFileAsDataUrl(file);
-  return { name: file.name, type: file.type || "application/pdf", dataUrl, storage: "inline" };
+  return uploadFileRef(LESSON_FILE_BUCKET, objectPath, body, isImage ? (body.type || "image/jpeg") : (file.type || "application/pdf"), { name: file.name });
 }
 
 function localPlanKey(employeeId, weekStart) {
@@ -3359,31 +3339,9 @@ function loadLocalPlan(employeeId, weekStart) {
 }
 
 async function uploadLessonImage(file, employeeId) {
-  const source = await readFileAsDataUrl(file);
-  const image = await new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("เปิดรูปภาพไม่สำเร็จ"));
-    img.src = source;
-  });
-  const scale = Math.min(1, 1280 / Math.max(image.width, image.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(image.width * scale);
-  canvas.height = Math.round(image.height * scale);
-  const ctx = canvas.getContext("2d");
-  if (ctx) ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-  const dataUrl = ctx ? canvas.toDataURL("image/jpeg", 0.8) : source;
-  const name = file.name || "worksheet.jpg";
-  try {
-    const blob = await (await fetch(dataUrl)).blob();
-    const objectPath = `${employeeId || "unknown"}/${todayISO()}/img-${newSupervisionId()}.jpg`;
-    const { error } = await supabase.storage.from(LESSON_FILE_BUCKET).upload(objectPath, blob, { contentType: "image/jpeg", upsert: false });
-    if (!error) {
-      const { data } = supabase.storage.from(LESSON_FILE_BUCKET).getPublicUrl(objectPath);
-      if (data?.publicUrl) return { name, url: data.publicUrl, path: objectPath, storage: "supabase" };
-    }
-  } catch { /* ไม่มี bucket → เก็บแบบย่อขนาดในแผน */ }
-  return { name, dataUrl, storage: "inline" };
+  const blob = await compressImageBlob(file);
+  const objectPath = `${employeeId || "unknown"}/${todayISO()}/img-${newSupervisionId()}.jpg`;
+  return uploadFileRef(LESSON_FILE_BUCKET, objectPath, blob, blob.type || "image/jpeg", { name: file.name || "worksheet.jpg" });
 }
 
 function printWorksheetImages(images, title) {
@@ -4564,13 +4522,13 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
       setError("อัปโหลดได้เฉพาะ PDF, Word หรือรูป");
       return;
     }
-    if (picked.size > SUPERVISION_FILE_LIMIT) {
+    if (!String(picked.type || "").startsWith("image/") && picked.size > SUPERVISION_FILE_LIMIT) {
       setError("ไฟล์ต้องมีขนาดไม่เกิน 2.5 MB");
       return;
     }
     try {
-      const dataUrl = await readFileAsDataUrl(picked);
-      updatePeriod(periodId, { homework: "yes", homework_file: { name: picked.name, type: picked.type || "", dataUrl } });
+      const uploaded = await uploadLessonFile(picked, currentUser.id);
+      updatePeriod(periodId, { homework: "yes", homework_file: { ...uploaded, name: picked.name } });
       setError("");
       setMessage("เลือกใบงานแล้ว กดบันทึกฉบับร่างหรือส่งให้ฝ่ายวิชาการเพื่อเก็บไฟล์");
     } catch (err) {
@@ -5384,7 +5342,7 @@ async function readRosterWorkbook(file) {
 }
 
 function fetchRollRows(employeeId) {
-  return cached(`roll-rows:${employeeId || "all"}`, 120000, () => fetchRollRowsRaw(employeeId)).then(rows => rows.map(row => ({ ...row })));
+  return cached(`roll-rows:${employeeId || "all"}`, 600000, () => fetchRollRowsRaw(employeeId)).then(rows => rows.map(row => ({ ...row })));
 }
 
 async function fetchRollRowsRaw(employeeId) {
@@ -5689,7 +5647,7 @@ function cleanActivityPlan(raw) {
     created_by_name: text(raw?.created_by_name, 120),
     updated_at: String(raw?.updated_at || ""),
     pending: !!raw?.pending,
-    worksheet_images: Array.isArray(raw?.worksheet_images) ? raw.worksheet_images.filter(img => img && (img.url || img.dataUrl)).slice(0, ACTIVITY_POST_IMAGE_LIMIT) : [],
+    worksheet_images: Array.isArray(raw?.worksheet_images) ? raw.worksheet_images.filter(img => img && (img.url || img.dataUrl || img.path)).slice(0, ACTIVITY_POST_IMAGE_LIMIT) : [],
     post_record: cleanActivityPost(raw?.post_record),
   };
 }
@@ -5737,7 +5695,7 @@ function cleanActivityPost(raw) {
     participants: text(raw.participants, 40),
     problems: text(raw.problems, 4000),
     suggestions: text(raw.suggestions, 4000),
-    images: Array.isArray(raw.images) ? raw.images.filter(img => img && (img.url || img.dataUrl)).slice(0, ACTIVITY_POST_IMAGE_LIMIT) : [],
+    images: Array.isArray(raw.images) ? raw.images.filter(img => img && (img.url || img.dataUrl || img.path)).slice(0, ACTIVITY_POST_IMAGE_LIMIT) : [],
     recorded_by: String(raw.recorded_by || ""),
     recorded_by_name: text(raw.recorded_by_name, 120),
     recorded_at: String(raw.recorded_at || ""),
@@ -6526,7 +6484,7 @@ async function loadEval2Store(currentUser) {
 }
 
 function loadEval2Sources(range) {
-  return cached(`eval2-sources:${range?.start}:${range?.end}`, 300000, () => loadEval2SourcesRaw(range));
+  return cached(`eval2-sources:${range?.start}:${range?.end}`, 600000, () => loadEval2SourcesRaw(range));
 }
 
 async function loadEval2SourcesRaw(range) {
@@ -7790,7 +7748,7 @@ function cleanCleaningInspection(raw) {
     total: cleaningTotal(scores, criteria),
     max: cleaningMaxOf(criteria),
     note: String(raw?.note || "").slice(0, 1000),
-    photos: (Array.isArray(raw?.photos) ? raw.photos : []).filter(photo => photo?.url || photo?.dataUrl).slice(0, CLEANING_PHOTO_LIMIT),
+    photos: (Array.isArray(raw?.photos) ? raw.photos : []).filter(photo => photo?.url || photo?.dataUrl || photo?.path).slice(0, CLEANING_PHOTO_LIMIT),
     by: String(raw?.by || "").slice(0, 120),
     by_id: String(raw?.by_id || ""),
     at: String(raw?.at || ""),
@@ -7852,30 +7810,9 @@ async function writeCleaningRow(item, employeeId) {
 }
 
 async function storeCleaningPhoto(file) {
-  const source = await readFileAsDataUrl(file);
-  const image = await new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("เปิดรูปภาพไม่สำเร็จ"));
-    img.src = source;
-  });
-  const scale = Math.min(1, 1024 / Math.max(image.width, image.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(image.width * scale);
-  canvas.height = Math.round(image.height * scale);
-  const ctx = canvas.getContext("2d");
-  if (ctx) ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-  const dataUrl = ctx ? canvas.toDataURL("image/jpeg", 0.7) : source;
-  try {
-    const blob = await (await fetch(dataUrl)).blob();
-    const objectPath = `cleaning/${todayISO()}/${newSupervisionId()}.jpg`;
-    const { error } = await supabase.storage.from(LESSON_FILE_BUCKET).upload(objectPath, blob, { contentType: "image/jpeg", upsert: false });
-    if (!error) {
-      const { data } = supabase.storage.from(LESSON_FILE_BUCKET).getPublicUrl(objectPath);
-      if (data?.publicUrl) return { url: data.publicUrl, path: objectPath, storage: "supabase" };
-    }
-  } catch { /* ไม่มี bucket → เก็บแบบย่อขนาดในรายการ */ }
-  return { dataUrl, storage: "inline" };
+  const blob = await compressImageBlob(file);
+  const objectPath = `cleaning/${todayISO()}/${newSupervisionId()}.jpg`;
+  return uploadFileRef(LESSON_FILE_BUCKET, objectPath, blob, blob.type || "image/jpeg");
 }
 
 const photoSrc = photo => photo?.url || photo?.dataUrl || "";
@@ -9671,14 +9608,14 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
     setMonthDataError("");
 
     Promise.all([
-      supabase.from("attendance").select("*").gte("check_in", monthStartTime).lt("check_in", monthEndTime),
+      supabase.from("attendance").select(ATTENDANCE_COLUMNS).gte("check_in", monthStartTime).lt("check_in", monthEndTime),
       supabase
         .from("attendance")
-        .select("*")
+        .select(ATTENDANCE_COLUMNS)
         .eq("work_activity", "training")
         .lte("training_start_date", monthLastDate)
         .gte("training_end_date", monthStartDate),
-      supabase.from("leaves").select("*").eq("status", "approved").lte("start_date", monthLastDate).gte("end_date", monthStartDate),
+      supabase.from("leaves").select(LEAVE_LIST_COLUMNS).eq("status", "approved").lte("start_date", monthLastDate).gte("end_date", monthStartDate),
     ]).then(([attendanceResult, trainingAttendanceResult, leaveResult]) => {
       if (!active) return;
       const errors = [attendanceResult.error, trainingAttendanceResult.error, leaveResult.error].filter(Boolean);
@@ -11383,7 +11320,7 @@ export default function HRApp() {
       setActivePage("dashboard");
     };
     check();
-    const t = setInterval(() => { if (document.visibilityState !== "hidden") check(); }, 300000);
+    const t = setInterval(() => { if (document.visibilityState !== "hidden") check(); }, 900000);
     const onVisible = () => { if (document.visibilityState === "visible") check(); };
     document.addEventListener("visibilitychange", onVisible);
     return () => { stopped = true; clearInterval(t); document.removeEventListener("visibilitychange", onVisible); };
@@ -11399,11 +11336,11 @@ export default function HRApp() {
     // ครูทั่วไปเห็นแค่ประวัติของตัวเอง + รายชื่อคนที่ลงเวลาวันนี้ จึงไม่ต้องดึงประวัติทั้งโรงเรียน (ลด egress)
     let att = null;
     if (hasAdminRights(currentUser)) {
-      ({ data: att } = await supabase.from("attendance").select("*, employees(name, department)").order("check_in", { ascending: false }).limit(5000));
+      ({ data: att } = await supabase.from("attendance").select(`${ATTENDANCE_COLUMNS}, employees(name, department)`).gte("check_in", new Date(Date.now() - 60 * 86400000).toISOString()).order("check_in", { ascending: false }).limit(5000));
     } else {
       const [{ data: mine }, { data: today }] = await Promise.all([
-        supabase.from("attendance").select("*, employees(name, department)").eq("employee_id", currentUser.id).order("check_in", { ascending: false }).limit(5000),
-        supabase.from("attendance").select("*, employees(name, department)").gte("check_in", `${todayISO()}T00:00:00+07:00`).order("check_in", { ascending: false }),
+        supabase.from("attendance").select(`${ATTENDANCE_COLUMNS}, employees(name, department)`).eq("employee_id", currentUser.id).order("check_in", { ascending: false }).limit(5000),
+        supabase.from("attendance").select(`${ATTENDANCE_COLUMNS}, employees(name, department)`).gte("check_in", `${todayISO()}T00:00:00+07:00`).order("check_in", { ascending: false }),
       ]);
       if (mine || today) {
         const byId = new Map();
@@ -11415,7 +11352,7 @@ export default function HRApp() {
     // ไม่ดึง document_url ที่เป็นรูป base64 มาทั้งก้อน (ใหญ่มาก) ดึงเฉพาะลิงก์ http สั้น ๆ ส่วนรูป base64 โหลดตอนกดดู
     const [{ data: lvs }, { data: lvDocs }, { data: lvInline }] = await Promise.all([
       supabase.from("leaves").select(`${LEAVE_LIST_COLUMNS}, employees!leaves_employee_id_fkey(name, department), substitute:employees!leaves_substitute_id_fkey(name)`).order("created_at", { ascending: false }),
-      supabase.from("leaves").select("id, document_url").like("document_url", "http%"),
+      supabase.from("leaves").select("id, document_url").or("document_url.like.http*,document_url.like.sb:*"),
       supabase.from("leaves").select("id").like("document_url", "data:%"),
     ]);
     if (lvs) {

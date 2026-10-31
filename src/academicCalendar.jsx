@@ -130,15 +130,17 @@ function formatDate(date) {
   return `${TH_DAYS[dow]} ${d} ${TH_MONTHS[m - 1]} ${y + 543}`;
 }
 
-export function AcademicCalendarPage() {
+export function AcademicCalendarPage({ extraEvents = [] }) {
   const [index, setIndex] = useState(() => defaultMonthIndex());
   const [view, setView] = useState("grid");
-  const month = ACADEMIC_CALENDAR_2_2569[index];
+  const baseMonth = ACADEMIC_CALENDAR_2_2569[index];
+  const withExtra = item => ({ ...item, events: [...item.events, ...extraEvents.filter(ev => ev.date.startsWith(item.month))].sort((a, b) => a.date.localeCompare(b.date)) });
+  const month = withExtra(baseMonth);
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
   const byDate = new Map();
   month.events.forEach(ev => byDate.set(ev.date, [...(byDate.get(ev.date) || []), ev]));
   const btn = (active) => ({ padding: "0.45rem 0.9rem", borderRadius: 10, border: "1.5px solid #cbd5e1", background: active ? "#0072D9" : "#fff", color: active ? "#fff" : "#334155", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" });
-  const allEvents = ACADEMIC_CALENDAR_2_2569.flatMap(item => item.events.map(ev => ({ ...ev, month: item.month })));
+  const allEvents = ACADEMIC_CALENDAR_2_2569.map(withExtra).flatMap(item => item.events.map(ev => ({ ...ev, month: item.month })));
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1rem" }}>

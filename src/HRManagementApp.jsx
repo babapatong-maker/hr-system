@@ -5589,6 +5589,8 @@ function cleanActivityPlan(raw) {
     title: text(raw?.title, 200),
     description: text(raw?.description, 3000),
     date: /^\d{4}-\d{2}-\d{2}$/.test(raw?.date || "") ? raw.date : "",
+    end_date: /^\d{4}-\d{2}-\d{2}$/.test(raw?.end_date || "") && raw.end_date > (raw?.date || "") ? raw.end_date : "",
+    days: (Array.isArray(raw?.days) ? raw.days : []).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d?.date || "")).map(d => ({ date: d.date, time: text(d.time, 60), detail: text(d.detail, 2000), holiday: !!d.holiday })).slice(0, 31),
     materials: rows(raw?.materials, false),
     requisitions: rows(raw?.requisitions, true),
     organizers: Array.isArray(raw?.organizers) ? [...new Set(raw.organizers.map(String))].slice(0, 50) : [],
@@ -5599,6 +5601,40 @@ function cleanActivityPlan(raw) {
     worksheet_images: Array.isArray(raw?.worksheet_images) ? raw.worksheet_images.filter(img => img && (img.url || img.dataUrl)).slice(0, ACTIVITY_POST_IMAGE_LIMIT) : [],
     post_record: cleanActivityPost(raw?.post_record),
   };
+}
+
+// ─── แผนกิจกรรมหลายวัน: date = วันเริ่ม, end_date = วันสิ้นสุด (ว่าง = วันเดียว), days = รายละเอียดรายวัน (จ.–ศ.)
+const TH_SHORT_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+const TH_DAY_NAMES = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
+function activityEnd(plan) { return plan?.end_date && plan.end_date > (plan.date || "") ? plan.end_date : (plan?.date || ""); }
+function activityDowOf(key) { const [y, m, d] = key.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)).getUTCDay(); }
+// วันทำการ (จ.–ศ.) ในช่วง — ถ้าเป็นวันเดียวคืนวันนั้นเสมอ
+function activityRangeDates(start, end) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(start || "")) return [];
+  if (!end || end <= start) return [start];
+  const out = [];
+  for (let key = start, i = 0; key <= end && i < 62; key = shiftDateKey(key, 1), i++) { const dow = activityDowOf(key); if (dow >= 1 && dow <= 5) out.push(key); }
+  return out.length ? out.slice(0, 31) : [start];
+}
+function activityDayList(plan) {
+  const byDate = new Map((plan?.days || []).map(d => [d.date, d]));
+  return activityRangeDates(plan?.date, activityEnd(plan)).map(date => ({ date, time: "", detail: "", holiday: false, ...(byDate.get(date) || {}) }));
+}
+function activityActiveDates(plan) { return activityDayList(plan).filter(d => !d.holiday).map(d => d.date); }
+function formatActivityRange(plan) {
+  const start = plan?.date; if (!/^\d{4}-\d{2}-\d{2}$/.test(start || "")) return "-";
+  const end = activityEnd(plan);
+  if (end === start) return formatThaiDateKey(start);
+  const [y1, m1, d1] = start.split("-").map(Number), [y2, m2, d2] = end.split("-").map(Number);
+  if (y1 === y2 && m1 === m2) return `${d1}–${d2} ${TH_SHORT_MONTHS[m2 - 1]} ${y2 + 543}`;
+  if (y1 === y2) return `${d1} ${TH_SHORT_MONTHS[m1 - 1]} – ${d2} ${TH_SHORT_MONTHS[m2 - 1]} ${y2 + 543}`;
+  return `${d1} ${TH_SHORT_MONTHS[m1 - 1]} ${y1 + 543} – ${d2} ${TH_SHORT_MONTHS[m2 - 1]} ${y2 + 543}`;
+}
+function activityDayLabel(key) { const [, m, d] = key.split("-").map(Number); return `${TH_DAY_NAMES[activityDowOf(key)]} ${d} ${TH_SHORT_MONTHS[m - 1]}`; }
+function activityIsMultiDay(plan) { return activityEnd(plan) !== plan?.date; }
+function activityDaysHtml(plan, esc) {
+  if (!activityIsMultiDay(plan)) return "";
+  return `<h4>กำหนดการรายวัน</h4><table style="border-collapse:collapse;width:100%"><tr><th style="border:1px solid #999;padding:3px">วัน</th><th style="border:1px solid #999;padding:3px">เวลา</th><th style="border:1px solid #999;padding:3px">กิจกรรม</th></tr>${activityDayList(plan).map(d => `<tr><td style="border:1px solid #999;padding:3px;white-space:nowrap">${esc(activityDayLabel(d.date))}</td><td style="border:1px solid #999;padding:3px">${d.holiday ? "-" : esc(d.time) || "-"}</td><td style="border:1px solid #999;padding:3px">${d.holiday ? "<b>วันหยุด (ไม่มีกิจกรรม)</b>" : esc(d.detail) || "-"}</td></tr>`).join("")}</table>`;
 }
 // บันทึกหลังกิจกรรม — เก็บในแถว JSON เดียวกับแผน (ฟิลด์ post_record) แผนเก่าที่ไม่มีฟิลด์นี้ = ยังไม่บันทึก
 const ACTIVITY_POST_IMAGE_LIMIT = 8;
@@ -5629,8 +5665,8 @@ function printActivityPost(plan, nameOf) {
   win.document.open();
   win.document.write(`<!doctype html><html lang="th"><head><meta charset="utf-8"><title>บันทึกหลังกิจกรรม ${esc(plan.title)}</title><style>@page{size:A4;margin:15mm}body{font-family:sans-serif;font-size:14px;color:#111}h2{text-align:center;margin:0 0 4px}h4{margin:12px 0 4px}.b{border:1px solid #999;border-radius:4px;padding:6px 8px;min-height:40px}.g{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}img{width:48%;max-height:80mm;object-fit:contain;border:1px solid #999;page-break-inside:avoid}.sig{margin-top:30px;display:flex;justify-content:space-around;text-align:center}</style></head><body>
 <h2>บันทึกหลังกิจกรรม</h2><div style="text-align:center">โรงเรียนนิมิตศึกษา</div>
-<p><b>กิจกรรม:</b> ${esc(plan.title)} &nbsp; <b>วันที่จัด:</b> ${esc(plan.date ? formatThaiDateKey(plan.date) : "-")}<br><b>ครูผู้จัดกิจกรรม:</b> ${esc(plan.organizers.map(nameOf).join(", ") || "-")}${post.participants ? `<br><b>จำนวนผู้เข้าร่วม:</b> ${esc(post.participants)}` : ""}</p>
-${block("1. ผลการดำเนินกิจกรรม", post.result)}${block("2. ปัญหา/อุปสรรค", post.problems)}${block("3. ข้อเสนอแนะ/แนวทางแก้ไข", post.suggestions)}
+<p><b>กิจกรรม:</b> ${esc(plan.title)} &nbsp; <b>วันที่จัด:</b> ${esc(formatActivityRange(plan))}${activityIsMultiDay(plan) ? ` (${activityActiveDates(plan).length} วัน)` : ""}<br><b>ครูผู้จัดกิจกรรม:</b> ${esc(plan.organizers.map(nameOf).join(", ") || "-")}${post.participants ? `<br><b>จำนวนผู้เข้าร่วม:</b> ${esc(post.participants)}` : ""}</p>
+${activityDaysHtml(plan, esc)}${block("1. ผลการดำเนินกิจกรรม", post.result)}${block("2. ปัญหา/อุปสรรค", post.problems)}${block("3. ข้อเสนอแนะ/แนวทางแก้ไข", post.suggestions)}
 ${imgs.length ? `<h4>ภาพประกอบกิจกรรม</h4><div class="g">${imgs.map(u => `<img src="${esc(u)}">`).join("")}</div>` : ""}
 ${sheets.length ? `<h4>ใบงาน</h4><div class="g">${sheets.map(u => `<img src="${esc(u)}">`).join("")}</div>` : ""}
 <div class="sig"><div>ลงชื่อ.................................ผู้บันทึก<br>(${esc(post.recorded_by_name || nameOf(post.recorded_by))})<br>${esc(post.recorded_at ? fmtDate(post.recorded_at) : "")}</div><div>ลงชื่อ.................................ผู้บริหาร<br>(.................................)</div></div>
@@ -5706,7 +5742,7 @@ function ActivityPostForm({ plan, currentUser, saving, onCancel, onSave, setErro
     <Card padding="0.85rem">
       <div style={{ display: "grid", gap: "0.6rem" }}>
         <div style={{ fontWeight: 800, fontSize: "1.05rem", color: "#233862" }}>บันทึกหลังกิจกรรม</div>
-        <div style={{ fontSize: "0.85rem", color: "#475569" }}>{plan.title} · {plan.date ? formatThaiDateKey(plan.date) : "-"}</div>
+        <div style={{ fontSize: "0.85rem", color: "#475569" }}>{plan.title} · {formatActivityRange(plan)}</div>
         {label("1. ผลการดำเนินกิจกรรม")}
         <textarea value={post.result} placeholder="กิจกรรมเป็นอย่างไร ได้ผลอย่างไร" onChange={e => set({ result: e.target.value })} style={area} />
         {label("จำนวนผู้เข้าร่วม (ถ้ามี)")}
@@ -5745,6 +5781,82 @@ function ActivityPostForm({ plan, currentUser, saving, onCancel, onSave, setErro
       </div>
     </Card>
   );
+}
+
+
+function ActivityDaysView({ plan }) {
+  if (!activityIsMultiDay(plan)) return null;
+  return (
+    <div style={{ display: "grid", gap: "0.2rem" }}>
+      <div style={{ fontWeight: 800, color: "#334155" }}>กำหนดการรายวัน ({activityActiveDates(plan).length} วัน)</div>
+      {activityDayList(plan).map(d => (
+        <div key={d.date} style={{ fontSize: "0.82rem", display: "flex", gap: "0.4rem", color: d.holiday ? "#94a3b8" : "#334155" }}>
+          <b style={{ flex: "none", minWidth: 110, color: d.holiday ? "#94a3b8" : "#0072D9" }}>{activityDayLabel(d.date)}</b>
+          <span style={{ whiteSpace: "pre-wrap" }}>{d.holiday ? "วันหยุด (ไม่มีกิจกรรม)" : [d.time, d.detail].filter(Boolean).join(" · ") || "-"}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ActivityDateRangeEditor({ plan, onChange, small }) {
+  const end = activityEnd(plan);
+  const multi = activityIsMultiDay(plan);
+  const days = activityDayList(plan);
+  const setDays = next => onChange({ days: next });
+  const setDay = (date, patch) => setDays(days.map(d => (d.date === date ? { ...d, ...patch } : d)));
+  const copyFrom = (from, to) => { const src = days.find(d => d.date === from); if (src) setDay(to, { time: src.time, detail: src.detail }); };
+  const wholeWeek = () => {
+    const base = plan.date || todayISO();
+    const dow = activityDowOf(base);
+    const monday = dow === 0 ? shiftDateKey(base, 1) : dow === 6 ? shiftDateKey(base, 2) : shiftDateKey(base, 1 - dow);
+    onChange({ date: monday, end_date: shiftDateKey(monday, 4) });
+  };
+  const lbl = { fontSize: "0.78rem", color: "#475569", fontWeight: 700, display: "grid", gap: "0.2rem" };
+  return (
+    <div style={{ display: "grid", gap: "0.45rem" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "flex-end" }}>
+        <label style={lbl}>วันที่เริ่ม<input type="date" value={plan.date} onChange={e => onChange({ date: e.target.value, ...(plan.end_date && e.target.value >= plan.end_date ? { end_date: "" } : {}) })} style={small} /></label>
+        <label style={lbl}>วันที่สิ้นสุด (ไม่ใส่ = วันเดียว)<input type="date" value={plan.end_date || ""} min={plan.date || undefined} onChange={e => onChange({ end_date: e.target.value > (plan.date || "") ? e.target.value : "" })} style={small} /></label>
+        <button type="button" onClick={wholeWeek} style={{ ...btnSecondary, flex: "none", padding: "0.45rem 0.7rem", fontSize: "0.82rem" }}>ทั้งสัปดาห์ จ.–ศ.</button>
+        {multi && <button type="button" onClick={() => onChange({ end_date: "" })} style={{ ...btnSecondary, flex: "none", padding: "0.45rem 0.7rem", fontSize: "0.82rem" }}>วันเดียว</button>}
+      </div>
+      <div style={{ fontSize: "0.82rem", color: "#0072D9", fontWeight: 800 }}>จัดกิจกรรม: {formatActivityRange({ date: plan.date, end_date: end })}{multi ? ` · ${days.filter(d => !d.holiday).length} วัน` : ""}</div>
+      {multi && (
+        <div style={{ display: "grid", gap: "0.45rem" }}>
+          <span style={{ fontWeight: 800, fontSize: "0.85rem", color: "#334155" }}>แผนรายวัน (เวลา + ทำอะไร)</span>
+          {days.map((d, i) => (
+            <div key={d.date} style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: "0.5rem", background: d.holiday ? "#f8fafc" : "#fff", display: "grid", gap: "0.35rem" }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", alignItems: "center" }}>
+                <b style={{ color: d.holiday ? "#94a3b8" : "#233862", flex: 1, minWidth: 120 }}>{activityDayLabel(d.date)}</b>
+                <label style={{ fontSize: "0.8rem", color: "#b91c1c", display: "flex", gap: "0.25rem", alignItems: "center", cursor: "pointer" }}><input type="checkbox" checked={d.holiday} onChange={e => setDay(d.date, { holiday: e.target.checked })} /> วันหยุด</label>
+                {i > 0 && !d.holiday && <button type="button" onClick={() => copyFrom(days[0].date, d.date)} style={{ ...btnSecondary, flex: "none", padding: "0.2rem 0.5rem", fontSize: "0.75rem" }}>ใช้แผน{TH_DAY_NAMES[activityDowOf(days[0].date)] === "จันทร์" ? "วันจันทร์" : "วันแรก"}</button>}
+                {i > 1 && !d.holiday && <button type="button" onClick={() => copyFrom(days[i - 1].date, d.date)} style={{ ...btnSecondary, flex: "none", padding: "0.2rem 0.5rem", fontSize: "0.75rem" }}>ใช้แผนวันก่อน</button>}
+              </div>
+              {d.holiday ? <div style={{ fontSize: "0.8rem", color: "#94a3b8" }}>วันหยุด ไม่มีกิจกรรม</div> : (
+                <>
+                  <input value={d.time} placeholder="เวลา เช่น 08:30–10:00" onChange={e => setDay(d.date, { time: e.target.value })} style={small} />
+                  <textarea value={d.detail} placeholder="ทำอะไรบ้างในวันนี้" onChange={e => setDay(d.date, { detail: e.target.value })} style={{ ...small, minHeight: 60, resize: "vertical" }} />
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ปฏิทินการศึกษา + แผนกิจกรรม (แสดงทุกวันทำการในช่วง ข้ามวันหยุดที่ติ๊กไว้ ซ่อนครูทดลองระบบ)
+function AcademicCalendarWithActivities({ employees, currentUser }) {
+  const [plans, setPlans] = useState([]);
+  useEffect(() => { fetchActivityRows().then(setPlans, () => setPlans([])); }, []);
+  const viewerIsTest = isTestTeacher(currentUser);
+  const testIds = new Set((employees || []).filter(isTestTeacher).map(emp => String(emp.id)));
+  const nameOf = id => (employees || []).find(emp => String(emp.id) === String(id))?.name || "";
+  const extra = plans.filter(p => viewerIsTest || (!testIds.has(String(p.created_by)) && !(p.organizers.length && p.organizers.every(id => testIds.has(String(id))))))
+    .flatMap(p => activityActiveDates(p).map(date => ({ date, title: `🎯 ${p.title}${activityIsMultiDay(p) ? ` (${formatActivityRange(p)})` : ""}`, teacher: p.organizers.map(nameOf).filter(Boolean).join(", "), activity: true })));
+  return <AcademicCalendarPage extraEvents={extra} />;
 }
 
 function readActivityLocal() {
@@ -5880,6 +5992,8 @@ function ActivityPlanPage({ employees, currentUser }) {
     const plan = cleanActivityPlan({ ...editing, updated_at: new Date().toISOString() });
     if (!plan.title.trim()) { setError("กรอกชื่อกิจกรรมก่อน"); return; }
     if (!plan.date) { setError("เลือกวันที่จัดกิจกรรม"); return; }
+    plan.days = activityIsMultiDay(plan) ? activityDayList(plan) : [];
+    if (activityIsMultiDay(plan) && !activityActiveDates(plan).length) { setError("ทุกวันถูกติ๊กเป็นวันหยุด เลือกอย่างน้อย 1 วันที่จัดกิจกรรม"); return; }
     plan.materials = plan.materials.filter(row => row.name.trim());
     plan.requisitions = plan.requisitions.filter(row => row.name.trim());
     if (plan.organizers.length === 0 && currentUser?.id) plan.organizers = [String(currentUser.id)];
@@ -5959,8 +6073,8 @@ function ActivityPlanPage({ employees, currentUser }) {
             <div style={{ fontWeight: 800, fontSize: "0.85rem", color: "#334155" }}>1. กิจกรรมที่จัด</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))", gap: "0.5rem" }}>
               <input value={editing.title} placeholder="ชื่อกิจกรรม" onChange={event => set({ title: event.target.value })} style={small} />
-              <input type="date" value={editing.date} onChange={event => set({ date: event.target.value })} style={small} />
             </div>
+            <ActivityDateRangeEditor plan={editing} onChange={set} small={small} />
             <textarea value={editing.description} placeholder="รายละเอียดกิจกรรม" onChange={event => set({ description: event.target.value })} style={{ ...small, minHeight: 80, resize: "vertical" }} />
             <ActivityRowsEditor title="2. สิ่งของที่ใช้" rows={editing.materials} onChange={materials => set({ materials })} />
             <ActivityRowsEditor title="3. ของที่ใช้เบิก" rows={editing.requisitions} withUnit onChange={requisitions => set({ requisitions })} />
@@ -6002,7 +6116,7 @@ function ActivityPlanPage({ employees, currentUser }) {
         return (
           <Card key={plan.id} padding="0.6rem 0.8rem">
             <button type="button" onClick={() => setOpenId(open ? "" : plan.id)} aria-expanded={open} style={{ width: "100%", display: "flex", gap: "0.5rem", alignItems: "center", border: "none", background: "transparent", padding: 0, fontFamily: "inherit", textAlign: "left", cursor: "pointer" }}>
-              <span style={{ fontSize: "0.78rem", color: "#0072D9", fontWeight: 800, flex: "none" }}>{plan.date ? formatThaiDateKey(plan.date) : "-"}</span>
+              <span style={{ fontSize: "0.78rem", color: "#0072D9", fontWeight: 800, flex: "none" }}>{formatActivityRange(plan)}</span>
               <span style={{ fontWeight: 800, color: "#233862", flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{plan.title}</span>
               {plan.pending && <span style={{ fontSize: "0.7rem", color: "#b45309", flex: "none" }}>รอซิงก์</span>}
               <span style={{ fontSize: "0.68rem", fontWeight: 800, flex: "none", borderRadius: 999, padding: "0.1rem 0.45rem", background: plan.post_record ? "#dcfce7" : "#f1f5f9", color: plan.post_record ? "#15803d" : "#64748b" }}>{plan.post_record ? "บันทึกแล้ว" : "ยังไม่บันทึก"}</span>
@@ -6012,6 +6126,7 @@ function ActivityPlanPage({ employees, currentUser }) {
             {open && (
               <div style={{ display: "grid", gap: "0.5rem", marginTop: "0.5rem", fontSize: "0.88rem" }}>
                 {plan.description && <FullText value={plan.description} />}
+                <ActivityDaysView plan={plan} />
                 {[["สิ่งของที่ใช้", plan.materials, false], ["ของที่ใช้เบิก", plan.requisitions, true]].map(([label, rows, withUnit]) => (
                   <div key={label}>
                     <div style={{ fontWeight: 800, color: "#334155" }}>{label} ({rows.length})</div>
@@ -7173,7 +7288,7 @@ function printActivityReport(plans, nameOf, heading) {
   win.document.write(`<!doctype html><html lang="th"><head><meta charset="utf-8"><title>รายงานกิจกรรม</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:sans-serif;font-size:12px}h2{text-align:center;margin:0}table{border-collapse:collapse;width:100%;margin-top:6px}th,td{border:1px solid #888;padding:3px 5px;vertical-align:top}th{background:#eef}</style></head><body>
 <h2>รายงานกิจกรรม โรงเรียนนิมิตศึกษา</h2><div style="text-align:center">${esc(heading)} · ${plans.length} กิจกรรม</div>
 <table><tr><th>#</th><th>วันที่</th><th>กิจกรรม</th><th>ครูผู้จัด</th><th>สิ่งของที่ใช้</th><th>ของที่ใช้เบิก</th><th>ใบงาน</th><th>บันทึกหลังกิจกรรม</th></tr>
-${plans.map((p, i) => `<tr><td>${i + 1}</td><td>${esc(p.date ? formatThaiDateKey(p.date) : "-")}</td><td>${esc(p.title)}</td><td>${esc(p.organizers.map(nameOf).join(", "))}</td><td>${items(p.materials)}</td><td>${items(p.requisitions)}</td><td style="text-align:center">${(p.worksheet_images || []).length}</td><td>${p.post_record ? "บันทึกแล้ว" : "ยังไม่บันทึก"}</td></tr>`).join("")}</table>
+${plans.map((p, i) => `<tr><td>${i + 1}</td><td>${esc(formatActivityRange(p))}${activityIsMultiDay(p) ? `<br><small>${activityDayList(p).map(d => `${esc(activityDayLabel(d.date))}: ${d.holiday ? "วันหยุด" : esc([d.time, d.detail].filter(Boolean).join(" ")) || "-"}`).join("<br>")}</small>` : ""}</td><td>${esc(p.title)}</td><td>${esc(p.organizers.map(nameOf).join(", "))}</td><td>${items(p.materials)}</td><td>${items(p.requisitions)}</td><td style="text-align:center">${(p.worksheet_images || []).length}</td><td>${p.post_record ? "บันทึกแล้ว" : "ยังไม่บันทึก"}</td></tr>`).join("")}</table>
 ${sumTable("สรุปของที่ใช้เบิกรวม", sumActivityItems(plans, "requisitions"))}${sumTable("สรุปสิ่งของที่ใช้รวม", sumActivityItems(plans, "materials"))}
 </body></html>`);
   win.document.close(); win.focus(); setTimeout(() => win.print(), 600);
@@ -7196,10 +7311,10 @@ function ExecActivityReport({ employees }) {
   }, [open, plans]);
   const testIds = new Set((employees || []).filter(isTestTeacher).map(emp => String(emp.id)));
   const all = (plans || []).filter(p => !testIds.has(String(p.created_by)) && !(p.organizers.length && p.organizers.every(id => testIds.has(String(id)))));
-  const terms = [...new Set([activityTermOf(todayISO()), ...all.map(p => activityTermOf(p.date)).filter(Boolean)])].sort().reverse();
+  const terms = [...new Set([activityTermOf(todayISO()), ...all.flatMap(p => [activityTermOf(p.date), activityTermOf(activityEnd(p))]).filter(Boolean)])].sort().reverse();
   const q = query.trim().toLowerCase();
   const shown = all
-    .filter(p => mode === "all" || (mode === "term" ? activityTermOf(p.date) === term : String(p.date).startsWith(month)))
+    .filter(p => mode === "all" || (mode === "term" ? [p.date, activityEnd(p)].some(d => activityTermOf(d) === term) : (String(p.date).slice(0, 7) <= month && String(activityEnd(p)).slice(0, 7) >= month)))
     .filter(p => !q || [p.title, p.description, ...p.organizers.map(nameOf), ...p.materials.map(r => r.name), ...p.requisitions.map(r => r.name)].join(" ").toLowerCase().includes(q))
     .sort((a, b) => String(a.date).localeCompare(String(b.date)));
   const heading = mode === "all" ? "ทุกกิจกรรม" : mode === "term" ? `ภาคเรียนที่ ${term}` : `เดือน ${new Date(`${month}-01T12:00:00Z`).toLocaleDateString("th-TH", { month: "long", year: "numeric", timeZone: "UTC" })}`;
@@ -7240,7 +7355,7 @@ function ExecActivityReport({ employees }) {
                   <div key={p.id} style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: "0.5rem 0.65rem" }}>
                     <button type="button" onClick={() => setDetail(isOpen ? "" : p.id)} style={{ width: "100%", border: "none", background: "none", padding: 0, textAlign: "left", cursor: "pointer", fontFamily: "inherit" }}>
                       <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap" }}>
-                        <span style={{ fontSize: "0.75rem", color: "#0072D9", fontWeight: 800 }}>{p.date ? formatThaiDateKey(p.date) : "-"}</span>
+                        <span style={{ fontSize: "0.75rem", color: "#0072D9", fontWeight: 800 }}>{formatActivityRange(p)}</span>
                         <span style={{ fontWeight: 800, color: "#233862", flex: 1, minWidth: 120 }}>{p.title}</span>
                         {p.approval?.status && <span style={{ fontSize: "0.68rem", fontWeight: 800, borderRadius: 999, padding: "0.1rem 0.45rem", background: "#EAF5FF", color: "#0072D9" }}>{p.approval.status}</span>}
                         <span style={{ fontSize: "0.68rem", fontWeight: 800, borderRadius: 999, padding: "0.1rem 0.45rem", background: p.post_record ? "#dcfce7" : "#f1f5f9", color: p.post_record ? "#15803d" : "#64748b" }}>{p.post_record ? "บันทึกแล้ว" : "ยังไม่บันทึก"}</span>
@@ -7253,6 +7368,7 @@ function ExecActivityReport({ employees }) {
                     {isOpen && (
                       <div style={{ display: "grid", gap: "0.4rem", marginTop: "0.5rem", fontSize: "0.85rem", borderTop: "1px solid #f1f5f9", paddingTop: "0.5rem" }}>
                         {p.description && <FullText value={p.description} />}
+                        <ActivityDaysView plan={p} />
                         {(p.worksheet_images || []).length > 0 && <div><div style={{ fontWeight: 800, color: "#334155" }}>ใบงาน</div><WorksheetImages images={p.worksheet_images} title={`ใบงาน ${p.title}`} /></div>}
                         {p.post_record ? (
                           <div style={{ background: "#f8fafc", borderRadius: 10, padding: "0.5rem 0.65rem", display: "grid", gap: "0.3rem" }}>
@@ -11639,7 +11755,7 @@ export default function HRApp() {
               {activePage === "cleaningDuty" && (isExecutiveUser(actingUser) ? <CleaningDutyPage currentUser={actingUser} /> : <NoAccessCard />)}
               {activePage === "teacherEval" && (isExecutiveUser(actingUser) ? <TeacherEvalPage employees={employees} currentUser={actingUser} initialSelected={evalFocus} /> : <NoAccessCard />)}
               {activePage === "settings" && <SettingsPage settings={settings} onRefresh={fetchData} />}
-              {activePage === "academicCalendar" && <AcademicCalendarPage />}
+              {activePage === "academicCalendar" && <AcademicCalendarWithActivities employees={employees} currentUser={actingUser} />}
               {activePage === "roomBooking" && <RoomBookingPage employees={employees} currentUser={actingUser} canManage={isExecutiveUser(actingUser) || isTestTeacherOwner(actingUser)} isTestTeacher={isTestTeacher} canSeeTestTeacher={isTestTeacher(actingUser)} />}
               {activePage === "kgShortPlan" && ((isKgTeacher(actingUser) || isExecutiveUser(actingUser)) ? <KgShortPlanPage employees={employees} currentUser={actingUser} canReview={isExecutiveUser(actingUser)} fetchStudents={fetchKgStudents} /> : <NoAccessCard />)}
             </>

@@ -3534,6 +3534,40 @@ function periodHasDetail(period) {
     || String(period?.lesson_page || "").trim());
 }
 
+
+// เติมวิชา/ห้อง/เวลาจากตารางสอนของครูเองให้อัตโนมัติ (ไม่ทับสิ่งที่ครูพิมพ์ไว้)
+const ACTIVITY_SUBJECT_RE = /(ชุมนุม|ลูกเสือ|เนตรนารี|ยุวกาชาด|แนะแนว|กิจกรรม|บำเพ็ญประโยชน์)/;
+const meaningfulText = value => String(value || "").replace(/[\s\-–—.]/g, "").length > 0;
+function autofillPeriodsFromTimetable(periods, weekStart, timetable) {
+  if (!Array.isArray(timetable) || timetable.length === 0) return periods;
+  const dates = weekDates(weekStart);
+  const hhmm = value => (value && value !== "00:00:00" ? String(value).slice(0, 5) : "");
+  return periods.map(period => {
+    const day = dates.indexOf(period.teach_date) + 1;
+    if (day < 1 || period.free) return period;
+    const slot = timetable.find(row => row.day_of_week === day && Number(row.period) === Number(period.period_no));
+    if (!slot) {
+      if (String(period.subject || "").trim()) return period;
+      if (periodIsBlank(period)) return { ...period, free: true };
+      const activity = [period.lesson_intro, period.plan_title, period.plan_unit].map(text => String(text || "").trim()).find(text => ACTIVITY_SUBJECT_RE.test(text));
+      if (activity) return { ...period, subject: activity.split("\n")[0].slice(0, 80) };
+      if (![period.lesson_intro, period.lesson_activity, period.lesson_practice, period.lesson_summary, period.plan_title, period.plan_unit].some(meaningfulText)) return { ...period, free: true };
+      return period;
+    }
+    const next = { ...period };
+    let fromSlot = false;
+    if (!String(next.subject || "").trim()) {
+      next.subject = slot.subject || "";
+      fromSlot = true;
+      if (!String(next.plan_class || "").trim()) next.plan_class = slot.class_room || "";
+    }
+    const start = hhmm(slot.start_time), end = hhmm(slot.end_time);
+    const badTime = !next.start_time || !next.end_time || next.start_time >= next.end_time;
+    if ((badTime || fromSlot) && start && end) { next.start_time = start; next.end_time = end; }
+    return next;
+  });
+}
+
 function periodIsBlank(period) {
   return !period?.free && !periodHasDetail(period);
 }
@@ -4273,13 +4307,17 @@ function defaultPlanWeek() {
   return weekday === 0 || weekday >= 5 ? shiftDateKey(monday, 7) : monday;
 }
 
+const NO_TIMETABLE_TEXT = "ยังไม่ได้กรอกตารางสอน จึงกรอกแผนการสอนไม่ได้ กรุณากรอกตารางสอนก่อน";
+
 function SupervisionTeacher({ currentUser, planFocus = null }) {
   const [weekStart, setWeekStart] = useState(() => planFocus?.date ? mondayOf(planFocus.date) : defaultPlanWeek());
   const [loadedStamp, setLoadedStamp] = useState(null);
   const [timetable, setTimetable] = useState([]);
+  const [timetableLoaded, setTimetableLoaded] = useState(false);
   useEffect(() => {
     let active = true;
-    fetchTimetableRows(currentUser.id).then(list => { if (active) setTimetable(list); }).catch(() => {});
+    setTimetableLoaded(false);
+    fetchTimetableRows(currentUser.id).then(list => { if (active) { setTimetable(list); setTimetableLoaded(true); } }).catch(() => {});
     return () => { active = false; };
   }, [currentUser.id]);
   useEffect(() => {
@@ -4354,13 +4392,24 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
     return () => { active = false; };
   }, [currentUser.id, weekStart]);
 
-  const formPlan = (nextStatus = status || "draft") => {
+  useEffect(() => {
+    if (loading || timetable.length === 0 || status === "submitted" || status === "late") return;
+    setPeriods(prev => {
+      const next = autofillPeriodsFromTimetable(prev, weekStart, timetable);
+      return JSON.stringify(next) === JSON.stringify(prev) ? prev : next;
+    });
+  }, [loading, timetable, weekStart, status]);
+
+  const noTimetable = timetableLoaded && timetable.length === 0;
+  const blockedNoTimetable = noTimetable && status !== "submitted" && status !== "late";
+
+  const formPlan = (nextStatus = status || "draft", sourcePeriods = periods) => {
     const previous = status === "late" ? "submitted" : status;
     const timing = resolveSubmission(nextStatus, previous, submittedAt, late, weekStart);
     return {
       version: 4,
       week_start: weekStart,
-      periods: periods.filter(period => !periodIsBlank(period)),
+      periods: sourcePeriods.filter(period => !periodIsBlank(period)),
       signoff,
       observations,
       status: timing.status,
@@ -4371,13 +4420,18 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
 
   const savePlan = async (nextStatus) => {
     const alreadySent = status === "submitted" || status === "late";
+    if (noTimetable && !alreadySent) {
+      setError(NO_TIMETABLE_TEXT);
+      return;
+    }
     const effective = alreadySent ? "submitted" : nextStatus;
-    const filled = periods.filter(period => !periodIsBlank(period));
+    const workPeriods = alreadySent ? periods : autofillPeriodsFromTimetable(periods, weekStart, timetable);
+    const filled = workPeriods.filter(period => !periodIsBlank(period));
     const taught = filled.filter(period => !period.free);
     // ส่งแล้วแก้ไขได้ตลอด: ไม่บังคับตรวจความครบซ้ำ และคงเวลาส่งครั้งแรก/สถานะสายเดิม
     if (effective === "submitted" && !alreadySent) {
       const missingDays = weekDates(weekStart).flatMap((date, index) => (
-        periods.some(period => period.teach_date === date && periodIsBlank(period)) ? [`วัน${DAY_NAMES[index + 1]}`] : []
+        workPeriods.some(period => period.teach_date === date && periodIsBlank(period)) ? [`วัน${DAY_NAMES[index + 1]}`] : []
       ));
       if (missingDays.length > 0) {
         setError(`ส่งได้เมื่อครบทุกวันจันทร์ถึงศุกร์ ยังขาด ${missingDays.join(" ")} ให้กรอกคาบหรือติ๊กคาบว่าง`);
@@ -4396,7 +4450,7 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
         return;
       }
     }
-    const plan = formPlan(effective);
+    const plan = formPlan(effective, workPeriods);
     if (JSON.stringify(plan).length > SUPERVISION_JSON_LIMIT) {
       setError("ไฟล์ใบงานรวมกันใหญ่เกินที่ฐานเก็บได้ ลดขนาดไฟล์ หรือวางลิงก์แทน");
       return;
@@ -4542,7 +4596,7 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
     }
   };
 
-  const actionButtons = (
+  const actionButtons = blockedNoTimetable ? null : (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))", gap: "0.5rem" }}>
       <button type="button" onClick={copyPreviousWeek} disabled={saving || loading} style={{ ...btnSecondary, minHeight: 44 }}><Copy size={16} /> คัดลอกจากสัปดาห์ก่อน</button>
       <button type="button" onClick={() => savePlan("draft")} disabled={saving || loading} style={{ ...btnSecondary, minHeight: 44 }}><Save size={16} /> บันทึกฉบับร่าง</button>
@@ -4588,10 +4642,16 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
                 ))}
               </div>
             )}
+            {blockedNoTimetable && (
+              <div role="alert" style={{ background: "#fef2f2", border: "2px solid #dc2626", borderRadius: "12px", padding: "1rem", color: "#b91c1c", fontWeight: 800, fontSize: "1.05rem", lineHeight: 1.6 }}>
+                ⚠️ {NO_TIMETABLE_TEXT}
+                <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "#7f1d1d", marginTop: "0.35rem" }}>ไปที่เมนู "ตารางสอน" เพิ่มคาบที่สอนให้ครบ แล้วกลับมาหน้านี้ ระบบจะเติมวิชา ห้อง และเวลาให้อัตโนมัติ</div>
+              </div>
+            )}
             {actionButtons}
             {submittedAt && status === "submitted" && <div style={{ marginTop: "0.7rem", fontSize: "0.78rem", color: "#64748b" }}>ส่งล่าสุด {fmtDate(submittedAt)} {fmtTime(submittedAt)}</div>}
           </Card>
-          {weekDates(weekStart).map((date, index) => {
+          {!blockedNoTimetable && weekDates(weekStart).map((date, index) => {
             const dayPeriods = periods
               .filter(period => period.teach_date === date)
               .sort((a, b) => (Number(a.period_no) || 0) - (Number(b.period_no) || 0));
@@ -4619,7 +4679,7 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
               </DayCard>
             );
           })}
-          <Card>{actionButtons}</Card>
+          {actionButtons && <Card>{actionButtons}</Card>}
         </>
       )}
     </div>

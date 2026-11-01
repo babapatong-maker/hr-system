@@ -4744,7 +4744,7 @@ function SupervisionAdmin({ employees, currentUser }) {
   const signedOff = (employeeId) => String(rows.find(item => item.employee_id === employeeId)?.end_time || "").startsWith("00:01");
 
   const teachers = employees
-    .filter(teacher => (teacher.role !== "admin" || rows.some(item => item.employee_id === teacher.id)) && !isNonTeachingStaff(teacher))
+    .filter(teacher => (teacher.role !== "admin" || TEACHING_EXECUTIVE_IDS.has(String(teacher.id)) || rows.some(item => item.employee_id === teacher.id)) && !isNonTeachingStaff(teacher))
     .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "th"));
   const visibleTeachers = teachers.filter(teacher => {
     const text = `${teacher.name || ""} ${teacher.department || ""}`.toLowerCase();
@@ -6521,6 +6521,17 @@ const PLAN_DEDUCT_WAIVERS = [
   { employee_id: "e5cbb8ef-0984-4e32-920b-7042847b2ff4", week: "*", note: "อันธิกา มีสมสืบ — ธุรการ ไม่ได้สอน (ถาวร)" },
   { employee_id: "667a471f-7d67-41b1-bb1e-e238b49da733", week: "2026-11-02", note: "ขนิษฐา จูปรางค์ — กรอกผิดเล็กน้อย ยกเว้นครั้งเดียว" },
 ];
+// ผู้บริหารที่สอนและส่งแผน: ประเมิน/หักคะแนนส่งแผนเหมือนครู (ผู้บริหารคนอื่นถูกนับเมื่อมีแผนในระบบ)
+const TEACHING_EXECUTIVE_IDS = new Set([
+  "c5306809-307e-47ae-bce1-42c2a9b38f1d", // เรณู เล็กดี
+  "193538b9-9672-4c18-b29d-114dcc5befaf", // จักรพล พลโสภาพ
+]);
+function isEvalSubject(emp, sources) {
+  if (!emp) return false;
+  if (!isExecutiveUser(emp)) return true;
+  const id = String(emp.id);
+  return TEACHING_EXECUTIVE_IDS.has(id) || !!sources?.plans?.some(row => String(row.employee_id) === id);
+}
 function exemptKgPlanEntries(emp, entries) {
   if (!emp) return entries;
   const kg = isKgHomeroomTeacher(emp) || isNonTeachingStaff(emp);
@@ -6767,7 +6778,7 @@ function TeacherDeductPage({ employees, currentUser, initialSelected = "" }) {
     return next;
   };
 
-  const teachers = (employees || []).filter(emp => !isExecutiveUser(emp));
+  const teachers = (employees || []).filter(emp => isEvalSubject(emp, sources));
   const rows = (sources ? teachers : []).map(emp => {
     const key = `${semKey}:${emp.id}`;
     const frozen = lock?.teachers?.[emp.id];
@@ -7176,7 +7187,7 @@ function ExecPeriodSection({ employees, leaves, onOpenPlan }) {
 
   const people = employees || [];
   const nameOf = id => people.find(emp => String(emp.id) === String(id))?.name || "-";
-  const teacherIds = new Set([...people.filter(emp => !isExecutiveUser(emp) && emp.role !== "admin").map(emp => String(emp.id)), ...(rows || []).map(row => String(row.employee_id))]);
+  const teacherIds = new Set([...people.filter(emp => (!isExecutiveUser(emp) && emp.role !== "admin") || TEACHING_EXECUTIVE_IDS.has(String(emp.id))).map(emp => String(emp.id)), ...(rows || []).map(row => String(row.employee_id))]);
   const teachers = people.filter(emp => teacherIds.has(String(emp.id)) && !isKgHomeroomTeacher(emp) && !isNonTeachingStaff(emp)).sort((a, b) => String(a.name).localeCompare(String(b.name), "th"));
   const dateOfDay = shiftDateKey(weekStart, day - 1);
   const isToday = dateOfDay === todayISO();
@@ -7478,7 +7489,7 @@ function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEv
   const [error, setError] = useState("");
   const people = (employees || []);
   const teachers = people.filter(emp => !isExecutiveUser(emp));
-  const planTeachers = teachers.filter(emp => !isNonTeachingStaff(emp));
+  const planTeachers = people.filter(emp => (!isExecutiveUser(emp) || TEACHING_EXECUTIVE_IDS.has(String(emp.id))) && !isNonTeachingStaff(emp));
   const workStart = String(settings?.work_start || "08:00").slice(0, 5);
   const grace = Number(settings?.late_grace_minutes || 0);
 
@@ -7504,7 +7515,7 @@ function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEv
       if (!active) return;
       const semKey = semesterKey(sem);
       const lock = store.locks?.[semKey];
-      const rows = teachers.map(emp => {
+      const rows = people.filter(emp => isEvalSubject(emp, sources)).map(emp => {
         const frozen = lock?.teachers?.[emp.id];
         const manual = (store.books?.[`${semKey}:${emp.id}`]?.entries || []).filter(entry => entry.date >= range.start && entry.date <= range.end);
         const entries = exemptKgPlanEntries(emp, frozen ? frozen.entries : [...computeAutoEntries(emp.id, sources, range, store.settings), ...manual]);

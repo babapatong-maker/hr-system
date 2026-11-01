@@ -7191,7 +7191,7 @@ function ExecPeriodSection({ employees, leaves, onOpenPlan }) {
   const [period, setPeriod] = useState(null);
   const [grid, setGrid] = useState(false);
   const [error, setError] = useState("");
-  const weekStart = mondayOf(todayISO());
+  const weekStart = useState(() => defaultPlanWeek())[0]; // ศุกร์ 18:00 ขึ้นไป → สัปดาห์ถัดไป เหมือนหน้าแผน;
 
   useEffect(() => {
     let active = true;

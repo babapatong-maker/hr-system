@@ -691,8 +691,16 @@ function weOf(employeeId, fallback) {
   return WORK_HOURS_OVERRIDES[String(employeeId)]?.end || fallback;
 }
 
+// เสาร์-อาทิตย์ (เวลาไทย): มาช่วยงานโรงเรียน ไม่นับสาย/กลับก่อน
+function isBangkokWeekend(time) {
+  if (!time) return false;
+  const day = new Date(time).toLocaleString("en-US", { timeZone: "Asia/Bangkok", weekday: "short" });
+  return day === "Sat" || day === "Sun";
+}
+const WEEKEND_HELP_LABEL = "ช่วยงานโรงเรียน";
 function checkLate(checkInTime, workStart, grace = 0) {
   if (!checkInTime || !workStart) return null;
+  if (isBangkokWeekend(checkInTime)) return { late: false, early: false, minutes: 0, weekend: true };
   const ci = new Date(checkInTime);
   const thStr = ci.toLocaleString("en-US", { timeZone: "Asia/Bangkok", hour12: false, hour: "2-digit", minute: "2-digit" });
   const [ciH, ciM] = thStr.split(":").map(Number);
@@ -710,6 +718,7 @@ function checkLate(checkInTime, workStart, grace = 0) {
 
 function checkEarly(checkOutTime, workEnd) {
   if (!checkOutTime || !workEnd) return null;
+  if (isBangkokWeekend(checkOutTime)) return { late: false, early: false, minutes: 0, weekend: true };
   const co = new Date(checkOutTime);
   const thStr = co.toLocaleString("en-US", { timeZone: "Asia/Bangkok", hour12: false, hour: "2-digit", minute: "2-digit" });
   const [coH, coM] = thStr.split(":").map(Number);
@@ -1559,7 +1568,8 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
     let quoteType, info;
     if (mode === "in") {
       info = checkLate(now.toISOString(), wsOf(selectedEmp, settings?.work_start), settings?.late_grace_minutes);
-      if (info?.late) quoteType = "late";
+      if (info?.weekend) quoteType = "weekend";
+      else if (info?.late) quoteType = "late";
       else if (info?.early) quoteType = "early";
       else quoteType = "onTime";
     } else {
@@ -1568,7 +1578,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
       else if (info?.late) quoteType = "stayLate";
       else quoteType = "onTimeLeave";
     }
-    const quote = randomQuote(quoteType);
+    const quote = randomQuote(quoteType === "weekend" ? "early" : quoteType);
     setDoneStatus({ type: quoteType, minutes: info?.minutes || 0 });
     setDoneQuote(quote);
     speakThai(quote);
@@ -1673,7 +1683,8 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
             <div style={{ color: "#166534", fontSize: "0.85rem" }}>เวลา {doneTime} น.</div>
             {mode === "in" && doneStatus && (() => {
               let badge;
-              if (doneStatus.type === "late") badge = <div style={{ marginTop: "0.5rem", background: "#fef2f2", border: "1px solid #fca5a5", color: "#dc2626", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>⚠️ มาสาย {formatMinutes(doneStatus.minutes)}</div>;
+              if (doneStatus.type === "weekend") badge = <div style={{ marginTop: "0.5rem", background: "#dcfce7", border: "1px solid #86efac", color: "#16a34a", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>🤝 {WEEKEND_HELP_LABEL} (วันหยุด)</div>;
+              else if (doneStatus.type === "late") badge = <div style={{ marginTop: "0.5rem", background: "#fef2f2", border: "1px solid #fca5a5", color: "#dc2626", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>⚠️ มาสาย {formatMinutes(doneStatus.minutes)}</div>;
               else if (doneStatus.type === "early") badge = <div style={{ marginTop: "0.5rem", background: "#EAF5FF", border: "1px solid #8FD0FF", color: "#008CFF", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>⏰ เข้าก่อนเวลา {formatMinutes(doneStatus.minutes)}</div>;
               else badge = <div style={{ marginTop: "0.5rem", color: "#16a34a", fontSize: "0.8rem", fontWeight: 600 }}>✓ มาตรงเวลา</div>;
               return (
@@ -1977,7 +1988,7 @@ function AttendancePage({ employees, activityLog, currentUser, settings, onRefre
                           <span style={{ background: "#EAF5FF", color: "#008CFF", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>⏰ เข้าก่อน {formatMinutes(lateInfo.minutes)}</span>
                         )}
                         {!lateInfo?.late && !lateInfo?.early && lateInfo && (
-                          <span style={{ background: "#dcfce7", color: "#16a34a", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>✓ ตรงเวลา</span>
+                          <span style={{ background: "#dcfce7", color: "#16a34a", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>{lateInfo.weekend ? `🤝 ${WEEKEND_HELP_LABEL}` : "✓ ตรงเวลา"}</span>
                         )}
                         {earlyInfo?.early && (
                           <span style={{ background: "#fef2f2", color: "#dc2626", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>🚪 กลับก่อน {formatMinutes(earlyInfo.minutes)}</span>
@@ -6532,7 +6543,10 @@ function isEvalSubject(emp, sources) {
   const id = String(emp.id);
   return TEACHING_EXECUTIVE_IDS.has(id) || !!sources?.plans?.some(row => String(row.employee_id) === id);
 }
-function exemptKgPlanEntries(emp, entries) {
+function exemptKgPlanEntries(emp, inputEntries) {
+  // กันบวกซ้ำ: ถ้าผู้บริหารให้คะแนน "เสียสละเวลา" เองในวันเดียวกันแล้ว ไม่ต้องนับอัตโนมัติ
+  const manualSacrifice = new Set((inputEntries || []).filter(entry => !entry?.auto && entry?.category === "sacrifice").map(entry => entry.date));
+  const entries = (inputEntries || []).filter(entry => !(entry?.auto && entry?.category === "sacrifice" && manualSacrifice.has(entry.date)));
   if (!emp) return entries;
   const kg = isKgHomeroomTeacher(emp) || isNonTeachingStaff(emp);
   const waived = new Set(PLAN_DEDUCT_WAIVERS.filter(w => String(w.employee_id) === String(emp.id)).map(w => w.week));
@@ -6567,6 +6581,10 @@ function computeAutoEntries(teacherId, sources, range, settings) {
     const end = row.end_date && row.end_date >= row.start_date ? row.end_date : row.start_date;
     let guard = 0;
     while (cursor && cursor <= end && guard < 200) { leaveDays.add(cursor); cursor = shiftDateKey(cursor, 1); guard += 1; }
+  });
+  // มาลงเวลาวันเสาร์-อาทิตย์ = ช่วยงานโรงเรียน (+ เสียสละเวลาให้กับโรงเรียน)
+  [...firstCheckIn.keys()].filter(date => date >= range.start && date <= lastDay && isBangkokWeekend(`${date}T12:00:00+07:00`)).sort().forEach(date => {
+    entries.push({ id: `auto-sacrifice-${date}`, auto: true, date, type: "add", points: 1, category: "sacrifice", reason: `${WEEKEND_HELP_LABEL} วันหยุด เข้า ${fmtTime(firstCheckIn.get(date))}` });
   });
   workDays.forEach(date => {
     const checkIn = firstCheckIn.get(date);
@@ -6677,7 +6695,7 @@ function evalSummary(entries) {
 }
 
 function evalEntryLabel(entry) {
-  if (entry.auto) return EVAL_AUTO_RULES.find(rule => rule.key === entry.category)?.label || "อัตโนมัติ";
+  if (entry.auto) return EVAL_AUTO_RULES.find(rule => rule.key === entry.category)?.label || EVAL_CATEGORIES.find(item => item.key === entry.category)?.label || "อัตโนมัติ";
   return EVAL_CATEGORIES.find(item => item.key === entry.category)?.label || "อื่นๆ";
 }
 
@@ -7562,7 +7580,7 @@ function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEv
   const checkedIn = attRows.filter(item => item.row).sort((a, b) => a.row.check_in.localeCompare(b.row.check_in));
   const lateList = checkedIn.filter(item => item.late > 0);
   const outList = checkedIn.filter(item => item.row.check_out);
-  const notIn = attRows.filter(item => !item.row);
+  const notIn = isBangkokWeekend(new Date()) ? [] : attRows.filter(item => !item.row); // วันหยุดไม่นับขาดลงเวลา
 
   // การลา
   const today = todayISO();
@@ -11439,7 +11457,7 @@ export default function HRApp() {
     return [
       {
         label: "วันนี้",
-        value: myAttToday ? (myLateInfo?.late ? `⚠️ สาย ${formatMinutes(myLateInfo.minutes)}` : "✓ ตรงเวลา") : "—",
+        value: myAttToday ? (myLateInfo?.late ? `⚠️ สาย ${formatMinutes(myLateInfo.minutes)}` : myLateInfo?.weekend ? `🤝 ${WEEKEND_HELP_LABEL}` : "✓ ตรงเวลา") : "—",
         icon: myLateInfo?.late ? AlertCircle : CheckCircle,
         color: myLateInfo?.late ? "#dc2626" : (myAttToday ? "#059669" : "#94a3b8"),
         bg: myLateInfo?.late ? "#fef2f2" : (myAttToday ? "#ecfdf5" : "#f8fafc"),

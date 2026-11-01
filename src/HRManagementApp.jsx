@@ -6543,10 +6543,7 @@ function isEvalSubject(emp, sources) {
   const id = String(emp.id);
   return TEACHING_EXECUTIVE_IDS.has(id) || !!sources?.plans?.some(row => String(row.employee_id) === id);
 }
-function exemptKgPlanEntries(emp, inputEntries) {
-  // กันบวกซ้ำ: ถ้าผู้บริหารให้คะแนน "เสียสละเวลา" เองในวันเดียวกันแล้ว ไม่ต้องนับอัตโนมัติ
-  const manualSacrifice = new Set((inputEntries || []).filter(entry => !entry?.auto && entry?.category === "sacrifice").map(entry => entry.date));
-  const entries = (inputEntries || []).filter(entry => !(entry?.auto && entry?.category === "sacrifice" && manualSacrifice.has(entry.date)));
+function exemptKgPlanEntries(emp, entries) {
   if (!emp) return entries;
   const kg = isKgHomeroomTeacher(emp) || isNonTeachingStaff(emp);
   const waived = new Set(PLAN_DEDUCT_WAIVERS.filter(w => String(w.employee_id) === String(emp.id)).map(w => w.week));
@@ -6581,10 +6578,6 @@ function computeAutoEntries(teacherId, sources, range, settings) {
     const end = row.end_date && row.end_date >= row.start_date ? row.end_date : row.start_date;
     let guard = 0;
     while (cursor && cursor <= end && guard < 200) { leaveDays.add(cursor); cursor = shiftDateKey(cursor, 1); guard += 1; }
-  });
-  // มาลงเวลาวันเสาร์-อาทิตย์ = ช่วยงานโรงเรียน (+ เสียสละเวลาให้กับโรงเรียน)
-  [...firstCheckIn.keys()].filter(date => date >= range.start && date <= lastDay && isBangkokWeekend(`${date}T12:00:00+07:00`)).sort().forEach(date => {
-    entries.push({ id: `auto-sacrifice-${date}`, auto: true, date, type: "add", points: 1, category: "sacrifice", reason: `${WEEKEND_HELP_LABEL} วันหยุด เข้า ${fmtTime(firstCheckIn.get(date))}` });
   });
   workDays.forEach(date => {
     const checkIn = firstCheckIn.get(date);
@@ -6695,7 +6688,7 @@ function evalSummary(entries) {
 }
 
 function evalEntryLabel(entry) {
-  if (entry.auto) return EVAL_AUTO_RULES.find(rule => rule.key === entry.category)?.label || EVAL_CATEGORIES.find(item => item.key === entry.category)?.label || "อัตโนมัติ";
+  if (entry.auto) return EVAL_AUTO_RULES.find(rule => rule.key === entry.category)?.label || "อัตโนมัติ";
   return EVAL_CATEGORIES.find(item => item.key === entry.category)?.label || "อื่นๆ";
 }
 
@@ -7494,6 +7487,79 @@ function ExecActivityReport({ employees }) {
   );
 }
 
+// รายงานผู้บริหาร: ใครมาลงเวลาวันหยุด (เสาร์-อาทิตย์/วันหยุดที่ตั้งไว้) เพื่อให้ผู้บริหารกรอกคะแนน "เสียสละเวลาให้กับโรงเรียน" เอง
+function ExecHolidayAttendance({ employees, currentUser, onOpenEval }) {
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState("month");
+  const [month, setMonth] = useState(() => todayISO().slice(0, 7));
+  const [from, setFrom] = useState(() => `${todayISO().slice(0, 7)}-01`);
+  const [to, setTo] = useState(() => todayISO());
+  const [rows, setRows] = useState(null);
+  const [holidays, setHolidays] = useState([]);
+  const [error, setError] = useState("");
+  const range = mode === "month" ? { start: `${month}-01`, end: shiftDateKey(`${shiftDateKey(`${month}-01`, 32).slice(0, 7)}-01`, -1) } : { start: from, end: to < from ? from : to };
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    setRows(null); setError("");
+    (async () => {
+      try {
+        const store = await loadEval2Store(currentUser).catch(() => null);
+        if (alive) setHolidays(store?.settings?.holidays || []);
+        const { data, error: err } = await supabase.from("attendance").select("id, employee_id, check_in, check_out, work_activity").gte("check_in", `${range.start}T00:00:00+07:00`).lte("check_in", `${range.end}T23:59:59+07:00`).order("check_in", { ascending: true }).limit(20000);
+        if (err) throw err;
+        if (alive) setRows(data || []);
+      } catch (err) { if (alive) { setError(err.message || "โหลดไม่สำเร็จ"); setRows([]); } }
+    })();
+    return () => { alive = false; };
+  }, [open, range.start, range.end]);
+  const viewerIsTest = isTestTeacher(currentUser);
+  const empById = new Map((employees || []).map(emp => [String(emp.id), emp]));
+  const holidaySet = new Set(holidays);
+  const shown = (rows || []).filter(row => {
+    const emp = empById.get(String(row.employee_id));
+    if (!emp || (!viewerIsTest && isTestTeacher(emp))) return false;
+    return isBangkokWeekend(row.check_in) || holidaySet.has(getDateKey(row.check_in));
+  });
+  const people = new Set(shown.map(row => String(row.employee_id))).size;
+  const small = { ...inputStyle, padding: "0.35rem 0.5rem", fontSize: "0.82rem", width: "auto" };
+  const cell = { padding: "0.35rem 0.5rem", borderTop: "1px solid #f1f5f9", fontSize: "0.82rem" };
+  return (
+    <ExecSection title="ลงเวลาวันหยุด (ช่วยงานโรงเรียน)" icon={Calendar} right={<button type="button" onClick={() => setOpen(!open)} style={{ ...btnSecondary, flex: "none", padding: "0.3rem 0.7rem", fontSize: "0.8rem" }}>{open ? "ซ่อน" : "เปิดดู"}</button>}>
+      {!open ? <div style={{ color: "#64748b", fontSize: "0.85rem" }}>ดูว่าใครมาลงเวลาวันเสาร์-อาทิตย์/วันหยุด เพื่อกรอกคะแนน "เสียสละเวลาให้กับโรงเรียน" เอง</div> : (
+        <div style={{ display: "grid", gap: "0.6rem" }}>
+          {error && <ErrorBox>{error}</ErrorBox>}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", alignItems: "center" }}>
+            <select value={mode} onChange={e => setMode(e.target.value)} style={small}><option value="month">รายเดือน</option><option value="range">เลือกช่วงวันที่</option></select>
+            {mode === "month" ? <input type="month" value={month} onChange={e => e.target.value && setMonth(e.target.value)} style={small} /> : (<>
+              <input type="date" value={from} onChange={e => e.target.value && setFrom(e.target.value)} style={small} /><span>ถึง</span>
+              <input type="date" value={to} onChange={e => e.target.value && setTo(e.target.value)} style={small} /></>)}
+            <span style={{ background: "#dcfce7", color: "#15803d", borderRadius: 999, padding: "0.15rem 0.6rem", fontWeight: 700, fontSize: "0.8rem" }}>{shown.length} ครั้ง · {people} คน</span>
+          </div>
+          {rows === null ? <div style={{ color: "#64748b" }}>กำลังโหลด...</div> : shown.length === 0 ? <div style={{ color: "#94a3b8", textAlign: "center", padding: "1rem" }}>ไม่มีผู้ลงเวลาวันหยุดในช่วงนี้</div> : (
+            <div style={{ overflowX: "auto" }}><table style={{ borderCollapse: "collapse", width: "100%" }}>
+              <thead><tr style={{ background: "#f8fafc", textAlign: "left", fontSize: "0.78rem", color: "#475569" }}><th style={cell}>ชื่อ</th><th style={cell}>วันที่</th><th style={cell}>เข้า</th><th style={cell}>ออก</th><th style={cell}></th></tr></thead>
+              <tbody>{shown.map(row => {
+                const emp = empById.get(String(row.employee_id));
+                const isHoliday = !isBangkokWeekend(row.check_in);
+                return (
+                  <tr key={row.id}>
+                    <td style={{ ...cell, fontWeight: 700, color: "#233862" }}>{emp.name}{row.work_activity === "training" && <span style={{ color: "#0072D9", fontSize: "0.7rem" }}> (อบรม)</span>}</td>
+                    <td style={cell}>{fmtDate(row.check_in)}{isHoliday && <span style={{ color: "#b45309", fontSize: "0.7rem" }}> วันหยุด</span>}</td>
+                    <td style={cell}>{fmtTime(row.check_in)}</td>
+                    <td style={cell}>{row.check_out ? fmtTime(row.check_out) : "-"}</td>
+                    <td style={cell}>{onOpenEval && <button type="button" onClick={() => onOpenEval(emp.id)} style={{ ...btnSecondary, flex: "none", padding: "0.2rem 0.55rem", fontSize: "0.75rem", whiteSpace: "nowrap" }}>+ ให้คะแนนเสียสละ</button>}</td>
+                  </tr>);
+              })}</tbody>
+            </table></div>
+          )}
+          <div style={{ color: "#94a3b8", fontSize: "0.75rem" }}>ปุ่ม "+ ให้คะแนนเสียสละ" จะเปิดหน้าประเมินของครูคนนั้น ให้เลือกหัวข้อ "เสียสละเวลาให้กับโรงเรียน" (+1) แล้วบันทึกเอง ระบบไม่บวกให้อัตโนมัติ</div>
+        </div>
+      )}
+    </ExecSection>
+  );
+}
+
 function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEval, onOpenLeave, onOpenCalendar }) {
   const [date, setDate] = useState(() => todayISO());
   const [attendance, setAttendance] = useState([]);
@@ -7623,6 +7689,7 @@ function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEv
       {error && <ErrorBox>{error}</ErrorBox>}
       <UpcomingCalendarCard onOpen={onOpenCalendar} />
       <ExecActivityReport employees={employees} />
+      <ExecHolidayAttendance employees={employees} currentUser={currentUser} onOpenEval={onOpenEval} />
       <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 1fr))" }}>
         <ExecSection title="การประเมินครู" icon={TrendingUp} right={<span style={{ fontSize: "0.75rem", color: "#64748b" }}>{evalNote}</span>}>
           {!evalRows ? <div style={{ color: "#64748b" }}>กำลังคำนวณคะแนน...</div> : (

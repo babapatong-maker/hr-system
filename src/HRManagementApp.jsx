@@ -3535,6 +3535,18 @@ function periodHasDetail(period) {
 // เติมวิชา/ห้อง/เวลาจากตารางสอนของครูเองให้อัตโนมัติ (ไม่ทับสิ่งที่ครูพิมพ์ไว้)
 const ACTIVITY_SUBJECT_RE = /(ชุมนุม|ลูกเสือ|เนตรนารี|ยุวกาชาด|แนะแนว|กิจกรรม|บำเพ็ญประโยชน์)/;
 const meaningfulText = value => String(value || "").replace(/[\s\-–—.]/g, "").length > 0;
+// เวลาคาบจากตารางสอน (HH:MM) — แก้ค่าที่พิมพ์ผิดในตารางสอน เช่น 00:30 → 12:30 เมื่อเวลาเลิกเป็นช่วงบ่าย
+function timetableSlotTimes(slot) {
+  const hhmm = value => (value && value !== "00:00:00" ? String(value).slice(0, 5) : "");
+  let start = hhmm(slot?.start_time);
+  const end = hhmm(slot?.end_time);
+  if (start && end && start.startsWith("00:")) {
+    const noon = `12:${start.slice(3)}`;
+    if (noon < end) start = noon;
+  }
+  return start && end && start < end ? { start, end } : null;
+}
+
 function autofillPeriodsFromTimetable(periods, weekStart, timetable) {
   if (!Array.isArray(timetable) || timetable.length === 0) return periods;
   const dates = weekDates(weekStart);
@@ -3558,9 +3570,14 @@ function autofillPeriodsFromTimetable(periods, weekStart, timetable) {
       fromSlot = true;
       if (!String(next.plan_class || "").trim()) next.plan_class = slot.class_room || "";
     }
-    const start = hhmm(slot.start_time), end = hhmm(slot.end_time);
-    const badTime = !next.start_time || !next.end_time || next.start_time >= next.end_time;
-    if ((badTime || fromSlot) && start && end) { next.start_time = start; next.end_time = end; }
+    // เวลาคาบยึดตามตารางสอนเสมอ (ครูแก้เองไม่ได้)
+    const times = timetableSlotTimes(slot);
+    if (times) { next.start_time = times.start; next.end_time = times.end; }
+    else {
+      const start = hhmm(slot.start_time), end = hhmm(slot.end_time);
+      const badTime = !next.start_time || !next.end_time || next.start_time >= next.end_time;
+      if ((badTime || fromSlot) && start && end) { next.start_time = start; next.end_time = end; }
+    }
     return next;
   });
 }
@@ -3620,7 +3637,8 @@ function WeekPeriodEditor({ period, disabled, onChange, onPickFile, onPickWorksh
   const [open, setOpen] = useState(defaultOpen);
   const [typing, setTyping] = useState(false);
   const subjectOptions = [...new Map((timetable || []).map(row => [timetableSlotLabel(row), row])).values()];
-  const applySlot = row => onChange({ subject: row.subject || "", plan_class: row.class_room || "", start_time: row.start_time && row.start_time !== "00:00:00" ? String(row.start_time).slice(0, 5) : period.start_time, end_time: row.end_time ? String(row.end_time).slice(0, 5) : period.end_time });
+  const lockedTimes = slot ? timetableSlotTimes(slot) : null;
+  const applySlot = row => lockedTimes ? onChange({ subject: row.subject || "", plan_class: row.class_room || "", start_time: lockedTimes.start, end_time: lockedTimes.end }) : onChange({ subject: row.subject || "", plan_class: row.class_room || "", start_time: row.start_time && row.start_time !== "00:00:00" ? String(row.start_time).slice(0, 5) : period.start_time, end_time: row.end_time ? String(row.end_time).slice(0, 5) : period.end_time });
   const { plan } = selectedPlanParts(period);
   const summary = periodFoldSummary(period, plan);
   return (
@@ -3652,11 +3670,15 @@ function WeekPeriodEditor({ period, disabled, onChange, onPickFile, onPickWorksh
         </Field>
       </div>
       <div style={periodGrid}>
-        <Field label="เวลาเริ่ม">
-          <input type="time" value={period.start_time || ""} onChange={event => onChange({ start_time: event.target.value })} style={periodInput} />
+        <Field label={lockedTimes ? "เวลาเริ่ม (จากตารางสอน)" : "เวลาเริ่ม"}>
+          {lockedTimes
+            ? <input type="time" value={lockedTimes.start} readOnly tabIndex={-1} title="เวลาดึงจากตารางสอน แก้ไม่ได้" style={{ ...periodInput, background: "#f1f5f9", color: "#475569", cursor: "not-allowed" }} />
+            : <input type="time" value={period.start_time || ""} onChange={event => onChange({ start_time: event.target.value })} style={periodInput} />}
         </Field>
-        <Field label="เวลาสิ้นสุด">
-          <input type="time" value={period.end_time || ""} onChange={event => onChange({ end_time: event.target.value })} style={periodInput} />
+        <Field label={lockedTimes ? "เวลาสิ้นสุด (จากตารางสอน)" : "เวลาสิ้นสุด"}>
+          {lockedTimes
+            ? <input type="time" value={lockedTimes.end} readOnly tabIndex={-1} title="เวลาดึงจากตารางสอน แก้ไม่ได้" style={{ ...periodInput, background: "#f1f5f9", color: "#475569", cursor: "not-allowed" }} />
+            : <input type="time" value={period.end_time || ""} onChange={event => onChange({ end_time: event.target.value })} style={periodInput} />}
         </Field>
       </div>
       <Field label="วิชา / ห้อง (จากตารางสอน)">
@@ -4307,6 +4329,8 @@ function defaultPlanWeek() {
 const NO_TIMETABLE_TEXT = "ยังไม่ได้กรอกตารางสอน จึงกรอกแผนการสอนไม่ได้ กรุณากรอกตารางสอนก่อน";
 
 function SupervisionTeacher({ currentUser, planFocus = null }) {
+  const [jumpFocus, setJumpFocus] = useState(null);
+  const openFocus = jumpFocus && (!planFocus || jumpFocus.at > (planFocus.at || 0)) ? jumpFocus : planFocus;
   const [weekStart, setWeekStart] = useState(() => planFocus?.date ? mondayOf(planFocus.date) : defaultPlanWeek());
   const [loadedStamp, setLoadedStamp] = useState(null);
   const [timetable, setTimetable] = useState([]);
@@ -4430,20 +4454,35 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
       const missingDays = weekDates(weekStart).flatMap((date, index) => (
         workPeriods.some(period => period.teach_date === date && periodIsBlank(period)) ? [`วัน${DAY_NAMES[index + 1]}`] : []
       ));
+      const dates = weekDates(weekStart);
+      const where = list => list.map(period => `${DAY_NAMES[dates.indexOf(period.teach_date) + 1] ? `วัน${DAY_NAMES[dates.indexOf(period.teach_date) + 1]}` : formatThaiDateKey(period.teach_date)} คาบ ${period.period_no}`).join(", ");
+      const failWith = (text, list) => {
+        const sorted = [...list].sort((a, b) => String(a.teach_date).localeCompare(String(b.teach_date)) || (Number(a.period_no) || 0) - (Number(b.period_no) || 0));
+        setError(`${text}: ${where(sorted)}`);
+        const first = sorted[0];
+        if (first) {
+          setJumpFocus({ date: first.teach_date, period: first.period_no, at: Date.now() });
+          setTimeout(() => document.getElementById(`plan-${first.teach_date}-${first.period_no}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 150);
+        }
+      };
+      const blank = workPeriods.filter(period => dates.includes(period.teach_date) && periodIsBlank(period));
       if (missingDays.length > 0) {
-        setError(`ส่งได้เมื่อครบทุกวันจันทร์ถึงศุกร์ ยังขาด ${missingDays.join(" ")} ให้กรอกคาบหรือติ๊กคาบว่าง`);
+        failWith(`ส่งได้เมื่อครบทุกวันจันทร์ถึงศุกร์ ยังขาด ${missingDays.join(" ")} ให้กรอกคาบหรือติ๊กคาบว่าง`, blank);
         return;
       }
-      if (taught.some(period => !period.start_time || !period.end_time || !String(period.subject || "").trim() || ![period.lesson_intro, period.lesson_activity, period.lesson_practice, period.lesson_summary].some(value => String(value || "").trim()))) {
-        setError("ทุกคาบที่สอนต้องมีเวลาเริ่ม เวลาเลิก วิชา และรายละเอียดการสอนอย่างน้อย 1 ขั้น ก่อนส่ง");
+      const noDetail = taught.filter(period => !period.start_time || !period.end_time || !String(period.subject || "").trim() || ![period.lesson_intro, period.lesson_activity, period.lesson_practice, period.lesson_summary].some(value => String(value || "").trim()));
+      if (noDetail.length) {
+        failWith("ทุกคาบที่สอนต้องมีเวลาเริ่ม เวลาเลิก วิชา และรายละเอียดการสอนอย่างน้อย 1 ขั้น ยังขาด", noDetail);
         return;
       }
-      if (taught.some(period => period.start_time >= period.end_time)) {
-        setError("เวลาเลิกต้องหลังเวลาเริ่ม");
+      const badTime = taught.filter(period => period.start_time >= period.end_time);
+      if (badTime.length) {
+        failWith("เวลาเลิกต้องหลังเวลาเริ่ม", badTime);
         return;
       }
-      if (taught.some(period => period.homework === "yes" && !String(period.homework_what || "").trim() && !period.homework_file?.dataUrl)) {
-        setError("คาบที่มีการบ้าน ต้องบอกว่างานคืออะไร หรืออัปโหลดใบงาน");
+      const noHw = taught.filter(period => period.homework === "yes" && !String(period.homework_what || "").trim() && !period.homework_file?.dataUrl);
+      if (noHw.length) {
+        failWith("คาบที่มีการบ้าน ต้องบอกว่างานคืออะไร หรืออัปโหลดใบงาน", noHw);
         return;
       }
     }
@@ -4654,11 +4693,11 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
               .sort((a, b) => (Number(a.period_no) || 0) - (Number(b.period_no) || 0));
             const filled = dayPeriods.filter(period => !periodIsBlank(period)).length;
             return (
-              <DayCard key={`${date}-${planFocus?.at || 0}`} defaultOpen={planFocus?.date === date} title={`วัน${DAY_NAMES[index + 1]}`} summary={`${formatThaiDateKey(date)} · ${filled}/6${timetable.some(row => row.day_of_week === index + 1) ? ` · ตารางสอน ${timetable.filter(row => row.day_of_week === index + 1).length} คาบ` : ""}`}>
+              <DayCard key={`${date}-${openFocus?.at || 0}`} defaultOpen={openFocus?.date === date} title={`วัน${DAY_NAMES[index + 1]}`} summary={`${formatThaiDateKey(date)} · ${filled}/6${timetable.some(row => row.day_of_week === index + 1) ? ` · ตารางสอน ${timetable.filter(row => row.day_of_week === index + 1).length} คาบ` : ""}`}>
                 {dayPeriods.map(period => (
                   <WeekPeriodEditor
-                    key={`${period.id}-${planFocus?.at || 0}`}
-                    defaultOpen={planFocus?.date === date && Number(planFocus?.period) === Number(period.period_no)}
+                    key={`${period.id}-${openFocus?.at || 0}`}
+                    defaultOpen={openFocus?.date === date && Number(openFocus?.period) === Number(period.period_no)}
                     slot={timetable.find(row => row.day_of_week === index + 1 && Number(row.period) === Number(period.period_no)) || null}
                     timetable={timetable}
                     period={period}

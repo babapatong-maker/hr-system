@@ -772,6 +772,7 @@ function isTestTeacher(emp) {
 
 // เจ้าหน้าที่ที่ไม่สอน (เช่น ธุรการ) — ไม่ต้องส่งแผน ไม่มีคาบ (ยังลงเวลา/ใช้ฟีเจอร์อื่นตามปกติ)
 function isNonTeachingStaff(user) {
+  if (PLAN_DEDUCT_WAIVERS.some(w => w.week === "*" && String(w.employee_id) === String(user?.id || ""))) return true;
   return /ธุรการ/.test(String(user?.position || "")) || /ธุรการ/.test(String(user?.department || ""));
 }
 // ครูอนุบาล (ตอ./อ.1–3) อยู่ห้องตัวเองทั้งวัน — ไม่แสดงในตารางสอนรายคาบของผู้บริหาร
@@ -6513,6 +6514,21 @@ async function loadEval2SourcesRaw(range) {
   return { attendance, leaves, plans, rolls, errors };
 }
 
+// ครูอนุบาล: ยังไม่หักคะแนนเรื่องส่งแผนรายสัปดาห์ (สาย/ไม่ส่ง)
+const KG_PLAN_EXEMPT_KEYS = new Set(["plan_late", "plan_missing"]);
+// ยกเว้นหักส่งแผน: { employee_id, week: วันจันทร์ของสัปดาห์ (YYYY-MM-DD) หรือ "*" = ถาวร, note }
+const PLAN_DEDUCT_WAIVERS = [
+  { employee_id: "e5cbb8ef-0984-4e32-920b-7042847b2ff4", week: "*", note: "อันธิกา มีสมสืบ — ธุรการ ไม่ได้สอน (ถาวร)" },
+  { employee_id: "667a471f-7d67-41b1-bb1e-e238b49da733", week: "2026-11-02", note: "ขนิษฐา จูปรางค์ — กรอกผิดเล็กน้อย ยกเว้นครั้งเดียว" },
+];
+function exemptKgPlanEntries(emp, entries) {
+  if (!emp) return entries;
+  const kg = isKgHomeroomTeacher(emp) || isNonTeachingStaff(emp);
+  const waived = new Set(PLAN_DEDUCT_WAIVERS.filter(w => String(w.employee_id) === String(emp.id)).map(w => w.week));
+  if (waived.has("*")) return (entries || []).filter(entry => !(entry?.type === "deduct" && KG_PLAN_EXEMPT_KEYS.has(entry.category)));
+  if (!kg && !waived.size) return entries;
+  return (entries || []).filter(entry => !(entry?.type === "deduct" && KG_PLAN_EXEMPT_KEYS.has(entry.category) && (kg || waived.has(entry.date))));
+}
 function computeAutoEntries(teacherId, sources, range, settings) {
   const id = String(teacherId);
   const today = todayISO();
@@ -6606,6 +6622,7 @@ function MyEvalScoreCard({ currentUser }) {
         const manual = (store.books?.[`${semKey}:${empId}`]?.entries || []).filter(entry => entry.date >= range.start && entry.date <= range.end);
         entries = [...computeAutoEntries(empId, sources, range, store.settings), ...manual];
       }
+      entries = exemptKgPlanEntries(currentUser, entries);
       const month = todayISO().slice(0, 7);
       const groups = new Map();
       entries.filter(entry => String(entry.date || "").startsWith(month)).forEach(entry => {
@@ -6755,7 +6772,7 @@ function TeacherDeductPage({ employees, currentUser, initialSelected = "" }) {
     const key = `${semKey}:${emp.id}`;
     const frozen = lock?.teachers?.[emp.id];
     const manual = (store?.books?.[key]?.entries || []).filter(entry => entry.date >= range.start && entry.date <= range.end);
-    const entries = frozen ? frozen.entries : [...computeAutoEntries(emp.id, sources, range, settings), ...manual];
+    const entries = exemptKgPlanEntries(emp, frozen ? frozen.entries : [...computeAutoEntries(emp.id, sources, range, settings), ...manual]);
     const summary = evalSummary(entries);
     return { emp, entries, ...summary, name: emp.name || "" };
   });
@@ -7490,7 +7507,7 @@ function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEv
       const rows = teachers.map(emp => {
         const frozen = lock?.teachers?.[emp.id];
         const manual = (store.books?.[`${semKey}:${emp.id}`]?.entries || []).filter(entry => entry.date >= range.start && entry.date <= range.end);
-        const entries = frozen ? frozen.entries : [...computeAutoEntries(emp.id, sources, range, store.settings), ...manual];
+        const entries = exemptKgPlanEntries(emp, frozen ? frozen.entries : [...computeAutoEntries(emp.id, sources, range, store.settings), ...manual]);
         return { emp, ...evalSummary(entries) };
       }).sort((a, b) => a.score - b.score || String(a.emp.name).localeCompare(String(b.emp.name), "th"));
       setEvalRows(rows);

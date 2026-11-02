@@ -4532,8 +4532,9 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
     setWeekStart(next);
   };
 
+  const [copyPick, setCopyPick] = useState(null); // { items: [{ key, period }], selected: { [key]: true } }
+  const copyKey = period => `${period.teach_date}#${period.period_no}`;
   const copyPreviousWeek = async () => {
-    if (JSON.stringify(periods) !== baseline && !window.confirm("คัดลอกจากสัปดาห์ก่อนจะแทนที่สิ่งที่กรอกอยู่ ข้อมูลจะยังไม่ถูกบันทึกจนกว่าจะกดบันทึกเอง")) return;
     setSaving(true);
     setError("");
     setMessage("");
@@ -4541,25 +4542,57 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
       const previousWeek = shiftDateKey(weekStart, -7);
       const rows = await fetchSupervisionRows(currentUser.id, previousWeek);
       const plan = rows[0] ? parseSupervisionPlan(rows[0].subject, previousWeek) : null;
-      const copied = (plan?.periods || []).filter(period => !periodIsBlank(period));
+      const copied = (plan?.periods || []).filter(period => !periodIsBlank(period))
+        .map(period => ({ ...period, teach_date: period.teach_date ? shiftDateKey(period.teach_date, 7) : weekStart }))
+        .sort((a, b) => a.teach_date.localeCompare(b.teach_date) || a.period_no - b.period_no);
       if (copied.length === 0) {
         setError("ยังไม่มีแผนของสัปดาห์ก่อน");
         return;
       }
-      setPeriods(periodsForEditor({
-        periods: copied.map(period => ({
-          ...period,
-          id: newSupervisionId(),
-          teach_date: period.teach_date ? shiftDateKey(period.teach_date, 7) : weekStart,
-        })),
-      }, weekStart));
-      setMessage("คัดลอกจากสัปดาห์ก่อนแล้ว กดบันทึกฉบับร่างหรือส่งให้ฝ่ายวิชาการเพื่อเก็บข้อมูล");
+      const items = copied.map(period => ({ key: copyKey(period), period }));
+      setCopyPick({ items, selected: Object.fromEntries(items.map(item => [item.key, true])) });
     } catch (err) {
       setError(err.message || "คัดลอกไม่สำเร็จ");
     } finally {
       setSaving(false);
     }
   };
+  const applyCopyPick = () => {
+    if (!copyPick) return;
+    const chosen = copyPick.items.filter(item => copyPick.selected[item.key]);
+    if (chosen.length === 0) { setError("ยังไม่ได้เลือกคาบที่จะคัดลอก"); return; }
+    const byKey = Object.fromEntries(chosen.map(item => [item.key, item.period]));
+    const overwrite = periods.some(period => byKey[copyKey(period)] && !periodIsBlank(period));
+    if (overwrite && !window.confirm("บางคาบที่เลือกมีข้อมูลกรอกอยู่แล้ว จะถูกแทนที่ด้วยของสัปดาห์ก่อน ข้อมูลจะยังไม่ถูกบันทึกจนกว่าจะกดบันทึกเอง")) return;
+    setPeriods(current => current.map(period => {
+      const source = byKey[copyKey(period)];
+      return source ? { ...source, id: newSupervisionId(), teach_date: period.teach_date, period_no: period.period_no, start_time: period.start_time || source.start_time, end_time: period.end_time || source.end_time } : period;
+    }));
+    setCopyPick(null);
+    setError("");
+    setMessage(`คัดลอก ${chosen.length} คาบจากสัปดาห์ก่อนแล้ว กดบันทึกฉบับร่างหรือส่งให้ฝ่ายวิชาการเพื่อเก็บข้อมูล`);
+  };
+  const copyPickModal = copyPick && (
+    <Modal title="เลือกคาบที่จะคัดลอกจากสัปดาห์ก่อน" subtitle="ติ๊กเฉพาะวันและคาบที่ต้องการ" onClose={() => setCopyPick(null)} icon={Copy}>
+      <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.6rem", flexWrap: "wrap" }}>
+        <button type="button" onClick={() => setCopyPick(c => ({ ...c, selected: Object.fromEntries(c.items.map(i => [i.key, true])) }))} style={{ ...btnSecondary, minHeight: 36, flex: "none" }}>เลือกทั้งหมด</button>
+        <button type="button" onClick={() => setCopyPick(c => ({ ...c, selected: {} }))} style={{ ...btnSecondary, minHeight: 36, flex: "none" }}>ไม่เลือกเลย</button>
+      </div>
+      <div style={{ maxHeight: "50vh", overflowY: "auto", display: "grid", gap: "0.3rem" }}>
+        {copyPick.items.map(({ key, period }) => (
+          <label key={key} style={{ display: "flex", gap: "0.5rem", alignItems: "center", padding: "0.4rem 0.5rem", border: "1px solid #e2e8f0", borderRadius: 8, cursor: "pointer", fontSize: "0.85rem" }}>
+            <input type="checkbox" checked={!!copyPick.selected[key]} onChange={event => setCopyPick(c => ({ ...c, selected: { ...c.selected, [key]: event.target.checked } }))} style={{ width: 18, height: 18 }} />
+            <span style={{ fontWeight: 800, color: "#233862", minWidth: 120 }}>{new Date(`${period.teach_date}T00:00:00`).toLocaleDateString("th-TH", { weekday: "short", day: "numeric", month: "short" })} คาบ {period.period_no}</span>
+            <span style={{ color: "#475569" }}>{period.free ? "ว่าง" : [period.subject, period.plan_class, period.plan_title].filter(Boolean).join(" · ") || "-"}</span>
+          </label>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.8rem" }}>
+        <button type="button" onClick={() => setCopyPick(null)} style={{ ...btnSecondary, minHeight: 44 }}>ยกเลิก</button>
+        <button type="button" onClick={applyCopyPick} style={{ ...btnPrimary, minHeight: 44 }}><Copy size={16} /> คัดลอก {copyPick.items.filter(i => copyPick.selected[i.key]).length} คาบ</button>
+      </div>
+    </Modal>
+  );
 
   const updatePeriod = (id, patch) => {
     setPeriods(current => current.map(period => period.id === id ? { ...period, ...patch } : period));
@@ -4645,6 +4678,7 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
   return (
     <div style={{ display: "grid", gap: "1rem" }}>
       <WeekSwitcher weekStart={weekStart} onChange={changeWeek} disabled={saving || loading} />
+      {copyPickModal}
       {error && <ErrorBox>{error}</ErrorBox>}
       {message && <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", borderRadius: "10px", padding: "0.75rem 1rem", color: "#166534", fontWeight: 700 }}>{message}</div>}
       {loading ? (
@@ -6564,6 +6598,8 @@ async function loadEval2SourcesRaw(range) {
   return { attendance, leaves, plans, rolls, errors };
 }
 
+// เริ่มหักคะแนนส่งแผน (ไม่ส่ง/สาย) ตั้งแต่สัปดาห์เปิดเทอม 2 พ.ย. 2569
+const PLAN_SCORE_START_WEEK = "2026-11-02";
 // ครูอนุบาล: ยังไม่หักคะแนนเรื่องส่งแผนรายสัปดาห์ (สาย/ไม่ส่ง)
 const KG_PLAN_EXEMPT_KEYS = new Set(["plan_late", "plan_missing"]);
 // ยกเว้นหักส่งแผน: { employee_id, week: วันจันทร์ของสัปดาห์ (YYYY-MM-DD) หรือ "*" = ถาวร, note }
@@ -6642,7 +6678,9 @@ function computeAutoEntries(teacherId, sources, range, settings) {
     const status = row ? supervisionStatusFromStartTime(row.start_time) : "missing";
     const sent = status === "submitted" || status === "late" || plan?.status === "submitted";
     const late = status === "late" || (plan?.status === "submitted" && plan?.late);
-    if (!sent) add("plan_missing", monday, `ไม่ส่งแผนสัปดาห์ ${formatThaiDateKey(monday)} – ${formatThaiDateKey(shiftDateKey(monday, 4))}`);
+    const planScored = monday >= PLAN_SCORE_START_WEEK; // ก่อนเปิดเทอม (สัปดาห์ 26 ต.ค.) ไม่หักคะแนนส่งแผน
+    if (!planScored) { /* ไม่หัก */ }
+    else if (!sent) add("plan_missing", monday, `ไม่ส่งแผนสัปดาห์ ${formatThaiDateKey(monday)} – ${formatThaiDateKey(shiftDateKey(monday, 4))}`);
     else if (late) add("plan_late", monday, `ส่งแผนสัปดาห์ ${formatThaiDateKey(monday)} – ${formatThaiDateKey(shiftDateKey(monday, 4))} สาย${plan?.submitted_at ? ` (ส่ง ${fmtDate(plan.submitted_at)} ${fmtTime(plan.submitted_at)})` : ""}`);
     (plan?.periods || []).forEach(period => {
       if (!period.free && periodHasDetail(period) && period.teach_date >= range.start && period.teach_date <= lastDay) taught.push(period);
@@ -8937,6 +8975,7 @@ function StudentRollTeacher({ currentUser, recordedBy = null }) {
   const counts = rollCounts(namedStudents, marks);
   const savedMarks = baseline.days[date]?.marks || {};
   const className = book.class_name.trim();
+  const noMilk = /^ม\.?\s*[1-6]/.test(className) || /มัธยม/.test(className); // มัธยมไม่มีนม → ไม่ถามคนดื่มแทน
 
   const persist = async (nextBook, success, keepMarks = false) => {
     setSaving(true);
@@ -9011,7 +9050,7 @@ function StudentRollTeacher({ currentUser, recordedBy = null }) {
     const cleanMilk = {};
     const cleanMilkNote = {};
     Object.keys(clean).forEach(id => {
-      if (clean[id] === "present" || !milk[id]) return;
+      if (noMilk || clean[id] === "present" || !milk[id]) return;
       cleanMilk[id] = milk[id];
       if (milk[id] === MILK_OTHER) cleanMilkNote[id] = String(milkNote[id] || "").trim().slice(0, 80);
     });
@@ -9122,7 +9161,7 @@ function StudentRollTeacher({ currentUser, recordedBy = null }) {
                                 </td>
                               </tr>
                             )}
-                            {value && value !== "present" && (
+                            {!noMilk && value && value !== "present" && (
                               <tr style={{ background: "#fffbeb" }}>
                                 <td colSpan={6} style={{ padding: "0.2rem 0.4rem 0.4rem" }}>
                                   <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", alignItems: "center", fontSize: "0.78rem" }}>
@@ -9337,7 +9376,8 @@ function StudentStatsFormCard({ rows, employees }) {
   const { all } = statsTotals(stats);
   const unknownSex = STUDENT_STATS_LEVELS.flatMap(level => stats.levels[level.key].unknownSex.map(student => `${level.key} ${studentLabel(student)}`));
   const unchecked = STUDENT_STATS_LEVELS.filter(level => stats.levels[level.key].unchecked > 0).map(level => level.key);
-  const milkRows = STUDENT_STATS_LEVELS.flatMap(level => stats.levels[level.key].milk.map(item => ({ level: level.key, ...item })));
+  const absentRows = STUDENT_STATS_LEVELS.flatMap(level => stats.levels[level.key].milk.map(item => ({ level: level.key, ...item })));
+  const milkRows = absentRows.filter(item => !/^ม\./.test(item.level)); // มัธยมไม่มีนม
   const milkLabel = item => item.choice === "student" ? studentLabel(item.drinker) : item.choice === "other" ? `อื่น ๆ${item.note ? `: ${item.note}` : ""}` : item.choice === "none" ? "ไม่มี" : "ยังไม่เลือก";
   const statusLabel = status => ({ personal: "ลากิจ", sick: "ลาป่วย", absent: "ขาด", "": "ยังไม่เช็ค" }[status] ?? status);
 
@@ -9396,6 +9436,17 @@ function StudentStatsFormCard({ rows, employees }) {
               <thead><tr style={{ background: "#fffbeb" }}><th style={rollTh}>ชั้น</th><th style={{ ...rollTh, textAlign: "left" }}>นักเรียน</th><th style={rollTh}>สถานะ</th><th style={{ ...rollTh, textAlign: "left" }}>ผู้ดื่มนมแทน</th></tr></thead>
               <tbody>{milkRows.map(item => (
                 <tr key={`${item.level}-${item.student.id}`} style={{ borderTop: "1px solid #f1f5f9" }}><td style={rollTd}>{item.level}</td><td style={{ ...rollTd, textAlign: "left" }}>{studentLabel(item.student)}</td><td style={rollTd}>{statusLabel(item.status)}</td><td style={{ ...rollTd, textAlign: "left", color: item.choice ? "#233862" : "#b91c1c" }}>{milkLabel(item)}</td></tr>
+              ))}</tbody>
+            </table>
+          )}
+        </details>
+        <details>
+          <summary style={{ cursor: "pointer", fontWeight: 800, color: "#b91c1c" }}>🏫 เช็คนักเรียนไม่มาโรงเรียน ({absentRows.length})</summary>
+          {absentRows.length === 0 ? <div style={{ color: "#94a3b8", fontSize: "0.82rem", padding: "0.4rem 0" }}>วันนี้มาครบทุกคน</div> : (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem", marginTop: "0.4rem" }}>
+              <thead><tr style={{ background: "#fef2f2" }}><th style={rollTh}>ชั้น</th><th style={{ ...rollTh, textAlign: "left" }}>นักเรียน</th><th style={rollTh}>สถานะ</th></tr></thead>
+              <tbody>{absentRows.map(item => (
+                <tr key={`abs-${item.level}-${item.student.id}`} style={{ borderTop: "1px solid #f1f5f9" }}><td style={rollTd}>{item.level}</td><td style={{ ...rollTd, textAlign: "left" }}>{studentLabel(item.student)}</td><td style={rollTd}>{statusLabel(item.status)}</td></tr>
               ))}</tbody>
             </table>
           )}

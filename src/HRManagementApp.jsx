@@ -8975,7 +8975,7 @@ function StudentRollTeacher({ currentUser, recordedBy = null }) {
   const counts = rollCounts(namedStudents, marks);
   const savedMarks = baseline.days[date]?.marks || {};
   const className = book.class_name.trim();
-  const noMilk = /^ม\.?\s*[1-6]/.test(className) || /มัธยม/.test(className); // มัธยมไม่มีนม → ไม่ถามคนดื่มแทน
+  const noMilk = isNoMilkClass(className); // มัธยม/เตรียมอนุบาลไม่มีนม → ไม่ถามคนดื่มแทน
 
   const persist = async (nextBook, success, keepMarks = false) => {
     setSaving(true);
@@ -9367,6 +9367,11 @@ ${body}
 </body></html>`;
 }
 
+function isNoMilkClass(name) {
+  const t = String(name || "").trim();
+  return /^ม\.?\s*[1-6]/.test(t) || /มัธยม/.test(t) || /เตรียมอนุบาล/.test(t) || /^ตอ\.?/.test(t);
+}
+
 function StudentStatsFormCard({ rows, employees }) {
   const [date, setDate] = useState(todayISO);
   const [busy, setBusy] = useState(false);
@@ -9377,7 +9382,7 @@ function StudentStatsFormCard({ rows, employees }) {
   const unknownSex = STUDENT_STATS_LEVELS.flatMap(level => stats.levels[level.key].unknownSex.map(student => `${level.key} ${studentLabel(student)}`));
   const unchecked = STUDENT_STATS_LEVELS.filter(level => stats.levels[level.key].unchecked > 0).map(level => level.key);
   const absentRows = STUDENT_STATS_LEVELS.flatMap(level => stats.levels[level.key].milk.map(item => ({ level: level.key, ...item })));
-  const milkRows = absentRows.filter(item => !/^ม\./.test(item.level)); // มัธยมไม่มีนม
+  const milkRows = absentRows.filter(item => !isNoMilkClass(item.level)); // มัธยม/เตรียมอนุบาลไม่มีนม
   const milkLabel = item => item.choice === "student" ? studentLabel(item.drinker) : item.choice === "other" ? `อื่น ๆ${item.note ? `: ${item.note}` : ""}` : item.choice === "none" ? "ไม่มี" : "ยังไม่เลือก";
   const statusLabel = status => ({ personal: "ลากิจ", sick: "ลาป่วย", absent: "ขาด", "": "ยังไม่เช็ค" }[status] ?? status);
 

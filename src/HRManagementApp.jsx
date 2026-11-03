@@ -5122,6 +5122,7 @@ const ROLL_STATUSES = [
   { value: "present", label: "มา", color: "#166534", bg: "#dcfce7", border: "#86efac" },
   { value: "personal", label: "ลากิจ", color: "#b45309", bg: "#fef3c7", border: "#fcd34d" },
   { value: "sick", label: "ลาป่วย", color: "#0072D9", bg: "#DCEFFF", border: "#8FD0FF" },
+  { value: "absent", label: "ขาด", color: "#b91c1c", bg: "#fee2e2", border: "#fca5a5" },
 ];
 // "absent" เก็บไว้อ่านข้อมูลเก่าเท่านั้น หน้าเช็คชื่อใช้แค่ มา / ลา (ลากิจ หรือ ป่วย)
 const ROLL_STATUS_VALUES = new Set([...ROLL_STATUSES.map(item => item.value), "absent"]);
@@ -9191,6 +9192,7 @@ function StudentRollTeacher({ currentUser, recordedBy = null }) {
                         </th>
                         <th style={rollTh}>ลากิจ</th>
                         <th style={rollTh}>ลาป่วย</th>
+                        <th style={rollTh}>ขาด</th>
                         <th style={rollTh}>ลบ</th>
                       </tr>
                     </thead>
@@ -9206,7 +9208,7 @@ function StudentRollTeacher({ currentUser, recordedBy = null }) {
                                 <button type="button" onClick={() => toggleSex(student)} disabled={saving} aria-label={`เพศของ ${studentLabel(student)}`} title="กดเพื่อสลับ ชาย/หญิง" style={{ marginRight: 4, minWidth: 24, height: 20, borderRadius: 6, border: "1px solid #cbd5e1", background: studentSex(student) === "M" ? "#DCEFFF" : studentSex(student) === "F" ? "#fce7f3" : "#fff7ed", color: studentSex(student) === "M" ? "#0072D9" : studentSex(student) === "F" ? "#be185d" : "#c2410c", fontWeight: 800, fontSize: "0.7rem", cursor: "pointer", padding: "0 4px", fontFamily: "inherit" }}>{studentSex(student) === "M" ? "ช" : studentSex(student) === "F" ? "ญ" : "?"}</button>
                                 {studentLabel(student)}
                               </td>
-                              {["present", "personal", "sick"].map(status => (
+                              {["present", "personal", "sick", "absent"].map(status => (
                                 <td key={status} style={rollTd}>
                                   <input type="checkbox" aria-label={`${studentLabel(student)} ${labelOf(ROLL_STATUSES, status)}`} disabled={saving} checked={value === status} onChange={tick(status)} style={{ width: 16, height: 16, cursor: "pointer" }} />
                                 </td>
@@ -9217,14 +9219,14 @@ function StudentRollTeacher({ currentUser, recordedBy = null }) {
                             </tr>
                             {value === "sick" && (
                               <tr>
-                                <td colSpan={6} style={{ padding: "0 0.3rem 0.35rem" }}>
+                                <td colSpan={7} style={{ padding: "0 0.3rem 0.35rem" }}>
                                   <SickScreening value={health[student.id]} disabled={saving} onChange={item => setHealth(current => ({ ...current, [student.id]: item }))} />
                                 </td>
                               </tr>
                             )}
                             {!noMilk && value && value !== "present" && (
                               <tr style={{ background: "#fffbeb" }}>
-                                <td colSpan={6} style={{ padding: "0.2rem 0.4rem 0.4rem" }}>
+                                <td colSpan={7} style={{ padding: "0.2rem 0.4rem 0.4rem" }}>
                                   <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", alignItems: "center", fontSize: "0.78rem" }}>
                                     <span style={{ fontWeight: 800, color: "#92400e" }}>🥛 นมของ {student.name} ใครดื่มแทน</span>
                                     <select aria-label={`ผู้ดื่มนมแทน ${studentLabel(student)}`} value={milk[student.id] || ""} disabled={saving} onChange={event => setMilk(current => ({ ...current, [student.id]: event.target.value }))} style={{ minHeight: 30, borderRadius: 8, border: "1px solid #fcd34d", fontSize: "0.8rem", fontFamily: "inherit", padding: "0 0.3rem", background: "#fff", maxWidth: "100%" }}>
@@ -9251,6 +9253,12 @@ function StudentRollTeacher({ currentUser, recordedBy = null }) {
                   {saving ? <RefreshCw size={16} style={{ animation: "spin 1s linear infinite" }} /> : <Save size={16} />}
                   {saving ? "กำลังบันทึก..." : "บันทึกการเช็คชื่อ"}
                 </button>
+                {!saving && baseline.days[date]?.saved_at && sameMarks(marks, savedMarks) && (
+                  <div role="status" style={{ background: "#dcfce7", border: "2px solid #22c55e", borderRadius: 10, padding: "0.75rem 0.9rem", color: "#166534", fontWeight: 800, textAlign: "center", lineHeight: 1.5 }}>
+                    ✅ บันทึกการเช็คชื่อเรียบร้อยแล้ว
+                    <div style={{ fontWeight: 600, fontSize: "0.82rem" }}>{formatThaiDateKey(date)} · เวลา {fmtTime(baseline.days[date].saved_at)} · มา {counts.present} · ลากิจ {counts.personal} · ลาป่วย {counts.sick} · ขาด {counts.absent}{counts.unset > 0 ? ` · ยังไม่ติ๊ก ${counts.unset}` : ""}</div>
+                  </div>
+                )}
               </div>
             </Card>
             </>

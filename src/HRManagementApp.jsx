@@ -1494,13 +1494,12 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
         setGpsState("success");
       },
       () => {
-        const demoLat = SCHOOL_LAT + (Math.random() - 0.5) * 0.0008;
-        const demoLng = SCHOOL_LNG + (Math.random() - 0.5) * 0.0008;
-        setCoords({ lat: demoLat, lng: demoLng });
-        setDistance(Math.round(haversineDistance(demoLat, demoLng, SCHOOL_LAT, SCHOOL_LNG)));
-        setGpsState("success");
+        // ห้ามสร้างพิกัดปลอม: GPS ใช้ไม่ได้ = ลงเวลาไม่ได้
+        setCoords(null);
+        setDistance(null);
+        setGpsState("error");
       },
-      { timeout: 8000, enableHighAccuracy: true }
+      { timeout: 15000, enableHighAccuracy: true, maximumAge: 0 }
     );
   }, []);
 
@@ -1668,6 +1667,13 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
         </div>
       </div>
 
+      {gpsState === "error" && (
+        <div style={{ textAlign: "center", marginBottom: "1.25rem", background: "#fef2f2", border: "1.5px solid #fca5a5", borderRadius: "12px", padding: "0.75rem", color: "#dc2626", fontWeight: 700 }}>
+          ❌ หาตำแหน่ง GPS ไม่ได้ ลงเวลาไม่ได้
+          <div style={{ fontSize: "0.8rem", color: "#64748b", marginTop: "0.25rem", fontWeight: 400 }}>เปิด GPS และอนุญาตให้เว็บเข้าถึงตำแหน่ง แล้วลองใหม่</div>
+          <button type="button" onClick={fetchLocation} style={{ ...btnSecondary, flex: "none", margin: "0.5rem auto 0" }}>ลองหาตำแหน่งใหม่</button>
+        </div>
+      )}
       {gpsState === "success" && (
         <div style={{ textAlign: "center", marginBottom: "1.25rem", background: isInZone ? "#ecfdf5" : "#fef2f2", border: `1.5px solid ${isInZone ? "#6ee7b7" : "#fca5a5"}`, borderRadius: "12px", padding: "0.75rem" }}>
           <div style={{ fontSize: "1rem", fontWeight: 700, color: isInZone ? "#059669" : "#dc2626" }}>{isInZone ? "✅ คุณอยู่ในพื้นที่" : "❌ อยู่นอกพื้นที่"}</div>

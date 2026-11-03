@@ -9,6 +9,8 @@ export const MILK_FIRST_ROW = 7;
 export const MILK_ROWS_PER_SHEET = 29; // แถว 7–35
 export const MILK_DAY_FIRST_COL = 6; // F = วันที่ 1 … AJ = วันที่ 31
 export const MILK_MARK = "/";
+// ลากิจ = ล · ลาป่วย = ป · ขาด = ข (ตัวดำ ไม่นับเป็นวันดื่มนม)
+const ABSENCE_CODE = { personal: "ล", sick: "ป", absent: "ข" };
 export const MILK_MARK_COLOR = "FFFF0000";
 export const MILK_MAX_MARKS = 4;
 
@@ -53,7 +55,8 @@ export function buildMilkRecord(book, month) {
       const subs = Object.entries(entry.record.milk || {}).filter(([absentId, pick]) => pick === student.id && absentId !== student.id).length;
       return Math.min(MILK_MAX_MARKS, 1 + subs);
     });
-    return { student, marks, days: marks.filter(Boolean).length, cartons: marks.reduce((sum, n) => sum + n, 0), substitutes: marks.reduce((sum, n) => sum + Math.max(0, n - 1), 0) };
+    const codes = days.map(entry => ABSENCE_CODE[entry.record?.marks?.[student.id] || ""] || "");
+    return { student, marks, codes, days: marks.filter(Boolean).length, cartons: marks.reduce((sum, n) => sum + n, 0), substitutes: marks.reduce((sum, n) => sum + Math.max(0, n - 1), 0) };
   });
   // ตรวจรายการดื่มแทนที่เลือกนักเรียนที่ไม่ได้มาเรียน (จะไม่ถูกขีด)
   days.forEach(entry => {
@@ -108,6 +111,7 @@ function fillSheet(sheet, record, part, teacherName) {
     record.days.forEach((entry, index) => {
       const cell = row.getCell(MILK_DAY_FIRST_COL + index);
       const count = item ? item.marks[index] : 0;
+      const code = !count && item ? item.codes[index] : "";
       // เซลล์จากแม่แบบใช้อ็อบเจกต์สไตล์ร่วมกัน → สร้างสไตล์ใหม่ทั้งก้อนต่อเซลล์ (กันการแก้ทับกันทั้งแถว)
       const base = cell.style || {};
       const border = { ...(base.border || {}) };
@@ -116,11 +120,11 @@ function fillSheet(sheet, record, part, teacherName) {
       else delete border.diagonal;
       cell.style = {
         ...base,
-        font: count ? markFont(count) : { ...(base.font || {}) },
-        alignment: { ...(base.alignment || {}), horizontal: count ? "center" : base.alignment?.horizontal, vertical: "middle" },
+        font: count ? markFont(count) : code ? { name: "Angsana New", size: 14, bold: true, color: { argb: "FF000000" } } : { ...(base.font || {}) },
+        alignment: { ...(base.alignment || {}), horizontal: count || code ? "center" : base.alignment?.horizontal, vertical: "middle" },
         border,
       };
-      cell.value = markText(count);
+      cell.value = code || markText(count);
     });
     row.getCell(37).value = item && item.days ? item.days : null; // AK รวมวัน
   }
@@ -189,7 +193,7 @@ export function milkRecordPrintHtml(record, { teacherName = "" } = {}) {
       const cells = record.days.map((entry, index) => {
         const count = item ? item.marks[index] : 0;
         const holiday = entry.inMonth && entry.weekend && !entry.checked;
-        return `<td class="d${holiday ? " hol" : ""}">${count ? `<span class="mk${count > 2 ? " sm" : ""}">${MILK_MARK.repeat(count)}</span>` : ""}</td>`;
+        return `<td class="d${holiday ? " hol" : ""}">${count ? `<span class="mk${count > 2 ? " sm" : ""}">${MILK_MARK.repeat(count)}</span>` : item && item.codes[index] ? `<b style="color:#000">${item.codes[index]}</b>` : ""}</td>`;
       }).join("");
       return `<tr style="height:${pt(21.95)}pt"><td class="c" style="font-size:${pt(12)}pt">${item ? esc(Number(item.student.number) || part * MILK_ROWS_PER_SHEET + i + 1) : i + 1 + part * MILK_ROWS_PER_SHEET}</td><td class="nm">${item ? esc(item.student.name) : ""}</td><td class="nm">${item ? esc(item.student.surname || "") : ""}</td><td></td><td></td>${cells}<td class="c">${item && item.days ? item.days : ""}</td><td></td><td></td><td></td><td></td></tr>`;
     }).join("");

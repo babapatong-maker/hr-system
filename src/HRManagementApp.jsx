@@ -3261,6 +3261,8 @@ function emptyPostNote() {
     admin_comment: "",
     admin_sign: "",
     admin_date: "",
+    not_used: false,
+    not_used_reason: "",
   };
 }
 
@@ -3277,6 +3279,8 @@ function cleanPostNote(raw) {
   ["problems", "solutions", "suggestions", "admin_comment"].forEach(key => { out[key] = text(raw[key]); });
   ["teacher_sign", "admin_sign"].forEach(key => { out[key] = text(raw[key], 120); });
   ["teacher_date", "admin_date"].forEach(key => { out[key] = /^\d{4}-\d{2}-\d{2}$/.test(raw[key] || "") ? raw[key] : ""; });
+  out.not_used = raw.not_used === true;
+  out.not_used_reason = out.not_used ? text(raw.not_used_reason, 1000) : "";
   return out;
 }
 
@@ -3296,8 +3300,14 @@ function legacyKpaText(raw) {
   return lines.join("\n");
 }
 
+function postNoteNeedsReason(note) {
+  return !!(note && note.not_used === true && !String(note.not_used_reason || "").trim());
+}
+
 function postNoteHasData(note) {
   if (!note) return false;
+  // ติ๊ก "ไม่ได้ใช้แผนนี้" ต้องมีเหตุผลจึงนับว่าบันทึกแล้ว
+  if (note.not_used === true) return !!String(note.not_used_reason || "").trim();
   const kpa = typeof note.kpa_text === "string" ? note.kpa_text : legacyKpaText(note);
   return !!(String(kpa || "").trim()
     || ["problems", "solutions", "suggestions", "teacher_sign", "admin_comment"].some(key => String(note[key] || "").trim()));
@@ -3452,8 +3462,38 @@ function YoutubeLinksEditor({ links, disabled, onChange }) {
 function PostNoteEditor({ note, disabled, teacherName, onChange }) {
   const value = cleanPostNote(note);
   const set = patch => onChange({ ...value, ...patch });
+  const missingReason = postNoteNeedsReason(value);
+  const notUsedBox = (
+    <div style={{ background: value.not_used ? "#FFF7ED" : "#F8FAFC", border: `1px solid ${missingReason ? "#dc2626" : "#e2e8f0"}`, borderRadius: "12px", padding: "0.6rem 0.75rem", display: "grid", gap: "0.5rem" }}>
+      <label style={{ display: "flex", gap: "0.5rem", alignItems: "center", fontWeight: 800, color: "#9a3412", cursor: disabled ? "default" : "pointer" }}>
+        <input type="checkbox" checked={value.not_used} disabled={disabled} onChange={event => set({ not_used: event.target.checked, not_used_reason: event.target.checked ? value.not_used_reason : "" })} />
+        ไม่ได้ใช้แผนนี้ในคาบนี้
+      </label>
+      {value.not_used && (
+        <Field label="เหตุผลที่ไม่ได้ใช้แผน / ไม่ได้สอน (บังคับกรอก)">
+          <textarea value={value.not_used_reason} disabled={disabled} placeholder="เช่น มีกิจกรรมกีฬาสี นักเรียนไปทัศนศึกษา ครูไปอบรม..." onChange={event => set({ not_used_reason: event.target.value })} style={{ ...periodArea, borderColor: missingReason ? "#dc2626" : undefined }} />
+          {missingReason && <div style={{ color: "#dc2626", fontSize: "0.85rem", fontWeight: 700 }}>ต้องกรอกเหตุผลก่อนจึงจะบันทึกได้</div>}
+        </Field>
+      )}
+    </div>
+  );
+  if (value.not_used) return (
+    <div style={{ display: "grid", gap: "0.75rem" }}>
+      {notUsedBox}
+      <div style={periodGrid}>
+        <Field label="ลงชื่อผู้สอน">
+          <input value={value.teacher_sign} disabled={disabled} placeholder={teacherName || ""} onChange={event => set({ teacher_sign: event.target.value })} style={periodInput} />
+        </Field>
+        <Field label="วันที่บันทึก">
+          <input type="date" value={value.teacher_date} disabled={disabled} onChange={event => set({ teacher_date: event.target.value })} style={periodInput} />
+        </Field>
+      </div>
+      <PostNoteAdminRead note={value} />
+    </div>
+  );
   return (
     <div style={{ display: "grid", gap: "0.75rem" }}>
+      {notUsedBox}
       <Field label="1. ผลการจัดกิจกรรมการเรียนรู้ (K/P/A)">
         <textarea value={value.kpa_text} disabled={disabled} placeholder={"K (ความรู้): เช่น นักเรียน 26 จาก 30 คน อธิบายหลักการ... ได้ถูกต้อง\nP (ทักษะกระบวนการ): เช่น ทำการทดลอง บันทึกผลได้...\nA (คุณลักษณะ): เช่น ตั้งใจ ทำงานร่วมกับผู้อื่น..."} onChange={event => set({ kpa_text: event.target.value })} style={{ ...periodArea, minHeight: 120 }} />
       </Field>
@@ -3488,6 +3528,14 @@ function PostNoteAdminRead({ note }) {
 function PostNoteRead({ note }) {
   const value = cleanPostNote(note);
   if (!postNoteHasData(value)) return <div style={{ color: "#94a3b8" }}>ยังไม่ได้บันทึกหลังสอน</div>;
+  if (value.not_used) return (
+    <div style={{ display: "grid", gap: "0.45rem" }}>
+      <div style={{ fontWeight: 800, color: "#9a3412" }}>ไม่ได้ใช้แผนนี้ในคาบนี้</div>
+      <div><div style={{ fontWeight: 800, color: "#233862" }}>เหตุผล</div><FullText value={value.not_used_reason} /></div>
+      <div style={{ color: "#334155", fontSize: "0.9rem" }}>ลงชื่อผู้สอน {value.teacher_sign || "-"} {value.teacher_date ? `· ${formatThaiDateKey(value.teacher_date)}` : ""}</div>
+      <PostNoteAdminRead note={value} />
+    </div>
+  );
   return (
     <div style={{ display: "grid", gap: "0.45rem" }}>
       <div><div style={{ fontWeight: 800, color: "#233862" }}>1. ผลการจัดกิจกรรมการเรียนรู้ (K/P/A)</div><FullText value={value.kpa_text} /></div>
@@ -4446,6 +4494,11 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
       return;
     }
     const effective = alreadySent ? "submitted" : nextStatus;
+    const noReason = periods.filter(period => postNoteNeedsReason(period.post_note));
+    if (noReason.length > 0) {
+      setError(`ติ๊ก "ไม่ได้ใช้แผนนี้ในคาบนี้" แล้วต้องกรอกเหตุผลด้วย: ${noReason.map(period => `${formatThaiDateKey(period.teach_date)} คาบ ${period.period_no}`).join(", ")}`);
+      return;
+    }
     const workPeriods = alreadySent ? periods : autofillPeriodsFromTimetable(periods, weekStart, timetable);
     const filled = workPeriods.filter(period => !periodIsBlank(period));
     const taught = filled.filter(period => !period.free);
@@ -6351,6 +6404,8 @@ const EVAL_CATEGORIES = [
   { key: "duty", label: "ไม่เข้าเวร (หมวดเดิม)", type: "deduct", points: 2, legacy: true },
 ];
 const evalPointOptions = key => EVAL_CATEGORIES.find(item => item.key === key)?.options || EVAL_POINT_OPTIONS;
+// วันที่ยังไม่เริ่มสอนจริง ไม่หักคะแนนบันทึกหลังสอน
+const POST_NOTE_WAIVED_DATES = ["2026-11-02"];
 const EVAL_AUTO_RULES = [
   { key: "late_checkin", label: "ลงเวลาสาย", points: 0.5 },
   { key: "no_checkin", label: "ไม่ลงเวลาเข้า (วันทำงาน ไม่นับวันลาที่อนุมัติ)", points: 1 },
@@ -6687,7 +6742,7 @@ function computeAutoEntries(teacherId, sources, range, settings) {
     });
   }
   taught.forEach(period => {
-    if (!postNoteHasData(period.post_note)) add("post_missing", period.teach_date, `ไม่มีบันทึกหลังสอน วันที่ ${formatThaiDateKey(period.teach_date)} คาบที่ ${period.period_no}${period.subject ? ` (${period.subject})` : ""}`);
+    if (!postNoteHasData(period.post_note) && !POST_NOTE_WAIVED_DATES.includes(String(period.teach_date || "").slice(0, 10))) add("post_missing", period.teach_date, `ไม่มีบันทึกหลังสอน วันที่ ${formatThaiDateKey(period.teach_date)} คาบที่ ${period.period_no}${period.subject ? ` (${period.subject})` : ""}`);
   });
   // เช็คชื่อนักเรียน: เฉพาะครูที่มีรายชื่อนักเรียน
   const rollRow = sources.rolls.find(row => String(row.employee_id) === id);

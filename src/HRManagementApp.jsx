@@ -1922,7 +1922,52 @@ function EmployeePage({ employees, currentUser, onRefresh }) {
   );
 }
 
-function AttendancePage({ employees, activityLog, currentUser, settings, onRefresh }) {
+function PostNoteMissingWarning({ currentUser, onOpenAcademic }) {
+  const [items, setItems] = useState([]);
+  useEffect(() => {
+    let alive = true;
+    const id = String(currentUser?.id || "");
+    if (!id || isTestTeacher(currentUser) || isNonTeachingStaff(currentUser) || isKgHomeroomTeacher(currentUser)) { setItems([]); return; }
+    const today = todayISO();
+    const start = shiftDateKey(today, -7);
+    const end = shiftDateKey(today, -1);
+    (async () => {
+      try {
+        const { data, error } = await supabase.from("teaching_schedule").select("id, employee_id, period, subject, created_at").eq("class_room", SUPERVISION_SCHEDULE_ROOM).eq("day_of_week", 0).eq("employee_id", id).gte("period", weekPeriodKey(mondayOf(start))).lte("period", weekPeriodKey(mondayOf(end)));
+        if (error || !alive) return;
+        const latest = new Map();
+        (data || []).forEach(row => { const cur = latest.get(row.period); if (!cur || String(row.created_at || "") > String(cur.created_at || "")) latest.set(row.period, row); });
+        const out = [];
+        latest.forEach(row => {
+          const plan = parseSupervisionPlan(row.subject, String(row.period).replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3"));
+          (plan?.periods || []).forEach(period => {
+            const d = String(period.teach_date || "").slice(0, 10);
+            if (period.free || isOffsitePeriod(period) || !periodHasDetail(period) || d < start || d > end) return;
+            const dow = new Date(`${d}T12:00:00+07:00`).getDay();
+            if (dow === 0 || dow === 6 || POST_NOTE_WAIVED_DATES.includes(d)) return;
+            if (!postNoteHasData(period.post_note)) out.push({ date: d, no: period.period_no, subject: period.subject });
+          });
+        });
+        out.sort((a, b) => a.date.localeCompare(b.date) || Number(a.no) - Number(b.no));
+        if (alive) setItems(out);
+      } catch { /* ไม่แสดงเตือนถ้าโหลดไม่ได้ */ }
+    })();
+    return () => { alive = false; };
+  }, [currentUser?.id]);
+  if (!items.length) return null;
+  return (
+    <div style={{ background: "#fef2f2", border: "1.5px solid #fca5a5", borderRadius: "14px", padding: "0.9rem 1rem", marginBottom: "1.25rem", color: "#991b1b" }}>
+      <div style={{ fontWeight: 800, marginBottom: "0.4rem" }}>⚠️ ยังไม่ได้บันทึกหลังสอน {items.length} คาบ (7 วันที่ผ่านมา)</div>
+      <ul style={{ margin: "0 0 0.6rem 1.1rem", padding: 0, fontSize: "0.88rem", lineHeight: 1.6 }}>
+        {items.slice(0, 10).map((it, i) => <li key={i}>{formatThaiDateKey(it.date)} คาบที่ {it.no}{it.subject ? ` (${it.subject})` : ""}</li>)}
+        {items.length > 10 && <li>และอีก {items.length - 10} คาบ</li>}
+      </ul>
+      {onOpenAcademic && <button onClick={onOpenAcademic} style={{ background: "#dc2626", color: "#fff", border: "none", borderRadius: "10px", padding: "0.5rem 1rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>ไปบันทึกหลังสอน →</button>}
+    </div>
+  );
+}
+
+function AttendancePage({ employees, activityLog, currentUser, settings, onRefresh, onOpenAcademic }) {
   const [showIn, setShowIn] = useState(false);
   const [showOut, setShowOut] = useState(false);
   const filtered = hasAdminRights(currentUser) ? activityLog : activityLog.filter(a => a.employee_id === currentUser?.id);
@@ -1930,6 +1975,7 @@ function AttendancePage({ employees, activityLog, currentUser, settings, onRefre
   return (
     <div>
       <PageHeader title="ลงเวลาเข้า-ออก" count={filtered.length} />
+      <PostNoteMissingWarning currentUser={currentUser} onOpenAcademic={onOpenAcademic} />
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
         <button onClick={() => setShowIn(true)} style={{ background: "linear-gradient(135deg, #008CFF, #0072D9)", border: "none", borderRadius: "1rem", padding: "1.5rem", color: "#fff", cursor: "pointer", fontFamily: "inherit", boxShadow: "0 8px 24px rgba(0,140,255,0.3)", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
           <LogIn size={32} /><div style={{ fontSize: "1.1rem", fontWeight: 800 }}>ลงเวลาเข้างาน</div>
@@ -3561,6 +3607,13 @@ function clockLabel(value) {
   return text || "……";
 }
 
+// คาบไปสอน/เรียนนอกสถานที่ (ตากฟ้า): ไม่ต้องทำแผน ไม่ต้องบันทึกหลังสอน ไม่หักคะแนน
+const OFFSITE_PERIOD_RE = /ตากฟ้า/;
+function isOffsitePeriod(period) {
+  return OFFSITE_PERIOD_RE.test(String(period?.subject || "")) || OFFSITE_PERIOD_RE.test(String(period?.plan_class || "")) || OFFSITE_PERIOD_RE.test(String(period?.class_room || ""));
+}
+const OFFSITE_NOTE = "ไปตากฟ้า (นอกสถานที่) ไม่ต้องทำแผน/บันทึก";
+
 function periodHasDetail(period) {
   return !!(period?.start_time
     || period?.end_time
@@ -3710,6 +3763,7 @@ function WeekPeriodEditor({ period, disabled, onChange, onPickFile, onPickWorksh
           คาบว่าง
         </label>
       </div>
+      {isOffsitePeriod(period) && <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#047857", borderRadius: "10px", padding: "0.45rem 0.7rem", fontWeight: 700, fontSize: "0.85rem" }}>🚌 {OFFSITE_NOTE}</div>}
       {open && (
       <>
       <div style={periodGrid}>
@@ -3823,6 +3877,7 @@ function WeekPeriodEditor({ period, disabled, onChange, onPickFile, onPickWorksh
         </Field>
       </QuietFold>
       <QuietFold title="บันทึกหลังสอน (บันทึกหลังแผน)">
+        {isOffsitePeriod(period) && <div style={{ color: "#047857", fontWeight: 700, fontSize: "0.85rem" }}>🚌 {OFFSITE_NOTE}</div>}
         <PostNoteEditor note={period.post_note} disabled={disabled} teacherName={teacherName} onChange={note => onChange({ post_note: note })} />
       </QuietFold>
       <Field label="มีงานหรือการบ้านหรือไม่">
@@ -3866,6 +3921,9 @@ function SupervisionPeriodRead({ period, defaultOpen = false, adminSlot = null, 
   const planLabel = choice.plan ? choice.plan.title : "";
   const topicLabel = choice.hour ? `ชั่วโมงที่ ${choice.hour.hour}` : "";
   const summary = periodFoldSummary(period, choice.plan);
+  if (!period.free && isOffsitePeriod(period)) {
+    return <div style={{ background: "#ecfdf5", borderRadius: "12px", padding: "0.7rem 0.8rem", fontWeight: 700, color: "#047857" }}>คาบที่ {period.period_no} · {String(period.subject || "").trim()} · 🚌 {OFFSITE_NOTE}</div>;
+  }
   if (!period.free && !periodHasDetail(period)) {
     return <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "0.7rem 0.8rem", color: "#94a3b8" }}>คาบที่ {period.period_no} · ยังไม่ได้กรอก</div>;
   }
@@ -4529,7 +4587,7 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
         failWith(`ส่งได้เมื่อครบทุกวันจันทร์ถึงศุกร์ ยังขาด ${missingDays.join(" ")} ให้กรอกคาบหรือติ๊กคาบว่าง`, blank);
         return;
       }
-      const noDetail = taught.filter(period => !period.start_time || !period.end_time || !String(period.subject || "").trim() || ![period.lesson_intro, period.lesson_activity, period.lesson_practice, period.lesson_summary].some(value => String(value || "").trim()));
+      const noDetail = taught.filter(period => !isOffsitePeriod(period)).filter(period => !period.start_time || !period.end_time || !String(period.subject || "").trim() || ![period.lesson_intro, period.lesson_activity, period.lesson_practice, period.lesson_summary].some(value => String(value || "").trim()));
       if (noDetail.length) {
         failWith("ทุกคาบที่สอนต้องมีเวลาเริ่ม เวลาเลิก วิชา และรายละเอียดการสอนอย่างน้อย 1 ขั้น ยังขาด", noDetail);
         return;
@@ -4539,7 +4597,7 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
         failWith("เวลาเลิกต้องหลังเวลาเริ่ม", badTime);
         return;
       }
-      const noHw = taught.filter(period => period.homework === "yes" && !String(period.homework_what || "").trim() && !period.homework_file?.dataUrl);
+      const noHw = taught.filter(period => !isOffsitePeriod(period) && period.homework === "yes" && !String(period.homework_what || "").trim() && !period.homework_file?.dataUrl);
       if (noHw.length) {
         failWith("คาบที่มีการบ้าน ต้องบอกว่างานคืออะไร หรืออัปโหลดใบงาน", noHw);
         return;
@@ -6745,7 +6803,7 @@ function computeAutoEntries(teacherId, sources, range, settings) {
     else if (!sent) add("plan_missing", monday, `ไม่ส่งแผนสัปดาห์ ${formatThaiDateKey(monday)} – ${formatThaiDateKey(shiftDateKey(monday, 4))}`);
     else if (late) add("plan_late", monday, `ส่งแผนสัปดาห์ ${formatThaiDateKey(monday)} – ${formatThaiDateKey(shiftDateKey(monday, 4))} สาย${plan?.submitted_at ? ` (ส่ง ${fmtDate(plan.submitted_at)} ${fmtTime(plan.submitted_at)})` : ""}`);
     (plan?.periods || []).forEach(period => {
-      if (!period.free && periodHasDetail(period) && period.teach_date >= range.start && period.teach_date <= lastDay) taught.push(period);
+      if (!period.free && !isOffsitePeriod(period) && periodHasDetail(period) && period.teach_date >= range.start && period.teach_date <= lastDay) taught.push(period);
     });
   }
   taught.forEach(period => {
@@ -12080,7 +12138,7 @@ export default function HRApp() {
                 </>
               )}
               {activePage === "employee" && <EmployeePage employees={employees} currentUser={currentUser} onRefresh={fetchData} />}
-              {activePage === "attendance" && <AttendancePage employees={employees} activityLog={activityLog} currentUser={actingUser} settings={settings} onRefresh={fetchData} />}
+              {activePage === "attendance" && <AttendancePage employees={employees} activityLog={activityLog} currentUser={actingUser} settings={settings} onRefresh={fetchData} onOpenAcademic={() => setActivePage("academic")} />}
               {activePage === "leave" && <LeavePage employees={employees} leaves={leaves} currentUser={actingUser} onRefresh={fetchData} />}
               {activePage === "outing" && <OutingPage employees={employees} outings={outings} currentUser={actingUser} onRefresh={fetchData} />}
               {activePage === "finance" && isSalaryOwner(currentUser) && isSalaryOwner(actingUser) && <FinancePortal employees={employees} attendance={activityLog} leaves={leaves} settings={settings} />}

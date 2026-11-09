@@ -6478,6 +6478,7 @@ const EVAL_AUTO_RULES = [
   { key: "plan_missing", label: "ไม่ส่งแผนรายสัปดาห์ (เลยวันอาทิตย์ 08:00 น. แล้วยังไม่ส่ง) ต่อสัปดาห์", points: 2 },
   { key: "post_missing", label: "ไม่มีบันทึกหลังสอน (ต่อคาบ)", points: 0.5 },
   { key: "roll_missing", label: "ไม่เช็คชื่อนักเรียน (ต่อวัน)", points: 0.5 },
+  { key: "training_auto", label: "ไปอบรม (ลงเวลาแบบไปอบรม) เพิ่มต่อครั้ง", points: 1, bonus: true },
 ];
 
 function defaultEval2Settings(workStart) {
@@ -6699,7 +6700,7 @@ async function loadEval2SourcesRaw(range) {
   const lastWeek = weekPeriodKey(mondayOf(range.end));
   const [attendance, leaves, plans, rolls] = await Promise.all([
     safe("ลงเวลา", async () => {
-      const { data, error } = await supabase.from("attendance").select("employee_id, check_in, work_activity, training_start_date, training_end_date").gte("check_in", `${shiftDateKey(range.start, -60)}T00:00:00+07:00`).lte("check_in", `${range.end}T23:59:59+07:00`).limit(20000);
+      const { data, error } = await supabase.from("attendance").select("id, employee_id, check_in, work_activity, training_location, training_start_date, training_end_date").gte("check_in", `${shiftDateKey(range.start, -60)}T00:00:00+07:00`).lte("check_in", `${range.end}T23:59:59+07:00`).limit(20000);
       if (error) throw new Error(error.message);
       return data || [];
     }),
@@ -6726,6 +6727,12 @@ const KG_PLAN_EXEMPT_KEYS = new Set(["plan_late", "plan_missing"]);
 const PLAN_DEDUCT_WAIVERS = [
   { employee_id: "e5cbb8ef-0984-4e32-920b-7042847b2ff4", week: "*", note: "อันธิกา มีสมสืบ — ธุรการ ไม่ได้สอน (ถาวร)" },
   { employee_id: "667a471f-7d67-41b1-bb1e-e238b49da733", week: "2026-11-02", note: "ขนิษฐา จูปรางค์ — กรอกผิดเล็กน้อย ยกเว้นครั้งเดียว" },
+];
+// ยกเว้นหักลงเวลา (สาย/ไม่ลงเวลา) รายคนรายวัน: { employee_id, date: YYYY-MM-DD, note }
+const ATTENDANCE_DEDUCT_WAIVERS = [
+  { employee_id: "b944759d-08a4-44da-b04f-961c13462640", date: "2026-11-09", note: "บุญเสริม อาบสุวรรณ์ — ผู้บริหารสั่งไม่หัก" },
+  { employee_id: "96b95ce0-4443-4bf4-9926-6f1f8be8c654", date: "2026-11-09", note: "อิศราวรรธน์ วงษา — ผู้บริหารสั่งไม่หัก" },
+  { employee_id: "43eda422-429b-4bee-aa5e-52634b038d21", date: "2026-11-09", note: "ศศิธร พิมพ์เปีย — ผู้บริหารสั่งไม่หัก" },
 ];
 // ผู้บริหารที่สอนและส่งแผน: ประเมิน/หักคะแนนส่งแผนเหมือนครู (ผู้บริหารคนอื่นถูกนับเมื่อมีแผนในระบบ)
 const TEACHING_EXECUTIVE_IDS = new Set([
@@ -6763,6 +6770,13 @@ function computeAutoEntries(teacherId, sources, range, settings) {
   const presentDays = new Set();
   sources.attendance.filter(row => String(row.employee_id) === id).forEach(row => {
     getAttendanceWorkDateKeys(row).forEach(key => presentDays.add(key));
+    if (row.check_in && row.work_activity === "training") {
+      const tKey = getDateKey(row.check_in);
+      if (tKey >= range.start && tKey <= range.end && tKey <= today && rules.training_auto?.on !== false) {
+        const pts = rules.training_auto?.points > 0 ? rules.training_auto.points : 1;
+        entries.push({ id: `auto-training_auto-${row.id || tKey}`, auto: true, date: tKey, type: "add", points: pts, category: "training_auto", reason: `ลงเวลาไปอบรม ${fmtTime(row.check_in)}${row.training_location ? " · " + row.training_location : ""}` });
+      }
+    }
     if (!row.check_in || row.work_activity === "training") return;
     const key = getDateKey(row.check_in);
     if (!firstCheckIn.has(key) || row.check_in < firstCheckIn.get(key)) firstCheckIn.set(key, row.check_in);
@@ -6774,7 +6788,9 @@ function computeAutoEntries(teacherId, sources, range, settings) {
     let guard = 0;
     while (cursor && cursor <= end && guard < 200) { leaveDays.add(cursor); cursor = shiftDateKey(cursor, 1); guard += 1; }
   });
+  const attWaived = new Set(ATTENDANCE_DEDUCT_WAIVERS.filter(w => String(w.employee_id) === id).map(w => w.date));
   workDays.forEach(date => {
+    if (attWaived.has(date)) return;
     const checkIn = firstCheckIn.get(date);
     if (checkIn) {
       const startAt = wsOf(id, settings.work_start);
@@ -6861,7 +6877,7 @@ function MyEvalScoreCard({ currentUser }) {
   return (
     <div style={{ border: "1.5px solid #B8E0FF", background: "#F5FAFF", borderRadius: 12, padding: "0.7rem 0.8rem", marginBottom: "0.75rem", fontSize: "0.82rem" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
-        <div><div style={{ fontWeight: 800, color: "#233862" }}>คะแนนประเมินของฉัน</div><div style={{ fontSize: "0.7rem", color: "#64748b" }}>ภาคเรียน {data.sem.term}/{data.sem.year} · เต็ม 100</div></div>
+        <div><div style={{ fontWeight: 800, color: "#233862" }}>คะแนนประเมินของฉัน</div><div style={{ fontSize: "0.7rem", color: "#64748b" }}>ภาคเรียน {data.sem.term}/{data.sem.year} · คะแนนตั้งต้น 100</div></div>
         <div style={{ textAlign: "right" }}><div style={{ fontSize: "1.6rem", fontWeight: 900, color: level.color, lineHeight: 1 }}>{data.score}</div><div style={{ fontSize: "0.7rem", fontWeight: 700, color: level.color }}>{level.label}</div></div>
       </div>
       <div style={{ marginTop: "0.4rem", fontSize: "0.72rem", color: "#64748b" }}>ทั้งเทอม: หัก −{data.deduct} · เพิ่ม +{data.bonus}</div>
@@ -6880,7 +6896,7 @@ function MyEvalScoreCard({ currentUser }) {
 function evalSummary(entries) {
   const deduct = entries.filter(entry => entry.type === "deduct").reduce((sum, entry) => sum + entry.points, 0);
   const bonus = entries.filter(entry => entry.type === "add").reduce((sum, entry) => sum + entry.points, 0);
-  const score = Math.max(0, Math.min(100, 100 - deduct + bonus));
+  const score = Math.max(0, 100 - deduct + bonus);
   return { deduct: Math.round(deduct * 10) / 10, bonus: Math.round(bonus * 10) / 10, score: Math.round(score * 10) / 10 };
 }
 
@@ -6897,11 +6913,14 @@ function EvalScoreChart({ entries, range }) {
   const endKey = range.end < todayISO() ? range.end : todayISO();
   const end = Math.max(start + 86400000, new Date(`${endKey}T00:00:00`).getTime());
   const x = date => 4 + ((new Date(`${date}T00:00:00`).getTime() - start) / (end - start)) * (width - 8);
-  const y = score => 6 + (1 - score / 100) * (height - 12);
+  let maxScore = 100;
+  { let s = 100; sorted.forEach(entry => { s = Math.max(0, s + (entry.type === "add" ? entry.points : -entry.points)); if (s > maxScore) maxScore = s; }); }
+  const top = Math.ceil(maxScore);
+  const y = score => 6 + (1 - score / top) * (height - 12);
   let score = 100;
   const points = [[x(range.start), y(100)]];
   sorted.forEach(entry => {
-    score = Math.max(0, Math.min(100, score + (entry.type === "add" ? entry.points : -entry.points)));
+    score = Math.max(0, score + (entry.type === "add" ? entry.points : -entry.points));
     points.push([x(entry.date), y(score)]);
   });
   points.push([x(endKey), y(score)]);
@@ -6909,7 +6928,7 @@ function EvalScoreChart({ entries, range }) {
   return (
     <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", maxWidth: 480, height: "auto", background: "#f8fafc", borderRadius: 8 }} role="img" aria-label="กราฟคะแนนตลอดภาคเรียน">
       {[90, 80, 70, 60].map(line => <line key={line} x1={0} x2={width} y1={y(line)} y2={y(line)} stroke="#e2e8f0" strokeDasharray="3 3" />)}
-      {[100, 60].map(line => <text key={line} x={width - 2} y={y(line) - 2} fontSize="8" textAnchor="end" fill="#94a3b8">{line}</text>)}
+      {[...new Set([top, 100, 60])].map(line => <text key={line} x={width - 2} y={y(line) - 2} fontSize="8" textAnchor="end" fill="#94a3b8">{line}</text>)}
       <path d={path} fill="none" stroke={evalLevel(score).color} strokeWidth="2" />
     </svg>
   );
@@ -7159,7 +7178,7 @@ function TeacherDeductPage({ employees, currentUser, initialSelected = "" }) {
         )}
         <Card padding="0.75rem">
           <div style={{ fontWeight: 800, fontSize: "0.9rem", marginBottom: "0.4rem" }}>ไทม์ไลน์ ({timeline.length})</div>
-          {timeline.length === 0 ? <div style={{ color: "#94a3b8", fontSize: "0.85rem" }}>ยังไม่มีรายการ คะแนนเต็ม 100</div> : (
+          {timeline.length === 0 ? <div style={{ color: "#94a3b8", fontSize: "0.85rem" }}>ยังไม่มีรายการ คะแนนตั้งต้น 100</div> : (
             <div style={{ display: "grid" }}>
               {timeline.map(entry => (
                 <div key={entry.id} style={{ display: "grid", gridTemplateColumns: "4.6rem minmax(0,1fr) auto", gap: "0.45rem", alignItems: "start", padding: "0.3rem 0", borderTop: "1px solid #f1f5f9", fontSize: "0.8rem" }}>
@@ -7196,7 +7215,7 @@ function TeacherDeductPage({ employees, currentUser, initialSelected = "" }) {
       </div>
       {showSettings && (
         <Card padding="0.75rem">
-          <div style={{ fontWeight: 800, fontSize: "0.88rem", marginBottom: "0.4rem" }}>หักอัตโนมัติ (คะแนนต่อครั้ง)</div>
+          <div style={{ fontWeight: 800, fontSize: "0.88rem", marginBottom: "0.4rem" }}>หัก/เพิ่มอัตโนมัติ (คะแนนต่อครั้ง)</div>
           <div style={{ display: "grid", gap: "0.3rem" }}>
             {EVAL_AUTO_RULES.map(rule => (
               <div key={rule.key} style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.82rem" }}>

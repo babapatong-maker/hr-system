@@ -801,10 +801,51 @@ function hasAdminRights(user) {
   return !!user && (user.role === "admin" || isExecutiveUser(user));
 }
 
-function canAccessNavItem(item, user) {
+// ชื่อห้องเวรพื้นที่ขึ้นต้นด้วยชั้น เช่น "ป. 1 พื้นที่รับผิดชอบ ..." → "ป.1"
+function cleaningGradeToken(text) {
+  const raw = String(text || "").normalize("NFC").replace(/\s+/g, " ").trim();
+  if (/^เตรียมอนุบาล/.test(raw) || /^ตอ\.?(\s|$)/.test(raw)) return "ตอ.";
+  const m = raw.match(/^(อ\.?\s*[1-3]|ป\.?\s*[1-6]|ม\.?\s*[1-6])/);
+  if (!m) return "";
+  const token = m[1].replace(/\s+/g, "");
+  const letter = token.charAt(0);
+  const num = token.replace(/^[อปม]\.?/, "");
+  if (letter === "อ") return `อ.${num}`;
+  if (letter === "ป") return `ป.${num}`;
+  if (letter === "ม") return `ม.${num}`;
+  return "";
+}
+function isKindergartenCleaningGrade(grade) {
+  const g = cleaningGradeToken(grade);
+  return g === "ตอ." || /^อ\.[1-3]$/.test(g);
+}
+function teachingGradeOf(grades, user) {
+  if (!grades || !user) return "";
+  return grades[user.id] || grades[String(user.id)] || "";
+}
+// ครูประจำชั้นประถม/มัธยมที่มีชั้นที่สอน (ป. หรือ ม.) — ไม่รวมครูอนุบาล/เตรียมอนุบาล
+// ไม่มีตารางมอบหมายผู้รับเวรแยกต่างหาก จึงใช้ครูประจำชั้นทุกคนในกลุ่มนี้
+function isCleaningDutyHomeroomTeacher(user, grade) {
+  if (!user || isExecutiveUser(user)) return false;
+  if (isKgTeacher(user)) return false;
+  const g = cleaningGradeToken(grade);
+  return /^(ป\.[1-6]|ม\.[1-6])$/.test(g) && !isKindergartenCleaningGrade(g);
+}
+function canAccessCleaningDuty(user, grade) {
+  return isExecutiveUser(user) || isCleaningDutyHomeroomTeacher(user, grade);
+}
+function isOwnCleaningRoom(roomOrName, grade) {
+  const name = typeof roomOrName === "string" ? roomOrName : (roomOrName?.name || roomOrName?.room_name || "");
+  const roomGrade = cleaningGradeToken(name);
+  const mine = cleaningGradeToken(grade);
+  return !!roomGrade && !!mine && roomGrade === mine;
+}
+
+function canAccessNavItem(item, user, teachingGrade) {
   if (!item || !user) return false;
   if (item.key === "finance") return isSalaryOwner(user);
-  if (item.key === "teacherEval" || item.key === "execDash" || item.key === "cleaningDuty") return isExecutiveUser(user);
+  if (item.key === "teacherEval" || item.key === "execDash") return isExecutiveUser(user);
+  if (item.key === "cleaningDuty") return canAccessCleaningDuty(user, teachingGrade);
   if (item.key === "kgShortPlan") return isKgTeacher(user) || isExecutiveUser(user);
   return item.roles.includes(hasAdminRights(user) ? "admin" : "employee");
 }
@@ -8001,7 +8042,7 @@ function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEv
   );
 }
 
-// ─── เวรความสะอาด / เวรพื้นที่ (เฉพาะผู้บริหาร/แอดมิน) ─────────────────────────
+// ─── เวรความสะอาด / เวรพื้นที่ (ผู้บริหารเต็มสิทธิ์ + ครูประจำชั้น ป./ม. ประเมินได้ทุกห้องยกเว้นห้องตนเอง; ครูอนุบาลเข้าไม่ได้) ─────────────────────────
 // แถวพิเศษใน teaching_schedule: class_room "__CLEANING_DUTY__"
 // period 1 = ทะเบียนห้องเรียนและพื้นที่รับผิดชอบ (kind "config"), period 2 = ผลการตรวจ 1 ครั้ง/แถว (kind "inspection")
 const CLEANING_DUTY_ROOM = "__CLEANING_DUTY__";
@@ -8151,19 +8192,42 @@ function CleaningLevelBadge({ percent }) {
   return <span style={{ background: level.bg, color: level.color, fontWeight: 800, fontSize: "0.72rem", borderRadius: 20, padding: "0.12rem 0.55rem", whiteSpace: "nowrap" }}>{level.label}</span>;
 }
 
-function emptyCleaningForm(rooms, criteria = CLEANING_CRITERIA) {
-  const room = rooms[0];
+function emptyCleaningForm(rooms, criteria = CLEANING_CRITERIA, blockedRoomIds = null) {
+  const blocked = blockedRoomIds instanceof Set ? blockedRoomIds : new Set(blockedRoomIds || []);
+  const room = rooms.find(item => !blocked.has(item.id)) || null;
   const scores = {};
   criteria.forEach(item => { scores[item.key] = 5; });
   return { room_id: room?.id || "", area: room?.areas?.[0] || "", date: todayISO(), criteria: criteria.map(c => ({ key: c.key, label: c.label, hint: c.hint || "" })), scores, note: "", photos: [] };
 }
 
-function CleaningDutyPage({ currentUser }) {
-  if (!isExecutiveUser(currentUser)) return <NoAccessCard />;
-  return <CleaningDutyInner currentUser={currentUser} />;
+function CleaningDutyPage({ currentUser, teachingGrade: gradeHint }) {
+  const isExec = isExecutiveUser(currentUser);
+  const [grade, setGrade] = useState(isExec ? "" : (gradeHint ?? null));
+  const [ready, setReady] = useState(isExec);
+  useEffect(() => {
+    if (isExec) { setReady(true); return; }
+    let active = true;
+    loadTeachingGrades()
+      .then(map => {
+        if (!active) return;
+        setGrade(map[currentUser?.id] || map[String(currentUser?.id || "")] || "");
+        setReady(true);
+      })
+      .catch(() => {
+        if (!active) return;
+        setGrade(gradeHint || "");
+        setReady(true);
+      });
+    return () => { active = false; };
+  }, [currentUser?.id, isExec, gradeHint]);
+  if (!ready) return <Card><div style={{ color: "#64748b" }}>กำลังตรวจสอบสิทธิ์...</div></Card>;
+  if (!canAccessCleaningDuty(currentUser, grade)) {
+    return <Card><div style={{ textAlign: "center", color: "#b91c1c", fontWeight: 800, padding: "1.5rem" }}>ไม่มีสิทธิ์เข้าถึงหน้านี้ (เฉพาะผู้บริหาร และครูประจำชั้นประถม/มัธยมที่รับเวรพื้นที่ · ครูอนุบาลประเมินไม่ได้)</div></Card>;
+  }
+  return <CleaningDutyInner currentUser={currentUser} teachingGrade={grade || ""} canManage={isExec} />;
 }
 
-function CleaningDutyInner({ currentUser }) {
+function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false }) {
   const [tab, setTab] = useState("inspect");
   const [config, setConfig] = useState(cleanCleaningConfig(null));
   const [inspections, setInspections] = useState([]);
@@ -8187,6 +8251,14 @@ function CleaningDutyInner({ currentUser }) {
   const [criterionEdit, setCriterionEdit] = useState(null); // { key, label, hint }
   const [criterionDraft, setCriterionDraft] = useState({ label: "", hint: "" }); // { title, text, confirmLabel, onConfirm }
   const rooms = config.rooms;
+  const blockedRoomIds = new Set((canManage ? [] : rooms.filter(room => isOwnCleaningRoom(room, teachingGrade))).map(room => room.id));
+  const scoringBlocked = roomOrItem => {
+    if (canManage) return false;
+    const id = roomOrItem?.id || roomOrItem?.room_id;
+    if (id && blockedRoomIds.has(id)) return true;
+    return isOwnCleaningRoom(roomOrItem, teachingGrade);
+  };
+  const canMutateInspection = item => canManage || (String(item?.by_id) === String(currentUser.id) && !scoringBlocked(item));
   const askConfirm = (title, text, onConfirm, confirmLabel = "ลบ") => setConfirmBox({ title, text, onConfirm, confirmLabel });
   const roomNameOf = item => rooms.find(room => room.id === item.room_id)?.name || item.room_name || "ห้องที่ลบแล้ว";
 
@@ -8206,31 +8278,34 @@ function CleaningDutyInner({ currentUser }) {
         const remote = await fetchCleaningRows();
         if (!active) return;
         let nextConfig = remote.config || cleanCleaningConfig(null);
-        if (local.config && local.config.pending && local.config.updated_at > nextConfig.updated_at) {
+        if (canManage && local.config && local.config.pending && local.config.updated_at > nextConfig.updated_at) {
           nextConfig = { ...local.config, row_id: nextConfig.row_id || local.config.row_id };
           try { nextConfig.row_id = await writeCleaningRow(nextConfig, currentUser.id); nextConfig.pending = false; } catch { /* คงไว้ในเครื่อง */ }
         }
+        const blockedIds = new Set((canManage ? [] : nextConfig.rooms.filter(room => isOwnCleaningRoom(room, teachingGrade))).map(room => room.id));
         const deletedSet = new Set(local.deleted);
         const byId = new Map();
         remote.inspections.forEach(item => { if (!deletedSet.has(item.id)) byId.set(item.id, item); });
         for (const item of local.inspections) {
           if (deletedSet.has(item.id) || !item.pending) continue;
+          if (!canManage && (blockedIds.has(item.room_id) || isOwnCleaningRoom(item, teachingGrade))) continue;
           const merged = { ...item, row_id: byId.get(item.id)?.row_id || item.row_id };
           try { merged.row_id = await writeCleaningRow(merged, currentUser.id); merged.pending = false; } catch { /* คงไว้ในเครื่อง */ }
           byId.set(item.id, merged);
         }
-        const toDelete = remote.inspections.filter(item => deletedSet.has(item.id) && item.row_id).map(item => item.row_id);
+        const toDelete = remote.inspections.filter(item => deletedSet.has(item.id) && item.row_id && (canManage || (String(item.by_id) === String(currentUser.id) && !blockedIds.has(item.room_id) && !isOwnCleaningRoom(item, teachingGrade)))).map(item => item.row_id);
         let remaining = local.deleted;
         if (toDelete.length) {
           const { error: delError } = await supabase.from("teaching_schedule").delete().in("id", toDelete);
           if (!delError) remaining = [];
         } else remaining = [];
-        if (active) { commit(nextConfig, [...byId.values()], remaining); setForm(emptyCleaningForm(nextConfig.rooms, nextConfig.criteria)); }
+        if (active) { commit(nextConfig, [...byId.values()], remaining); setForm(emptyCleaningForm(nextConfig.rooms, nextConfig.criteria, blockedIds)); }
       } catch (err) {
         if (active) {
           const fallback = local.config || cleanCleaningConfig(null);
+          const blockedIds = new Set((canManage ? [] : fallback.rooms.filter(room => isOwnCleaningRoom(room, teachingGrade))).map(room => room.id));
           commit(fallback, local.inspections, local.deleted);
-          setForm(emptyCleaningForm(fallback.rooms, fallback.criteria));
+          setForm(emptyCleaningForm(fallback.rooms, fallback.criteria, blockedIds));
           setError(`โหลดจากฐานข้อมูลไม่ได้ (${err.message || "เชื่อมต่อไม่สำเร็จ"}) แสดงข้อมูลที่บันทึกไว้ในเครื่องนี้`);
         }
       } finally {
@@ -8242,6 +8317,7 @@ function CleaningDutyInner({ currentUser }) {
   }, []);
 
   const saveConfig = async (nextRooms, success, nextInspections = inspections, nextCriteria = config.criteria) => {
+    if (!canManage) { setError("เฉพาะผู้บริหารที่จัดการทะเบียนห้องและเกณฑ์ได้"); return; }
     const next = cleanCleaningConfig({ ...config, rooms: nextRooms, criteria: nextCriteria, updated_at: new Date().toISOString() });
     try {
       next.row_id = await writeCleaningRow(next, currentUser.id);
@@ -8254,7 +8330,8 @@ function CleaningDutyInner({ currentUser }) {
     }
     commit(next, nextInspections);
     if (!editingId && (!next.rooms.some(room => room.id === form.room_id) || nextCriteria !== config.criteria)) {
-      setForm(current => ({ ...emptyCleaningForm(next.rooms, next.criteria), ...(next.rooms.some(room => room.id === current.room_id) ? { room_id: current.room_id, area: current.area, date: current.date, note: current.note, photos: current.photos } : {}) }));
+      const blockedIds = new Set((canManage ? [] : next.rooms.filter(room => isOwnCleaningRoom(room, teachingGrade))).map(room => room.id));
+      setForm(current => ({ ...emptyCleaningForm(next.rooms, next.criteria, blockedIds), ...(next.rooms.some(room => room.id === current.room_id) && !blockedIds.has(current.room_id) ? { room_id: current.room_id, area: current.area, date: current.date, note: current.note, photos: current.photos } : {}) }));
     }
   };
 
@@ -8367,8 +8444,11 @@ function CleaningDutyInner({ currentUser }) {
     const room = rooms.find(item => item.id === form.room_id);
     if (!room) { setError("กรุณาเลือกห้องเรียน"); return; }
     if (!form.area) { setError("กรุณาเลือกพื้นที่รับผิดชอบ"); return; }
+    if (scoringBlocked(room)) { setError("ไม่สามารถประเมินห้องของตนเองได้"); return; }
     const now = new Date().toISOString();
     const original = editingId ? inspections.find(entry => entry.id === editingId) : null;
+    if (original && !canMutateInspection(original)) { setError("แก้ไขได้เฉพาะผลการตรวจของตนเอง"); return; }
+    if (original && scoringBlocked(original)) { setError("ไม่สามารถประเมินห้องของตนเองได้"); return; }
     const item = original
       ? cleanCleaningInspection({ ...original, room_id: form.room_id, area: form.area, date: form.date, criteria: form.criteria, scores: form.scores, note: form.note, photos: form.photos, room_name: room.name, updated_at: now, edited_by: currentUser.name })
       : cleanCleaningInspection({ ...form, id: newSupervisionId(), room_name: room.name, by: currentUser.name, by_id: currentUser.id, at: now, updated_at: now });
@@ -8385,27 +8465,35 @@ function CleaningDutyInner({ currentUser }) {
     }
     commit(config, original ? inspections.map(entry => (entry.id === original.id ? item : entry)) : [item, ...inspections]);
     setEditingId("");
-    setForm(current => ({ ...emptyCleaningForm(rooms, criteria), room_id: current.room_id, area: current.area, date: original ? todayISO() : current.date }));
+    setForm(current => ({ ...emptyCleaningForm(rooms, criteria, blockedRoomIds), room_id: scoringBlocked(current) ? "" : current.room_id, area: scoringBlocked(current) ? "" : current.area, date: original ? todayISO() : current.date }));
     setBusy(false);
   };
 
   const startEdit = item => {
+    if (!canMutateInspection(item)) { setError(scoringBlocked(item) ? "ไม่สามารถประเมินห้องของตนเองได้" : "แก้ไขได้เฉพาะผลการตรวจของตนเอง"); return; }
     setEditingId(item.id);
     setForm({ room_id: item.room_id, area: item.area, date: item.date, criteria: item.criteria.map(c => ({ ...c, hint: criteria.find(x => x.key === c.key)?.hint || "" })), scores: { ...item.scores }, note: item.note, photos: [...item.photos] });
     setTab("inspect");
     setDetailRoom("");
     setMessage("");
     setError(rooms.some(room => room.id === item.room_id) ? "" : "ห้องของผลการตรวจนี้ถูกลบจากทะเบียนแล้ว กรุณาเลือกห้องใหม่ก่อนบันทึก");
-    if (!rooms.some(room => room.id === item.room_id)) setForm(current => ({ ...current, room_id: rooms[0]?.id || "", area: rooms[0]?.areas?.[0] || "" }));
+    if (!rooms.some(room => room.id === item.room_id)) {
+      const fallback = rooms.find(room => !blockedRoomIds.has(room.id)) || null;
+      setForm(current => ({ ...current, room_id: fallback?.id || "", area: fallback?.areas?.[0] || "" }));
+    }
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const cancelEdit = () => {
     setEditingId("");
-    setForm(emptyCleaningForm(rooms, criteria));
+    setForm(emptyCleaningForm(rooms, criteria, blockedRoomIds));
   };
 
-  const deleteInspection = item => askConfirm("ลบผลการตรวจนี้?", `${roomNameOf(item)} · ${item.area} · วันที่ ${formatThaiDateKey(item.date)} (${item.total}/${item.max} คะแนน) — ลบแล้วกู้คืนไม่ได้`, () => removeInspection(item));
+  const deleteInspection = item => {
+    if (!canMutateInspection(item)) { setError(scoringBlocked(item) ? "ไม่สามารถประเมินห้องของตนเองได้" : "ลบได้เฉพาะผลการตรวจของตนเอง"); return; }
+    askConfirm("ลบผลการตรวจนี้?", `${roomNameOf(item)} · ${item.area} · วันที่ ${formatThaiDateKey(item.date)} (${item.total}/${item.max} คะแนน) — ลบแล้วกู้คืนไม่ได้`, () => removeInspection(item));
+  };
   const removeInspection = async item => {
+    if (!canMutateInspection(item)) { setError(scoringBlocked(item) ? "ไม่สามารถประเมินห้องของตนเองได้" : "ลบได้เฉพาะผลการตรวจของตนเอง"); return; }
     let nextDeleted = deleted;
     if (item.row_id) {
       const { error: delError } = await supabase.from("teaching_schedule").delete().eq("id", item.row_id);
@@ -8443,8 +8531,9 @@ function CleaningDutyInner({ currentUser }) {
   summary.forEach(row => { row.rank = row.count ? ++rank : null; });
 
   const small = { ...inputStyle, padding: "0.4rem 0.55rem", fontSize: "0.88rem" };
-  const tabs = [["inspect", "บันทึกผลการตรวจ"], ["summary", "สรุปผลและอันดับ"], ["rooms", "ทะเบียนห้อง พื้นที่ และเกณฑ์"]];
+  const tabs = [["inspect", "บันทึกผลการตรวจ"], ["summary", "สรุปผลและอันดับ"], ...(canManage ? [["rooms", "ทะเบียนห้อง พื้นที่ และเกณฑ์"]] : [])];
   const formRoom = rooms.find(room => room.id === form.room_id);
+  const formBlocked = scoringBlocked(formRoom || form.room_id);
   const formCriteria = form.criteria || criteria;
   const formTotal = cleaningTotal(form.scores, formCriteria);
   const formMax = cleaningMaxOf(formCriteria);
@@ -8474,8 +8563,8 @@ function CleaningDutyInner({ currentUser }) {
           {item.pending && <span style={{ fontSize: "0.7rem", color: "#b45309" }}>รอซิงก์</span>}
           {editingId === item.id && <span style={{ fontSize: "0.7rem", color: "#FF7106", fontWeight: 800 }}>กำลังแก้ไข</span>}
           <span style={{ marginLeft: "auto", fontSize: "0.72rem", color: "#94a3b8" }}>ผู้ตรวจ {item.by || "-"}{item.at ? ` · ${fmtDate(item.at)} ${fmtTime(item.at)}` : ""}{item.edited_by && item.updated_at !== item.at ? ` · แก้ไขโดย ${item.edited_by} ${fmtDate(item.updated_at)} ${fmtTime(item.updated_at)}` : ""}</span>
-          <button type="button" aria-label="แก้ไขผลการตรวจ" title="แก้ไข" onClick={() => startEdit(item)} style={{ border: "none", background: "#EAF5FF", color: "#0072D9", borderRadius: 8, padding: "0.2rem 0.4rem", cursor: "pointer" }}><Pencil size={13} /></button>
-          <button type="button" aria-label="ลบผลการตรวจ" title="ลบ" onClick={() => deleteInspection(item)} style={{ border: "none", background: "#fee2e2", color: "#b91c1c", borderRadius: 8, padding: "0.2rem 0.4rem", cursor: "pointer" }}><Trash2 size={13} /></button>
+          {canMutateInspection(item) && <button type="button" aria-label="แก้ไขผลการตรวจ" title="แก้ไข" onClick={() => startEdit(item)} style={{ border: "none", background: "#EAF5FF", color: "#0072D9", borderRadius: 8, padding: "0.2rem 0.4rem", cursor: "pointer" }}><Pencil size={13} /></button>}
+          {canMutateInspection(item) && <button type="button" aria-label="ลบผลการตรวจ" title="ลบ" onClick={() => deleteInspection(item)} style={{ border: "none", background: "#fee2e2", color: "#b91c1c", borderRadius: 8, padding: "0.2rem 0.4rem", cursor: "pointer" }}><Trash2 size={13} /></button>}
         </div>
         <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
           {item.criteria.map(c => <span key={c.key} style={{ fontSize: "0.75rem", background: item.scores[c.key] >= 4 ? "#EAF5FF" : item.scores[c.key] >= 3 ? "#fef9c3" : "#fee2e2", color: "#233862", borderRadius: 8, padding: "0.15rem 0.45rem" }}>{c.label} {item.scores[c.key]}/5</span>)}
@@ -8489,7 +8578,7 @@ function CleaningDutyInner({ currentUser }) {
   const header = (
     <div style={{ background: "linear-gradient(90deg, #008CFF, #3EBFFB)", borderRadius: 18, padding: "1rem 1.2rem", color: "#fff", boxShadow: "0 4px 24px rgba(0,140,255,0.2)" }}>
       <div style={{ fontSize: "1.2rem", fontWeight: 800 }}>เวรความสะอาด / เวรพื้นที่</div>
-      <div style={{ fontSize: "0.85rem", opacity: 0.9 }}>บันทึกผลการตรวจความสะอาดพื้นที่รับผิดชอบของแต่ละห้องเรียน (เฉพาะผู้บริหาร)</div>
+      <div style={{ fontSize: "0.85rem", opacity: 0.9 }}>{canManage ? "บันทึกผลการตรวจความสะอาดพื้นที่รับผิดชอบของแต่ละห้องเรียน (ผู้บริหารประเมินได้ทุกห้อง)" : "ครูประจำชั้นประเมินได้ทุกห้อง ยกเว้นห้องประจำชั้นของตนเอง"}</div>
     </div>
   );
 
@@ -8520,7 +8609,7 @@ function CleaningDutyInner({ currentUser }) {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 140px), 1fr))", gap: "0.6rem" }}>
               <Field label="ห้องเรียน">
                 <select value={form.room_id} onChange={event => { const room = rooms.find(item => item.id === event.target.value); setForm(current => ({ ...current, room_id: event.target.value, area: room?.areas?.[0] || "" })); }} style={small}>
-                  {rooms.map(room => <option key={room.id} value={room.id}>{room.name}</option>)}
+                  {rooms.map(room => <option key={room.id} value={room.id}>{room.name}{blockedRoomIds.has(room.id) ? " (ห้องของตนเอง — ประเมินไม่ได้)" : ""}</option>)}
                 </select>
               </Field>
               <Field label="วันที่ตรวจ">
@@ -8534,6 +8623,7 @@ function CleaningDutyInner({ currentUser }) {
                 </select>
               </Field>
             </div>
+            {formBlocked && <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10, padding: "0.55rem 0.8rem", color: "#b91c1c", fontWeight: 800, fontSize: "0.9rem", marginTop: "0.7rem" }}>ไม่สามารถประเมินห้องของตนเองได้</div>}
             <div style={{ display: "grid", gap: "0.55rem", marginTop: "0.8rem" }}>
               {formCriteria.map((c, index) => (
                 <div key={c.key} style={{ background: "#F3F8FD", border: "1px solid #E4EEF8", borderRadius: 12, padding: "0.55rem 0.7rem" }}>
@@ -8544,7 +8634,7 @@ function CleaningDutyInner({ currentUser }) {
                   <div style={{ fontSize: "0.75rem", color: "#596068", margin: "0.15rem 0 0.35rem" }}>{c.hint}</div>
                   <div role="radiogroup" aria-label={c.label} style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap" }}>
                     {[0, 1, 2, 3, 4, 5].map(value => (
-                      <button key={value} type="button" role="radio" aria-checked={form.scores[c.key] === value} onClick={() => setForm(current => ({ ...current, scores: { ...current.scores, [c.key]: value } }))} style={{ minWidth: 38, height: 34, borderRadius: 10, border: `1px solid ${form.scores[c.key] === value ? "#008CFF" : "#d6e4f2"}`, background: form.scores[c.key] === value ? "linear-gradient(135deg, #008CFF, #3EBFFB)" : "#fff", color: form.scores[c.key] === value ? "#fff" : "#233862", fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>{value}</button>
+                      <button key={value} type="button" role="radio" aria-checked={form.scores[c.key] === value} disabled={formBlocked} onClick={() => { if (!formBlocked) setForm(current => ({ ...current, scores: { ...current.scores, [c.key]: value } })); }} style={{ minWidth: 38, height: 34, borderRadius: 10, border: `1px solid ${form.scores[c.key] === value ? "#008CFF" : "#d6e4f2"}`, background: form.scores[c.key] === value ? "linear-gradient(135deg, #008CFF, #3EBFFB)" : "#fff", color: form.scores[c.key] === value ? "#fff" : "#233862", fontWeight: 800, cursor: formBlocked ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: formBlocked ? 0.55 : 1 }}>{value}</button>
                     ))}
                   </div>
                 </div>
@@ -8556,9 +8646,9 @@ function CleaningDutyInner({ currentUser }) {
               </Field>
             </div>
             <div style={{ display: "grid", gap: "0.45rem", marginTop: "0.6rem" }}>
-              <label style={{ ...btnSecondary, flex: "none", width: "fit-content", cursor: busy ? "wait" : "pointer" }}>
+              <label style={{ ...btnSecondary, flex: "none", width: "fit-content", cursor: (busy || formBlocked) ? "not-allowed" : "pointer", opacity: formBlocked ? 0.55 : 1 }}>
                 <Upload size={16} /> {busy ? "กำลังประมวลผลรูป..." : `แนบรูปถ่าย (ไม่เกิน ${CLEANING_PHOTO_LIMIT} รูป)`}
-                <input type="file" accept="image/*" multiple disabled={busy} onChange={pickPhotos} style={{ display: "none" }} />
+                <input type="file" accept="image/*" multiple disabled={busy || formBlocked} onChange={pickPhotos} style={{ display: "none" }} />
               </label>
               {form.photos.length > 0 && photoStrip(form.photos, index => setForm(current => ({ ...current, photos: current.photos.filter((_, i) => i !== index) })))}
             </div>
@@ -8567,7 +8657,7 @@ function CleaningDutyInner({ currentUser }) {
               <CleaningLevelBadge percent={formMax ? (formTotal / formMax) * 100 : 0} />
               <span style={{ fontSize: "0.75rem", color: "#596068" }}>{formCriteria.length} เกณฑ์ × 5</span>
               {editingId && <button type="button" disabled={busy} onClick={cancelEdit} style={{ ...btnSecondary, flex: "none", marginLeft: "auto", padding: "0.6rem 1rem" }}><X size={16} /> ยกเลิกการแก้ไข</button>}
-              <button type="button" disabled={busy} onClick={submitInspection} style={{ ...btnPrimary, flex: "none", marginLeft: editingId ? 0 : "auto", padding: "0.6rem 1.2rem", background: "linear-gradient(90deg, #FF7106, #FF9A3C)", color: "#fff", cursor: busy ? "wait" : "pointer", boxShadow: "0 4px 14px rgba(255,113,6,0.3)" }}><Save size={16} /> {editingId ? "บันทึกการแก้ไข" : "บันทึกผลการตรวจ"}</button>
+              <button type="button" disabled={busy || formBlocked} onClick={submitInspection} style={{ ...btnPrimary, flex: "none", marginLeft: editingId ? 0 : "auto", padding: "0.6rem 1.2rem", background: "linear-gradient(90deg, #FF7106, #FF9A3C)", color: "#fff", cursor: (busy || formBlocked) ? "not-allowed" : "pointer", boxShadow: "0 4px 14px rgba(255,113,6,0.3)", opacity: formBlocked ? 0.55 : 1 }}><Save size={16} /> {editingId ? "บันทึกการแก้ไข" : "บันทึกผลการตรวจ"}</button>
             </div>
           </Card>
           <Card>
@@ -8630,7 +8720,7 @@ function CleaningDutyInner({ currentUser }) {
         </Card>
       )}
 
-      {tab === "rooms" && (
+      {tab === "rooms" && canManage && (
         <Card>
           <div style={{ display: "flex", alignItems: "baseline", gap: "0.6rem", flexWrap: "wrap", marginBottom: "0.3rem" }}>
             <div style={{ fontWeight: 800, color: "#233862" }}>เกณฑ์การให้คะแนน</div>
@@ -8674,7 +8764,7 @@ function CleaningDutyInner({ currentUser }) {
         </Card>
       )}
 
-      {tab === "rooms" && (
+      {tab === "rooms" && canManage && (
         <Card>
           <div style={{ fontWeight: 800, color: "#233862", marginBottom: "0.6rem" }}>ทะเบียนห้องเรียนและพื้นที่รับผิดชอบ</div>
           <div style={{ display: "flex", gap: "0.45rem", marginBottom: "0.8rem", flexWrap: "wrap" }}>
@@ -11573,6 +11663,7 @@ function StatCard({ stat }) {
 export default function HRApp() {
   const [currentUser, setCurrentUser] = useState(null);
   const [teacherPreview, setTeacherPreview] = useState(false);
+  const [teachingGrades, setTeachingGrades] = useState(null);
   const getInitialPage = () => {
     if (typeof window === "undefined") return "dashboard";
     if (window.location.hash === "#finance") return "finance";
@@ -11648,9 +11739,16 @@ export default function HRApp() {
       setActivePage("dashboard");
       return;
     }
-    if ((activePage === "teacherEval" || activePage === "execDash" || activePage === "cleaningDuty") && !isExecutiveUser(currentUser)) {
+    if ((activePage === "teacherEval" || activePage === "execDash") && !isExecutiveUser(currentUser)) {
       setActivePage("dashboard");
       return;
+    }
+    if (activePage === "cleaningDuty" && !isExecutiveUser(currentUser)) {
+      if (teachingGrades == null) return;
+      if (!canAccessCleaningDuty(currentUser, teachingGradeOf(teachingGrades, currentUser))) {
+        setActivePage("dashboard");
+        return;
+      }
     }
     if (currentPage && !currentPage.executiveOnly && !currentPage.roles.includes(hasAdminRights(currentUser) ? "admin" : "employee")) {
       if (window.location.hash === "#finance" || window.location.hash === "#payroll") {
@@ -11658,7 +11756,7 @@ export default function HRApp() {
       }
       setActivePage("dashboard");
     }
-  }, [currentUser, activePage]);
+  }, [currentUser, activePage, teachingGrades]);
 
   // ตรวจว่าเครื่องนี้ยังอยู่ใน 3 เครื่องล่าสุด ตอนเปิดหน้า ตอนกลับมาที่แท็บ และทุก 5 นาที (ลดการดึงข้อมูล)
   const currentUserId = currentUser?.id;
@@ -11682,6 +11780,14 @@ export default function HRApp() {
 
   useEffect(() => { const t = setInterval(() => setCurrentTime(new Date()), 1000); return () => clearInterval(t); }, []);
   useEffect(() => { if (currentUser) fetchData(); }, [currentUser]);
+  useEffect(() => {
+    if (!currentUser) { setTeachingGrades(null); return; }
+    let active = true;
+    loadTeachingGrades()
+      .then(map => { if (active) setTeachingGrades(map || {}); })
+      .catch(() => { if (active) setTeachingGrades({}); });
+    return () => { active = false; };
+  }, [currentUser?.id]);
 
   async function fetchData() {
     setLoading(true);
@@ -11807,7 +11913,12 @@ export default function HRApp() {
     }
     setEvalFocus("");
     setPlanFocus(null);
-    if ((key === "teacherEval" || key === "execDash" || key === "cleaningDuty") && !isExecutiveUser(actingUser)) {
+    if ((key === "teacherEval" || key === "execDash") && !isExecutiveUser(actingUser)) {
+      setActivePage("dashboard");
+      setSidebarOpen(false);
+      return;
+    }
+    if (key === "cleaningDuty" && !canAccessCleaningDuty(actingUser, teachingGradeOf(teachingGrades, actingUser))) {
       setActivePage("dashboard");
       setSidebarOpen(false);
       return;
@@ -11816,7 +11927,7 @@ export default function HRApp() {
     setSidebarOpen(false);
   };
 
-  const visibleNavItems = navItems.filter(item => canAccessNavItem(item, actingUser));
+  const visibleNavItems = navItems.filter(item => canAccessNavItem(item, actingUser, teachingGradeOf(teachingGrades, actingUser)));
 
   if (activePage === "payrollStandalone" && isSalaryOwner(currentUser)) {
     return loading ? (
@@ -12166,7 +12277,7 @@ export default function HRApp() {
               {activePage === "academic" && <AcademicPage employees={employees} currentUser={actingUser} planFocus={planFocus} />}
               {activePage === "activityPlan" && <ActivityPlanPage employees={employees} currentUser={actingUser} />}
               {activePage === "execDash" && (isExecutiveUser(actingUser) ? <ExecutiveDashboard employees={employees} leaves={leaves} settings={settings} currentUser={actingUser} onOpenEval={id => { setEvalFocus(String(id)); setActivePage("teacherEval"); }} onOpenLeave={() => openNavItem("leave")} onOpenCalendar={() => openNavItem("academicCalendar")} /> : <NoAccessCard />)}
-              {activePage === "cleaningDuty" && (isExecutiveUser(actingUser) ? <CleaningDutyPage currentUser={actingUser} /> : <NoAccessCard />)}
+              {activePage === "cleaningDuty" && ((isExecutiveUser(actingUser) || teachingGrades == null || canAccessCleaningDuty(actingUser, teachingGradeOf(teachingGrades, actingUser))) ? <CleaningDutyPage currentUser={actingUser} teachingGrade={teachingGradeOf(teachingGrades, actingUser)} /> : <NoAccessCard />)}
               {activePage === "teacherEval" && (isExecutiveUser(actingUser) ? <TeacherEvalPage employees={employees} currentUser={actingUser} initialSelected={evalFocus} /> : <NoAccessCard />)}
               {activePage === "settings" && <SettingsPage settings={settings} onRefresh={fetchData} />}
               {activePage === "academicCalendar" && <AcademicCalendarWithActivities employees={employees} currentUser={actingUser} />}

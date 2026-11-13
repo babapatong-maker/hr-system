@@ -1,7 +1,8 @@
 // แบบบันทึกการแจกนมให้นักเรียนดื่ม (บันทึกดื่มนม) รายห้อง/รายเดือน
 // เติมลงสำเนาแบบฟอร์มต้นฉบับ public/forms/milk_record_template.xlsx (ชีตเดียว ลอกจากไฟล์ .xls ของโรงเรียน)
-// เครื่องหมาย: มาเรียน = เส้นแดง 1 ขีด "/" · ถูกเลือกให้ดื่มนมแทนเพื่อน = เพิ่ม 1 ขีดต่อ 1 กล่อง ("//")
-// ขาด/ลา = ไม่มีเครื่องหมาย · วันเสาร์–อาทิตย์ที่ไม่มีการเช็คชื่อ = เส้นทแยงสีแดงทั้งคอลัมน์ (แบบเดียวกับต้นฉบับ)
+// เครื่องหมาย: มาเรียน = เส้นแดง 1 ขีด "/" · ถูกเลือกให้ดื่มนมแทนเพื่อน = เพิ่ม 1 ขีดต่อ 1 กล่อง แล้วต่อท้าย ท.เลขที่ เช่น "//ท.2" หรือ "///ท.2,5"
+// เลขที่หลัง ท. ใช้ student.number จากรายชื่อ (คอลัมน์ "ที่") ไม่ใช้ลำดับแถว
+// ขาด/ลา = ล/ป/ข ตัวดำ ไม่นับ · วันเสาร์–อาทิตย์ที่ไม่มีการเช็คชื่อ = เส้นทแยงสีแดงทั้งคอลัมน์ (แบบเดียวกับต้นฉบับ)
 import { MILK_OTHER, MILK_NONE, classLevelKey } from "./studentStatsForm.js";
 
 export const MILK_RECORD_TEMPLATE_URL = "/forms/milk_record_template.xlsx";
@@ -33,6 +34,39 @@ export function milkClassLine(className) {
 const daysInMonth = month => { const [y, m] = month.split("-").map(Number); return new Date(Date.UTC(y, m, 0)).getUTCDate(); };
 const dayOfWeek = (month, day) => { const [y, m] = month.split("-").map(Number); return new Date(Date.UTC(y, m - 1, day)).getUTCDay(); };
 
+// เลขที่ตามรายชื่อห้อง (คอลัมน์ "ที่") — ไม่ใช้ลำดับแถว
+function rosterNumber(student) {
+  const raw = String(student?.number ?? "").trim();
+  if (!raw) return "";
+  const n = Number(raw);
+  return Number.isFinite(n) ? String(n) : raw;
+}
+
+// ผู้ที่ถูกเลือกดื่มนมแทนเพื่อน: คืนเลขที่ของนักเรียนที่ขาด/ลา (เรียงน้อยไปมาก)
+function substituteNumbers(students, milk, drinkerId) {
+  const byId = new Map((students || []).map(student => [student.id, student]));
+  const nums = Object.entries(milk || {})
+    .filter(([absentId, pick]) => pick === drinkerId && absentId !== drinkerId && pick !== MILK_OTHER && pick !== MILK_NONE)
+    .map(([absentId]) => rosterNumber(byId.get(absentId)))
+    .filter(Boolean);
+  return [...new Set(nums)].sort((a, b) => (Number(a) - Number(b)) || String(a).localeCompare(String(b), "th"));
+}
+
+export const markText = (count, numbers = []) => {
+  if (!(count > 0)) return null;
+  const marks = MILK_MARK.repeat(count);
+  return numbers.length ? `${marks}ท.${numbers.join(",")}` : marks;
+};
+
+const markFontSize = text => {
+  const len = String(text || "").length;
+  if (len > 8) return 7;
+  if (len > 5) return 8;
+  if (len > 2) return 10;
+  return 14;
+};
+const markFont = text => ({ name: "Angsana New", size: markFontSize(text), bold: true, color: { argb: MILK_MARK_COLOR } });
+
 // book = { class_name, students, days } ของห้องเดียว · month = "YYYY-MM"
 export function buildMilkRecord(book, month) {
   const students = (book?.students || []).filter(student => String(student?.name || "").trim())
@@ -48,15 +82,18 @@ export function buildMilkRecord(book, month) {
     days.push({ day, date, inMonth: day <= total, weekend: dow === 0 || dow === 6, checked, record: checked ? record : null });
   }
   const rows = students.map(student => {
-    const marks = days.map(entry => {
-      if (!entry.record) return 0;
+    const cells = days.map(entry => {
+      if (!entry.record) return { count: 0, numbers: [] };
       const status = entry.record.marks?.[student.id] || "";
-      if (status !== "present" && status !== "late") return 0; // ขาด/ลา/ยังไม่เช็ค = ไม่มีเครื่องหมาย
-      const subs = Object.entries(entry.record.milk || {}).filter(([absentId, pick]) => pick === student.id && absentId !== student.id).length;
-      return Math.min(MILK_MAX_MARKS, 1 + subs);
+      if (status !== "present" && status !== "late") return { count: 0, numbers: [] }; // ขาด/ลา/ยังไม่เช็ค = ไม่มีเครื่องหมาย
+      const milk = entry.record.milk || {};
+      const subCount = Object.entries(milk).filter(([absentId, pick]) => pick === student.id && absentId !== student.id).length;
+      return { count: Math.min(MILK_MAX_MARKS, 1 + subCount), numbers: substituteNumbers(students, milk, student.id) };
     });
     const codes = days.map(entry => ABSENCE_CODE[entry.record?.marks?.[student.id] || ""] || "");
-    return { student, marks, codes, days: marks.filter(Boolean).length, cartons: marks.reduce((sum, n) => sum + n, 0), substitutes: marks.reduce((sum, n) => sum + Math.max(0, n - 1), 0) };
+    const marks = cells.map(cell => cell.count);
+    const forNumbers = cells.map(cell => cell.numbers);
+    return { student, marks, forNumbers, codes, days: marks.filter(Boolean).length, cartons: marks.reduce((sum, n) => sum + n, 0), substitutes: marks.reduce((sum, n) => sum + Math.max(0, n - 1), 0) };
   });
   // ตรวจรายการดื่มแทนที่เลือกนักเรียนที่ไม่ได้มาเรียน (จะไม่ถูกขีด)
   days.forEach(entry => {
@@ -88,9 +125,6 @@ export function buildMilkRecord(book, month) {
   };
 }
 
-const markText = count => (count > 0 ? MILK_MARK.repeat(count) : null);
-const markFont = count => ({ name: "Angsana New", size: count > 2 ? 10 : 14, bold: true, color: { argb: MILK_MARK_COLOR } });
-
 function fillSheet(sheet, record, part, teacherName) {
   const [year, mon] = record.month.split("-").map(Number);
   sheet.getCell("A4").value = milkClassLine(record.className) + (record.sheets > 1 ? `   (แผ่นที่ ${part + 1}/${record.sheets})` : "");
@@ -111,6 +145,7 @@ function fillSheet(sheet, record, part, teacherName) {
     record.days.forEach((entry, index) => {
       const cell = row.getCell(MILK_DAY_FIRST_COL + index);
       const count = item ? item.marks[index] : 0;
+      const label = count ? markText(count, item.forNumbers?.[index] || []) : null;
       const code = !count && item ? item.codes[index] : "";
       // เซลล์จากแม่แบบใช้อ็อบเจกต์สไตล์ร่วมกัน → สร้างสไตล์ใหม่ทั้งก้อนต่อเซลล์ (กันการแก้ทับกันทั้งแถว)
       const base = cell.style || {};
@@ -120,11 +155,11 @@ function fillSheet(sheet, record, part, teacherName) {
       else delete border.diagonal;
       cell.style = {
         ...base,
-        font: count ? markFont(count) : code ? { name: "Angsana New", size: 14, bold: true, color: { argb: "FF000000" } } : { ...(base.font || {}) },
-        alignment: { ...(base.alignment || {}), horizontal: count || code ? "center" : base.alignment?.horizontal, vertical: "middle" },
+        font: label ? markFont(label) : code ? { name: "Angsana New", size: 14, bold: true, color: { argb: "FF000000" } } : { ...(base.font || {}) },
+        alignment: { ...(base.alignment || {}), horizontal: label || code ? "center" : base.alignment?.horizontal, vertical: "middle", shrinkToFit: !!(label && String(label).length > 2), wrapText: false },
         border,
       };
-      cell.value = code || markText(count);
+      cell.value = code || label;
     });
     row.getCell(37).value = item && item.days ? item.days : null; // AK รวมวัน
   }
@@ -192,8 +227,10 @@ export function milkRecordPrintHtml(record, { teacherName = "" } = {}) {
       const item = slice[i];
       const cells = record.days.map((entry, index) => {
         const count = item ? item.marks[index] : 0;
+        const label = count ? markText(count, item.forNumbers?.[index] || []) : "";
         const holiday = entry.inMonth && entry.weekend && !entry.checked;
-        return `<td class="d${holiday ? " hol" : ""}">${count ? `<span class="mk${count > 2 ? " sm" : ""}">${MILK_MARK.repeat(count)}</span>` : item && item.codes[index] ? `<b style="color:#000">${item.codes[index]}</b>` : ""}</td>`;
+        const mkClass = !label ? "" : String(label).length > 8 ? " xs" : String(label).length > 5 ? " sm" : String(label).length > 2 ? " md" : "";
+        return `<td class="d${holiday ? " hol" : ""}">${label ? `<span class="mk${mkClass}">${esc(label)}</span>` : item && item.codes[index] ? `<b style="color:#000">${esc(item.codes[index])}</b>` : ""}</td>`;
       }).join("");
       return `<tr style="height:${pt(21.95)}pt"><td class="c" style="font-size:${pt(12)}pt">${item ? esc(Number(item.student.number) || part * MILK_ROWS_PER_SHEET + i + 1) : i + 1 + part * MILK_ROWS_PER_SHEET}</td><td class="nm">${item ? esc(item.student.name) : ""}</td><td class="nm">${item ? esc(item.student.surname || "") : ""}</td><td></td><td></td>${cells}<td class="c">${item && item.days ? item.days : ""}</td><td></td><td></td><td></td><td></td></tr>`;
     }).join("");
@@ -235,7 +272,9 @@ thead tr.g td, tbody.g td { border: 1px solid #000; }
 .d { padding: 0; text-align: center; }
 .hol { background: linear-gradient(to top left, transparent calc(50% - 0.6px), #ff0000 calc(50% - 0.6px), #ff0000 calc(50% + 0.6px), transparent calc(50% + 0.6px)); }
 .mk { color: #ff0000; font-weight: bold; font-size: ${pt(14)}pt; letter-spacing: -0.5px; }
-.mk.sm { font-size: ${pt(10)}pt; }
+.mk.md { font-size: ${pt(10)}pt; letter-spacing: -0.8px; }
+.mk.sm { font-size: ${pt(8)}pt; letter-spacing: -0.8px; }
+.mk.xs { font-size: ${pt(7)}pt; letter-spacing: -1px; }
 tbody.g tr { break-inside: avoid; }
 </style></head><body>${parts.join("")}
 <script>window.onload = () => (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => setTimeout(() => window.print(), 200));</script>

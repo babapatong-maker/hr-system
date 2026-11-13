@@ -9440,7 +9440,7 @@ function StudentRollTeacher({ currentUser, recordedBy = null }) {
 }
 
 // ─── แบบบันทึกการแจกนมให้นักเรียนดื่ม (รายห้อง/รายเดือน) ───────────────────────────────
-// entries: [{ key, book, teacherName }] · มา = ขีดแดง 1 ขีด · ถูกเลือกดื่มแทน = 2 ขีด · ขาด/ลา = ไม่ขีด
+// entries: [{ key, book, teacherName }] · มา = ขีดแดง 1 ขีด · ถูกเลือกดื่มแทน = เพิ่มขีดแล้วต่อท้าย ท.เลขที่ เช่น "//ท.2" · ขาด/ลา = ล/ป/ข ไม่ขีด
 function MilkRecordFormCard({ entries }) {
   const usable = (entries || []).filter(entry => (entry.book?.students || []).some(student => String(student?.name || "").trim()));
   const [key, setKey] = useState("");

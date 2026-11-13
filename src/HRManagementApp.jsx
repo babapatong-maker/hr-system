@@ -805,6 +805,7 @@ function hasAdminRights(user) {
 function cleaningGradeToken(text) {
   const raw = String(text || "").normalize("NFC").replace(/\s+/g, " ").trim();
   if (/^เตรียมอนุบาล/.test(raw) || /^ตอ\.?(\s|$)/.test(raw)) return "ตอ.";
+  if (/^อนุบาล(\s|$)/.test(raw)) return "อนุบาล";
   const m = raw.match(/^(อ\.?\s*[1-3]|ป\.?\s*[1-6]|ม\.?\s*[1-6])/);
   if (!m) return "";
   const token = m[1].replace(/\s+/g, "");
@@ -817,28 +818,49 @@ function cleaningGradeToken(text) {
 }
 function isKindergartenCleaningGrade(grade) {
   const g = cleaningGradeToken(grade);
-  return g === "ตอ." || /^อ\.[1-3]$/.test(g);
+  return g === "ตอ." || g === "อนุบาล" || /^อ\.[1-3]$/.test(g);
 }
 function teachingGradeOf(grades, user) {
   if (!grades || !user) return "";
   return grades[user.id] || grades[String(user.id)] || "";
 }
-// ครูประจำชั้นประถม/มัธยมที่มีชั้นที่สอน (ป. หรือ ม.) — ไม่รวมครูอนุบาล/เตรียมอนุบาล
-// ไม่มีตารางมอบหมายผู้รับเวรแยกต่างหาก จึงใช้ครูประจำชั้นทุกคนในกลุ่มนี้
-function isCleaningDutyHomeroomTeacher(user, grade) {
-  if (!user || isExecutiveUser(user)) return false;
-  if (isKgTeacher(user)) return false;
-  const g = cleaningGradeToken(grade);
-  return /^(ป\.[1-6]|ม\.[1-6])$/.test(g) && !isKindergartenCleaningGrade(g);
+function cleaningTeacherGrade(user, grade) {
+  return cleaningGradeToken(grade) || cleaningGradeToken(kgTeacherInfo(user)?.level) || "";
 }
-function canAccessCleaningDuty(user, grade) {
-  return isExecutiveUser(user) || isCleaningDutyHomeroomTeacher(user, grade);
+function isKindergartenCleaningTeacher(user, grade) {
+  return isKgTeacher(user) || isKindergartenCleaningGrade(grade) || isKindergartenCleaningGrade(kgTeacherInfo(user)?.level);
+}
+// ครูทุกคนเข้าได้ (รวมอนุบาล) ยกเว้นเจ้าหน้าที่ที่ไม่สอน · ผู้บริหารประเมินได้ทุกพื้นที่
+function canAccessCleaningDuty(user) {
+  if (!user) return false;
+  if (isExecutiveUser(user)) return true;
+  return !isNonTeachingStaff(user);
 }
 function isOwnCleaningRoom(roomOrName, grade) {
   const name = typeof roomOrName === "string" ? roomOrName : (roomOrName?.name || roomOrName?.room_name || "");
   const roomGrade = cleaningGradeToken(name);
   const mine = cleaningGradeToken(grade);
   return !!roomGrade && !!mine && roomGrade === mine;
+}
+function isKindergartenCleaningArea(area) {
+  const raw = String(area || "").normalize("NFC").replace(/\s+/g, " ").trim();
+  return raw === CLEANING_KG_AREA || /หน้าตึกอนุบาล/.test(raw);
+}
+function isKindergartenCleaningRoom(roomOrName) {
+  if (roomOrName && typeof roomOrName === "object" && roomOrName.id === CLEANING_KG_ROOM_ID) return true;
+  const name = typeof roomOrName === "string" ? roomOrName : (roomOrName?.name || roomOrName?.room_name || "");
+  const raw = String(name || "").normalize("NFC").replace(/\s+/g, " ").trim();
+  if (!raw) return false;
+  if (isKindergartenCleaningGrade(cleaningGradeToken(raw))) return true;
+  return /^อนุบาล(\s|$)/.test(raw);
+}
+// พื้นที่ของตนเอง = ห้อง/ชั้นที่ครูรับผิดชอบ (ป.1–ม.6 ตามคำนำชื่อห้อง) หรือพื้นที่อนุบาลรวม (บริเวณหน้าตึกอนุบาล)
+function isOwnCleaningAssignment(roomOrItem, grade, user, area) {
+  if (isKindergartenCleaningTeacher(user, grade)) {
+    const areaName = area || (typeof roomOrItem === "object" ? roomOrItem?.area : "") || "";
+    if (isKindergartenCleaningArea(areaName) || isKindergartenCleaningRoom(roomOrItem)) return true;
+  }
+  return isOwnCleaningRoom(roomOrItem, cleaningTeacherGrade(user, grade));
 }
 
 function canAccessNavItem(item, user, teachingGrade) {
@@ -8044,12 +8066,30 @@ function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEv
   );
 }
 
-// ─── เวรความสะอาด / เวรพื้นที่ (ผู้บริหารเต็มสิทธิ์ + ครูประจำชั้น ป./ม. ประเมินได้ทุกห้องยกเว้นห้องตนเอง; ครูอนุบาลเข้าไม่ได้) ─────────────────────────
+// ─── เวรความสะอาด / เวรพื้นที่ (ผู้บริหารเต็มสิทธิ์ + ครูทุกคนประเมินได้ทุกพื้นที่ยกเว้นพื้นที่ตนเอง รวมครูอนุบาล) ─────────────────────────
 // แถวพิเศษใน teaching_schedule: class_room "__CLEANING_DUTY__"
 // period 1 = ทะเบียนห้องและพื้นที่รับผิดชอบ (kind "config"), period 2 = ผลการตรวจ 1 ครั้ง/แถว (kind "inspection")
 const CLEANING_DUTY_ROOM = "__CLEANING_DUTY__";
 const CLEANING_LOCAL_KEY = "hr_cleaning_duty_v1";
-const CLEANING_AREA_PRESETS = ["หอประชุม", "ทางเดิน", "สนาม", "ห้องน้ำ", "บันได", "สวนหย่อม"];
+const CLEANING_AREA_PRESETS = ["บริเวณหน้าตึกอนุบาล", "หอประชุม", "ทางเดิน", "สนาม", "ห้องน้ำ", "บันได", "สวนหย่อม"];
+const CLEANING_KG_AREA = "บริเวณหน้าตึกอนุบาล";
+const CLEANING_KG_ROOM_ID = "__CLEANING_KG_FRONT__";
+const CLEANING_KG_ROOM_NAME = "อนุบาล พื้นที่รับผิดชอบ บริเวณหน้าตึกอนุบาล";
+function isBuiltinCleaningRoom(room) {
+  return !!room && room.id === CLEANING_KG_ROOM_ID;
+}
+function hasKindergartenCleaningArea(rooms) {
+  return (rooms || []).some(room => isBuiltinCleaningRoom(room) || isKindergartenCleaningRoom(room) || (room.areas || []).some(isKindergartenCleaningArea));
+}
+// เติมพื้นที่อนุบาลในเครื่อง ถ้ายังไม่มีในทะเบียน — ไม่เขียนลงฐานข้อมูล
+function roomsWithCleaningDefaults(rooms) {
+  const list = Array.isArray(rooms) ? rooms.map(cleanCleaningRoom).filter(room => room.name) : [];
+  if (hasKindergartenCleaningArea(list)) return list;
+  return [...list, { id: CLEANING_KG_ROOM_ID, name: CLEANING_KG_ROOM_NAME, areas: [CLEANING_KG_AREA] }];
+}
+function persistableCleaningRooms(rooms) {
+  return (rooms || []).filter(room => !isBuiltinCleaningRoom(room));
+}
 // เกณฑ์ชุดเดิม (ห้องเรียน/กระดาน) เก็บไว้เฉพาะตอนอ่านผลการตรวจเก่า — ไม่ใช้เป็นเกณฑ์ใหม่
 const CLEANING_CRITERIA_LEGACY = [
   { key: "trash", label: "ขยะ", hint: "ไม่มีขยะตกค้างบนพื้น ใต้โต๊ะ และมุมห้อง" },
@@ -8265,7 +8305,7 @@ function CleaningDutyPage({ currentUser, teachingGrade: gradeHint }) {
   }, [currentUser?.id, isExec, gradeHint]);
   if (!ready) return <Card><div style={{ color: "#64748b" }}>กำลังตรวจสอบสิทธิ์...</div></Card>;
   if (!canAccessCleaningDuty(currentUser, grade)) {
-    return <Card><div style={{ textAlign: "center", color: "#b91c1c", fontWeight: 800, padding: "1.5rem" }}>ไม่มีสิทธิ์เข้าถึงหน้านี้ (เฉพาะผู้บริหาร และครูประจำชั้นประถม/มัธยมที่รับเวรพื้นที่ · ครูอนุบาลประเมินไม่ได้)</div></Card>;
+    return <Card><div style={{ textAlign: "center", color: "#b91c1c", fontWeight: 800, padding: "1.5rem" }}>ไม่มีสิทธิ์เข้าถึงหน้านี้ (เฉพาะผู้บริหารและครู)</div></Card>;
   }
   return <CleaningDutyInner currentUser={currentUser} teachingGrade={grade || ""} canManage={isExec} />;
 }
@@ -8293,13 +8333,14 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
   const [confirmBox, setConfirmBox] = useState(null);
   const [criterionEdit, setCriterionEdit] = useState(null); // { key, label, hint }
   const [criterionDraft, setCriterionDraft] = useState({ label: "", hint: "" }); // { title, text, confirmLabel, onConfirm }
-  const rooms = config.rooms;
-  const blockedRoomIds = new Set((canManage ? [] : rooms.filter(room => isOwnCleaningRoom(room, teachingGrade))).map(room => room.id));
+  const rooms = roomsWithCleaningDefaults(config.rooms);
+  const blockedRoomIds = new Set((canManage ? [] : rooms.filter(room => isOwnCleaningAssignment(room, teachingGrade, currentUser))).map(room => room.id));
   const scoringBlocked = roomOrItem => {
     if (canManage) return false;
+    const area = typeof roomOrItem === "object" ? roomOrItem?.area : "";
     const id = roomOrItem?.id || roomOrItem?.room_id;
     if (id && blockedRoomIds.has(id)) return true;
-    return isOwnCleaningRoom(roomOrItem, teachingGrade);
+    return isOwnCleaningAssignment(roomOrItem, teachingGrade, currentUser, area);
   };
   const canMutateInspection = item => canManage || (String(item?.by_id) === String(currentUser.id) && !scoringBlocked(item));
   const askConfirm = (title, text, onConfirm, confirmLabel = "ลบ") => setConfirmBox({ title, text, onConfirm, confirmLabel });
@@ -8325,30 +8366,30 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
           nextConfig = { ...local.config, row_id: nextConfig.row_id || local.config.row_id };
           try { nextConfig.row_id = await writeCleaningRow(nextConfig, currentUser.id); nextConfig.pending = false; } catch { /* คงไว้ในเครื่อง */ }
         }
-        const blockedIds = new Set((canManage ? [] : nextConfig.rooms.filter(room => isOwnCleaningRoom(room, teachingGrade))).map(room => room.id));
+        const blockedIds = new Set((canManage ? [] : roomsWithCleaningDefaults(nextConfig.rooms).filter(room => isOwnCleaningAssignment(room, teachingGrade, currentUser))).map(room => room.id));
         const deletedSet = new Set(local.deleted);
         const byId = new Map();
         remote.inspections.forEach(item => { if (!deletedSet.has(item.id)) byId.set(item.id, item); });
         for (const item of local.inspections) {
           if (deletedSet.has(item.id) || !item.pending) continue;
-          if (!canManage && (blockedIds.has(item.room_id) || isOwnCleaningRoom(item, teachingGrade))) continue;
+          if (!canManage && (blockedIds.has(item.room_id) || isOwnCleaningAssignment(item, teachingGrade, currentUser))) continue;
           const merged = { ...item, row_id: byId.get(item.id)?.row_id || item.row_id };
           try { merged.row_id = await writeCleaningRow(merged, currentUser.id); merged.pending = false; } catch { /* คงไว้ในเครื่อง */ }
           byId.set(item.id, merged);
         }
-        const toDelete = remote.inspections.filter(item => deletedSet.has(item.id) && item.row_id && (canManage || (String(item.by_id) === String(currentUser.id) && !blockedIds.has(item.room_id) && !isOwnCleaningRoom(item, teachingGrade)))).map(item => item.row_id);
+        const toDelete = remote.inspections.filter(item => deletedSet.has(item.id) && item.row_id && (canManage || (String(item.by_id) === String(currentUser.id) && !blockedIds.has(item.room_id) && !isOwnCleaningAssignment(item, teachingGrade, currentUser)))).map(item => item.row_id);
         let remaining = local.deleted;
         if (toDelete.length) {
           const { error: delError } = await supabase.from("teaching_schedule").delete().in("id", toDelete);
           if (!delError) remaining = [];
         } else remaining = [];
-        if (active) { commit(nextConfig, [...byId.values()], remaining); setForm(emptyCleaningForm(nextConfig.rooms, nextConfig.criteria, blockedIds)); }
+        if (active) { commit(nextConfig, [...byId.values()], remaining); setForm(emptyCleaningForm(roomsWithCleaningDefaults(nextConfig.rooms), nextConfig.criteria, blockedIds)); }
       } catch (err) {
         if (active) {
           const fallback = local.config || cleanCleaningConfig(null);
-          const blockedIds = new Set((canManage ? [] : fallback.rooms.filter(room => isOwnCleaningRoom(room, teachingGrade))).map(room => room.id));
+          const blockedIds = new Set((canManage ? [] : roomsWithCleaningDefaults(fallback.rooms).filter(room => isOwnCleaningAssignment(room, teachingGrade, currentUser))).map(room => room.id));
           commit(fallback, local.inspections, local.deleted);
-          setForm(emptyCleaningForm(fallback.rooms, fallback.criteria, blockedIds));
+          setForm(emptyCleaningForm(roomsWithCleaningDefaults(fallback.rooms), fallback.criteria, blockedIds));
           setError(`โหลดจากฐานข้อมูลไม่ได้ (${err.message || "เชื่อมต่อไม่สำเร็จ"}) แสดงข้อมูลที่บันทึกไว้ในเครื่องนี้`);
         }
       } finally {
@@ -8361,7 +8402,7 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
 
   const saveConfig = async (nextRooms, success, nextInspections = inspections, nextCriteria = config.criteria) => {
     if (!canManage) { setError("เฉพาะผู้บริหารที่จัดการทะเบียนห้องและเกณฑ์ได้"); return; }
-    const next = cleanCleaningConfig({ ...config, rooms: nextRooms, criteria: nextCriteria, updated_at: new Date().toISOString() });
+    const next = cleanCleaningConfig({ ...config, rooms: persistableCleaningRooms(nextRooms), criteria: nextCriteria, updated_at: new Date().toISOString() });
     try {
       next.row_id = await writeCleaningRow(next, currentUser.id);
       next.pending = false;
@@ -8372,9 +8413,10 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
       setError(`${err.message || "บันทึกไม่สำเร็จ"} · เก็บไว้ในเครื่องนี้แล้ว จะซิงก์เมื่อเปิดหน้านี้ครั้งถัดไป`);
     }
     commit(next, nextInspections);
-    if (!editingId && (!next.rooms.some(room => room.id === form.room_id) || nextCriteria !== config.criteria)) {
-      const blockedIds = new Set((canManage ? [] : next.rooms.filter(room => isOwnCleaningRoom(room, teachingGrade))).map(room => room.id));
-      setForm(current => ({ ...emptyCleaningForm(next.rooms, next.criteria, blockedIds), ...(next.rooms.some(room => room.id === current.room_id) && !blockedIds.has(current.room_id) ? { room_id: current.room_id, area: current.area, date: current.date, note: current.note, photos: current.photos } : {}) }));
+    if (!editingId && (!roomsWithCleaningDefaults(next.rooms).some(room => room.id === form.room_id) || nextCriteria !== config.criteria)) {
+      const visibleRooms = roomsWithCleaningDefaults(next.rooms);
+      const blockedIds = new Set((canManage ? [] : visibleRooms.filter(room => isOwnCleaningAssignment(room, teachingGrade, currentUser))).map(room => room.id));
+      setForm(current => ({ ...emptyCleaningForm(visibleRooms, next.criteria, blockedIds), ...(visibleRooms.some(room => room.id === current.room_id) && !blockedIds.has(current.room_id) ? { room_id: current.room_id, area: current.area && isOwnCleaningAssignment(visibleRooms.find(room => room.id === current.room_id), teachingGrade, currentUser, current.area) ? "" : current.area, date: current.date, note: current.note, photos: current.photos } : {}) }));
     }
   };
 
@@ -8382,22 +8424,24 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
     const name = newRoom.trim();
     if (!name) return;
     if (rooms.some(room => room.name === name)) { setError(`มีห้อง ${name} อยู่แล้ว`); return; }
-    saveConfig([...rooms, cleanCleaningRoom({ name, areas: [] })], `เพิ่มห้อง ${name} แล้ว`);
+    saveConfig([...persistableCleaningRooms(rooms), cleanCleaningRoom({ name, areas: [] })], `เพิ่มห้อง ${name} แล้ว`);
     setNewRoom("");
   };
   const removeRoom = room => {
+    if (isBuiltinCleaningRoom(room)) { setError("พื้นที่อนุบาลนี้เป็นค่าตั้งต้นจากระบบ ยังไม่บันทึกลงฐานข้อมูล จึงลบถาวรไม่ได้"); return; }
     const count = inspections.filter(item => item.room_id === room.id).length;
-    askConfirm(`ลบห้อง ${room.name}?`, `ห้องนี้จะถูกนำออกจากทะเบียน${count ? ` · ผลการตรวจเดิม ${count} รายการยังคงอยู่ในสรุปผล` : ""}`, () => saveConfig(rooms.filter(item => item.id !== room.id), `ลบห้อง ${room.name} แล้ว`));
+    askConfirm(`ลบห้อง ${room.name}?`, `ห้องนี้จะถูกนำออกจากทะเบียน${count ? ` · ผลการตรวจเดิม ${count} รายการยังคงอยู่ในสรุปผล` : ""}`, () => saveConfig(persistableCleaningRooms(rooms).filter(item => item.id !== room.id), `ลบห้อง ${room.name} แล้ว`));
   };
   const renameRoom = () => {
     if (!roomEdit) return;
     const room = rooms.find(item => item.id === roomEdit.id);
     const name = roomEdit.name.trim().slice(0, 80);
     if (!room || !name) { setError("กรุณากรอกชื่อห้อง"); return; }
+    if (isBuiltinCleaningRoom(room)) { setError("พื้นที่อนุบาลนี้เป็นค่าตั้งต้นจากระบบ ยังไม่บันทึกลงฐานข้อมูล จึงเปลี่ยนชื่อไม่ได้"); setRoomEdit(null); return; }
     if (name === room.name) { setRoomEdit(null); return; }
     if (rooms.some(item => item.id !== room.id && item.name === name)) { setError(`มีห้อง ${name} อยู่แล้ว`); return; }
     setRoomEdit(null);
-    saveConfig(rooms.map(item => (item.id === room.id ? { ...item, name } : item)), `เปลี่ยนชื่อห้อง ${room.name} เป็น ${name} แล้ว`);
+    saveConfig(persistableCleaningRooms(rooms).map(item => (item.id === room.id ? { ...item, name } : item)), `เปลี่ยนชื่อห้อง ${room.name} เป็น ${name} แล้ว`);
   };
   // เปลี่ยนชื่อพื้นที่ → แก้ชื่อพื้นที่ในผลการตรวจเดิมของห้องนั้นด้วย
   const renameArea = async () => {
@@ -8405,6 +8449,7 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
     const room = rooms.find(item => item.id === areaEdit.roomId);
     const to = areaEdit.to.trim().slice(0, 60);
     if (!room || !to) { setError("กรุณากรอกชื่อพื้นที่"); return; }
+    if (isBuiltinCleaningRoom(room)) { setError("พื้นที่อนุบาลนี้เป็นค่าตั้งต้นจากระบบ ยังไม่บันทึกลงฐานข้อมูล จึงเปลี่ยนชื่อไม่ได้"); setAreaEdit(null); return; }
     if (to === areaEdit.from) { setAreaEdit(null); return; }
     if (room.areas.includes(to)) { setError(`ห้อง ${room.name} มีพื้นที่ ${to} อยู่แล้ว`); return; }
     const from = areaEdit.from;
@@ -8419,17 +8464,21 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
       try { next.row_id = await writeCleaningRow(next, currentUser.id); next.pending = false; } catch { next.pending = true; failed += 1; }
       nextInspections.push(next);
     }
-    await saveConfig(rooms.map(item => (item.id === room.id ? { ...item, areas: item.areas.map(value => (value === from ? to : value)) } : item)), `เปลี่ยนชื่อพื้นที่ ${from} เป็น ${to} แล้ว${failed ? ` (ผลการตรวจ ${failed} รายการรอซิงก์)` : ""}`, nextInspections);
+    await saveConfig(persistableCleaningRooms(rooms).map(item => (item.id === room.id ? { ...item, areas: item.areas.map(value => (value === from ? to : value)) } : item)), `เปลี่ยนชื่อพื้นที่ ${from} เป็น ${to} แล้ว${failed ? ` (ผลการตรวจ ${failed} รายการรอซิงก์)` : ""}`, nextInspections);
     if (form.room_id === room.id && form.area === from) setForm(current => ({ ...current, area: to }));
     setBusy(false);
   };
   const addArea = (room, area) => {
     const text = String(area || "").trim();
     if (!text || room.areas.includes(text)) return;
-    saveConfig(rooms.map(item => (item.id === room.id ? { ...item, areas: [...item.areas, text] } : item)), `เพิ่มพื้นที่ ${text} ให้ห้อง ${room.name} แล้ว`);
+    if (isBuiltinCleaningRoom(room)) { setError("พื้นที่อนุบาลนี้เป็นค่าตั้งต้นจากระบบ ยังไม่บันทึกลงฐานข้อมูล จึงแก้ในทะเบียนไม่ได้"); return; }
+    saveConfig(persistableCleaningRooms(rooms).map(item => (item.id === room.id ? { ...item, areas: [...item.areas, text] } : item)), `เพิ่มพื้นที่ ${text} ให้ห้อง ${room.name} แล้ว`);
     setAreaDrafts(current => ({ ...current, [room.id]: "" }));
   };
-  const removeArea = (room, area) => askConfirm(`ลบพื้นที่ ${area} ของห้อง ${room.name}?`, "ผลการตรวจเดิมของพื้นที่นี้ยังคงอยู่", () => saveConfig(rooms.map(item => (item.id === room.id ? { ...item, areas: item.areas.filter(value => value !== area) } : item)), `ลบพื้นที่ ${area} แล้ว`));
+  const removeArea = (room, area) => {
+    if (isBuiltinCleaningRoom(room)) { setError("พื้นที่อนุบาลนี้เป็นค่าตั้งต้นจากระบบ ยังไม่บันทึกลงฐานข้อมูล จึงลบไม่ได้"); return; }
+    askConfirm(`ลบพื้นที่ ${area} ของห้อง ${room.name}?`, "ผลการตรวจเดิมของพื้นที่นี้ยังคงอยู่", () => saveConfig(persistableCleaningRooms(rooms).map(item => (item.id === room.id ? { ...item, areas: item.areas.filter(value => value !== area) } : item)), `ลบพื้นที่ ${area} แล้ว`));
+  };
 
   const criteria = config.criteria;
   const saveCriteria = (list, success) => saveConfig(rooms, success, inspections, list);
@@ -8487,11 +8536,11 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
     const room = rooms.find(item => item.id === form.room_id);
     if (!room) { setError("กรุณาเลือกห้องที่รับผิดชอบ"); return; }
     if (!form.area) { setError("กรุณาเลือกพื้นที่รับผิดชอบ"); return; }
-    if (scoringBlocked(room)) { setError("ไม่สามารถประเมินห้องของตนเองได้"); return; }
+    if (scoringBlocked({ ...room, area: form.area })) { setError("ไม่สามารถประเมินพื้นที่ของตนเองได้"); return; }
     const now = new Date().toISOString();
     const original = editingId ? inspections.find(entry => entry.id === editingId) : null;
     if (original && !canMutateInspection(original)) { setError("แก้ไขได้เฉพาะผลการตรวจของตนเอง"); return; }
-    if (original && scoringBlocked(original)) { setError("ไม่สามารถประเมินห้องของตนเองได้"); return; }
+    if (original && scoringBlocked({ ...original, area: form.area })) { setError("ไม่สามารถประเมินพื้นที่ของตนเองได้"); return; }
     const item = original
       ? cleanCleaningInspection({ ...original, room_id: form.room_id, area: form.area, date: form.date, criteria: form.criteria, scores: form.scores, note: form.note, photos: form.photos, room_name: room.name, updated_at: now, edited_by: currentUser.name })
       : cleanCleaningInspection({ ...form, id: newSupervisionId(), room_name: room.name, by: currentUser.name, by_id: currentUser.id, at: now, updated_at: now });
@@ -8513,7 +8562,7 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
   };
 
   const startEdit = item => {
-    if (!canMutateInspection(item)) { setError(scoringBlocked(item) ? "ไม่สามารถประเมินห้องของตนเองได้" : "แก้ไขได้เฉพาะผลการตรวจของตนเอง"); return; }
+    if (!canMutateInspection(item)) { setError(scoringBlocked(item) ? "ไม่สามารถประเมินพื้นที่ของตนเองได้" : "แก้ไขได้เฉพาะผลการตรวจของตนเอง"); return; }
     setEditingId(item.id);
     setForm({ room_id: item.room_id, area: item.area, date: item.date, criteria: item.criteria.map(c => ({ ...c, hint: criteria.find(x => x.key === c.key)?.hint || "" })), scores: { ...item.scores }, note: item.note, photos: [...item.photos] });
     setTab("inspect");
@@ -8532,11 +8581,11 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
   };
 
   const deleteInspection = item => {
-    if (!canMutateInspection(item)) { setError(scoringBlocked(item) ? "ไม่สามารถประเมินห้องของตนเองได้" : "ลบได้เฉพาะผลการตรวจของตนเอง"); return; }
+    if (!canMutateInspection(item)) { setError(scoringBlocked(item) ? "ไม่สามารถประเมินพื้นที่ของตนเองได้" : "ลบได้เฉพาะผลการตรวจของตนเอง"); return; }
     askConfirm("ลบผลการตรวจนี้?", `${roomNameOf(item)} · ${item.area} · วันที่ ${formatThaiDateKey(item.date)} (${item.total}/${item.max} คะแนน) — ลบแล้วกู้คืนไม่ได้`, () => removeInspection(item));
   };
   const removeInspection = async item => {
-    if (!canMutateInspection(item)) { setError(scoringBlocked(item) ? "ไม่สามารถประเมินห้องของตนเองได้" : "ลบได้เฉพาะผลการตรวจของตนเอง"); return; }
+    if (!canMutateInspection(item)) { setError(scoringBlocked(item) ? "ไม่สามารถประเมินพื้นที่ของตนเองได้" : "ลบได้เฉพาะผลการตรวจของตนเอง"); return; }
     let nextDeleted = deleted;
     if (item.row_id) {
       const { error: delError } = await supabase.from("teaching_schedule").delete().eq("id", item.row_id);
@@ -8576,7 +8625,7 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
   const small = { ...inputStyle, padding: "0.4rem 0.55rem", fontSize: "0.88rem" };
   const tabs = [["inspect", "บันทึกผลการตรวจ"], ["summary", "สรุปผลและอันดับ"], ...(canManage ? [["rooms", "ทะเบียนห้อง พื้นที่ และเกณฑ์"]] : [])];
   const formRoom = rooms.find(room => room.id === form.room_id);
-  const formBlocked = scoringBlocked(formRoom || form.room_id);
+  const formBlocked = scoringBlocked({ ...(formRoom || {}), room_id: form.room_id, area: form.area, name: formRoom?.name });
   const formCriteria = form.criteria || criteria;
   const formTotal = cleaningTotal(form.scores, formCriteria);
   const formMax = cleaningMaxOf(formCriteria);
@@ -8621,7 +8670,7 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
   const header = (
     <div style={{ background: "linear-gradient(90deg, #008CFF, #3EBFFB)", borderRadius: 18, padding: "1rem 1.2rem", color: "#fff", boxShadow: "0 4px 24px rgba(0,140,255,0.2)" }}>
       <div style={{ fontSize: "1.2rem", fontWeight: 800 }}>เวรความสะอาด / เวรพื้นที่</div>
-      <div style={{ fontSize: "0.85rem", opacity: 0.9 }}>{canManage ? "บันทึกผลการตรวจความสะอาดบริเวณรอบโรงเรียนตามพื้นที่รับผิดชอบของแต่ละห้อง (ผู้บริหารประเมินได้ทุกพื้นที่)" : "ครูประจำชั้นประเมินได้ทุกห้อง ยกเว้นห้องประจำชั้นของตนเอง"}</div>
+      <div style={{ fontSize: "0.85rem", opacity: 0.9 }}>{canManage ? "บันทึกผลการตรวจความสะอาดบริเวณรอบโรงเรียนตามพื้นที่รับผิดชอบของแต่ละห้อง (ผู้บริหารประเมินได้ทุกพื้นที่)" : "ครูประเมินได้ทุกพื้นที่ ยกเว้นพื้นที่ที่ตนเองหรือห้องของตนรับผิดชอบ"}</div>
     </div>
   );
 
@@ -8652,7 +8701,7 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 140px), 1fr))", gap: "0.6rem" }}>
               <Field label="ห้องที่รับผิดชอบ">
                 <select value={form.room_id} onChange={event => { const room = rooms.find(item => item.id === event.target.value); setForm(current => ({ ...current, room_id: event.target.value, area: room?.areas?.[0] || "" })); }} style={small}>
-                  {rooms.map(room => <option key={room.id} value={room.id}>{room.name}{blockedRoomIds.has(room.id) ? " (ห้องของตนเอง — ประเมินไม่ได้)" : ""}</option>)}
+                  {rooms.map(room => <option key={room.id} value={room.id} disabled={blockedRoomIds.has(room.id)}>{room.name}{blockedRoomIds.has(room.id) ? " (พื้นที่ของตนเอง — ประเมินไม่ได้)" : ""}</option>)}
                 </select>
               </Field>
               <Field label="วันที่ตรวจ">
@@ -8662,11 +8711,14 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
                 <select value={form.area} onChange={event => setForm(current => ({ ...current, area: event.target.value }))} style={small}>
                   {(formRoom?.areas || []).length === 0 && !form.area && <option value="">ยังไม่กำหนดพื้นที่</option>}
                   {form.area && !(formRoom?.areas || []).includes(form.area) && <option value={form.area}>{form.area} (ไม่อยู่ในทะเบียนแล้ว)</option>}
-                  {(formRoom?.areas || []).map(area => <option key={area} value={area}>{area}</option>)}
+                  {(formRoom?.areas || []).map(area => {
+                    const ownArea = !canManage && isOwnCleaningAssignment(formRoom, teachingGrade, currentUser, area);
+                    return <option key={area} value={area} disabled={ownArea}>{area}{ownArea ? " (พื้นที่ของตนเอง — ประเมินไม่ได้)" : ""}</option>;
+                  })}
                 </select>
               </Field>
             </div>
-            {formBlocked && <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10, padding: "0.55rem 0.8rem", color: "#b91c1c", fontWeight: 800, fontSize: "0.9rem", marginTop: "0.7rem" }}>ไม่สามารถประเมินห้องของตนเองได้</div>}
+            {formBlocked && <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10, padding: "0.55rem 0.8rem", color: "#b91c1c", fontWeight: 800, fontSize: "0.9rem", marginTop: "0.7rem" }}>ไม่สามารถประเมินพื้นที่ของตนเองได้</div>}
             <div style={{ display: "grid", gap: "0.55rem", marginTop: "0.8rem" }}>
               {formCriteria.map((c, index) => (
                 <div key={c.key} style={{ background: "#F3F8FD", border: "1px solid #E4EEF8", borderRadius: 12, padding: "0.55rem 0.7rem" }}>
@@ -8828,10 +8880,12 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
                     ) : (
                       <>
                         <strong style={{ color: "#233862", flex: 1 }}>{room.name}</strong>
-                        <button type="button" onClick={() => setRoomEdit({ id: room.id, name: room.name })} style={{ border: "none", background: "#EAF5FF", color: "#0072D9", borderRadius: 8, padding: "0.25rem 0.55rem", cursor: "pointer", fontFamily: "inherit", fontSize: "0.78rem", fontWeight: 700 }}><Pencil size={12} /> เปลี่ยนชื่อ</button>
+                        {isBuiltinCleaningRoom(room)
+                          ? <span style={{ fontSize: "0.75rem", color: "#0072D9", background: "#EAF5FF", borderRadius: 999, padding: "0.15rem 0.55rem", fontWeight: 700 }}>พื้นที่ตั้งต้นของอนุบาล</span>
+                          : <button type="button" onClick={() => setRoomEdit({ id: room.id, name: room.name })} style={{ border: "none", background: "#EAF5FF", color: "#0072D9", borderRadius: 8, padding: "0.25rem 0.55rem", cursor: "pointer", fontFamily: "inherit", fontSize: "0.78rem", fontWeight: 700 }}><Pencil size={12} /> เปลี่ยนชื่อ</button>}
                       </>
                     )}
-                    <button type="button" onClick={() => removeRoom(room)} style={{ border: "none", background: "#fee2e2", color: "#b91c1c", borderRadius: 8, padding: "0.25rem 0.55rem", cursor: "pointer", fontFamily: "inherit", fontSize: "0.78rem", fontWeight: 700 }}><Trash2 size={12} /> ลบห้อง</button>
+                    {!isBuiltinCleaningRoom(room) && <button type="button" onClick={() => removeRoom(room)} style={{ border: "none", background: "#fee2e2", color: "#b91c1c", borderRadius: 8, padding: "0.25rem 0.55rem", cursor: "pointer", fontFamily: "inherit", fontSize: "0.78rem", fontWeight: 700 }}><Trash2 size={12} /> ลบห้อง</button>}
                   </div>
                   <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", alignItems: "center" }}>
                     <span style={{ fontSize: "0.78rem", color: "#596068" }}>พื้นที่รับผิดชอบ:</span>
@@ -8845,16 +8899,19 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
                     ) : (
                       <span key={area} style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem", background: "#EAF5FF", color: "#0072D9", borderRadius: 999, padding: "0.15rem 0.3rem 0.15rem 0.6rem", fontSize: "0.8rem", fontWeight: 700 }}>
                         {area}
+                        {!isBuiltinCleaningRoom(room) && <>
                         <button type="button" aria-label={`เปลี่ยนชื่อพื้นที่ ${area}`} title="เปลี่ยนชื่อ" onClick={() => setAreaEdit({ roomId: room.id, from: area, to: area })} style={{ border: "none", background: "transparent", color: "#0072D9", cursor: "pointer", padding: 0, display: "inline-flex" }}><Pencil size={11} /></button>
                         <button type="button" aria-label={`ลบพื้นที่ ${area}`} onClick={() => removeArea(room, area)} style={{ border: "none", background: "transparent", color: "#0072D9", cursor: "pointer", padding: 0, display: "inline-flex" }}><X size={12} /></button>
+                        </>}
                       </span>
                     )))}
                   </div>
-                  <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap", alignItems: "center" }}>
+                  {!isBuiltinCleaningRoom(room) && <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap", alignItems: "center" }}>
                     {CLEANING_AREA_PRESETS.filter(area => !room.areas.includes(area)).map(area => <button key={area} type="button" onClick={() => addArea(room, area)} style={{ border: "1px dashed #8FD0FF", background: "#fff", color: "#0072D9", borderRadius: 999, padding: "0.12rem 0.55rem", fontSize: "0.75rem", cursor: "pointer", fontFamily: "inherit" }}>+ {area}</button>)}
                     <input value={areaDrafts[room.id] || ""} onChange={event => setAreaDrafts(current => ({ ...current, [room.id]: event.target.value }))} onKeyDown={event => { if (event.key === "Enter") addArea(room, areaDrafts[room.id]); }} placeholder="พื้นที่อื่น ๆ" aria-label={`เพิ่มพื้นที่ให้ ${room.name}`} style={{ ...small, width: 150, padding: "0.25rem 0.5rem", fontSize: "0.8rem" }} />
                     <button type="button" onClick={() => addArea(room, areaDrafts[room.id])} style={{ ...btnSecondary, flex: "none", padding: "0.25rem 0.6rem", fontSize: "0.78rem" }}>เพิ่ม</button>
-                  </div>
+                  </div>}
+                  {isBuiltinCleaningRoom(room) && <div style={{ fontSize: "0.75rem", color: "#596068" }}>แสดงจากค่าตั้งต้นในระบบ ยังไม่ถูกเขียนลงฐานข้อมูล</div>}
                 </div>
               ))}
             </div>

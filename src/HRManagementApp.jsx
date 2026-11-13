@@ -6516,7 +6516,7 @@ const EVAL_AUTO_RULES = [
   { key: "late_checkin", label: "ลงเวลาสาย", points: 0.5 },
   { key: "no_checkin", label: "ไม่ลงเวลาเข้า (วันทำงาน ไม่นับวันลาที่อนุมัติ)", points: 1 },
   { key: "plan_late", label: "ส่งแผนรายสัปดาห์ช้า (กำหนดส่งภายในวันอาทิตย์ก่อนสัปดาห์สอน ก่อน 08:00 น.) ต่อสัปดาห์", points: 1 },
-  { key: "plan_missing", label: "ไม่ส่งแผนรายสัปดาห์ (เลยวันอาทิตย์ 08:00 น. แล้วยังไม่ส่ง) ต่อสัปดาห์", points: 2 },
+  { key: "plan_missing", label: "ไม่ส่งแผนรายสัปดาห์ (เลยวันอาทิตย์ 08:00 น. แล้วยังไม่ส่ง) หัก 5 คะแนนต่อสัปดาห์", points: 5 },
   { key: "post_missing", label: "ไม่มีบันทึกหลังสอน (ต่อคาบ)", points: 0.5 },
   { key: "roll_missing", label: "ไม่เช็คชื่อนักเรียน (ต่อวัน)", points: 0.5 },
   { key: "training_auto", label: "ไปอบรม (ลงเวลาแบบไปอบรม) เพิ่มต่อครั้ง", points: 1, bonus: true },
@@ -6534,7 +6534,9 @@ function cleanEval2Settings(raw, workStart) {
   const rules = {};
   EVAL_AUTO_RULES.forEach(rule => {
     const saved = raw.rules?.[rule.key];
-    const points = Number(saved?.points);
+    let points = Number(saved?.points);
+    // ไม่ส่งแผนเคยหัก 2 — ถ้าค่าที่เก็บไว้ยังเป็นค่าเดิม ให้ใช้ค่าใหม่ในเกณฑ์ (5) โดยไม่เขียนฐานข้อมูลเอง
+    if (rule.key === "plan_missing" && points === 2) points = rule.points;
     rules[rule.key] = { on: saved?.on !== false, points: points >= 0 && points <= 100 ? points : rule.points };
   });
   return {

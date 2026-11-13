@@ -8046,28 +8046,41 @@ function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEv
 
 // ─── เวรความสะอาด / เวรพื้นที่ (ผู้บริหารเต็มสิทธิ์ + ครูประจำชั้น ป./ม. ประเมินได้ทุกห้องยกเว้นห้องตนเอง; ครูอนุบาลเข้าไม่ได้) ─────────────────────────
 // แถวพิเศษใน teaching_schedule: class_room "__CLEANING_DUTY__"
-// period 1 = ทะเบียนห้องเรียนและพื้นที่รับผิดชอบ (kind "config"), period 2 = ผลการตรวจ 1 ครั้ง/แถว (kind "inspection")
+// period 1 = ทะเบียนห้องและพื้นที่รับผิดชอบ (kind "config"), period 2 = ผลการตรวจ 1 ครั้ง/แถว (kind "inspection")
 const CLEANING_DUTY_ROOM = "__CLEANING_DUTY__";
 const CLEANING_LOCAL_KEY = "hr_cleaning_duty_v1";
-const CLEANING_AREA_PRESETS = ["ห้องเรียน", "ทางเดิน", "สนาม", "ห้องน้ำ", "บันได", "สวนหย่อม"];
-const CLEANING_CRITERIA = [
+const CLEANING_AREA_PRESETS = ["หอประชุม", "ทางเดิน", "สนาม", "ห้องน้ำ", "บันได", "สวนหย่อม"];
+// เกณฑ์ชุดเดิม (ห้องเรียน/กระดาน) เก็บไว้เฉพาะตอนอ่านผลการตรวจเก่า — ไม่ใช้เป็นเกณฑ์ใหม่
+const CLEANING_CRITERIA_LEGACY = [
   { key: "trash", label: "ขยะ", hint: "ไม่มีขยะตกค้างบนพื้น ใต้โต๊ะ และมุมห้อง" },
   { key: "floor", label: "ฝุ่น/พื้น", hint: "พื้นกวาดและถูสะอาด ไม่มีคราบหรือฝุ่นสะสม" },
   { key: "furniture", label: "โต๊ะเก้าอี้เป็นระเบียบ", hint: "จัดโต๊ะเก้าอี้เป็นแถว สิ่งของจัดเก็บเรียบร้อย" },
   { key: "board", label: "กระดาน/หน้าต่าง", hint: "กระดานลบสะอาด หน้าต่างและขอบหน้าต่างไม่มีฝุ่น" },
   { key: "bins", label: "ถังขยะ/การคัดแยก", hint: "ถังขยะไม่ล้น มีฝาปิด และคัดแยกขยะถูกประเภท" },
 ];
+const CLEANING_CRITERIA = [
+  { key: "cleanliness", label: "ความสะอาด", hint: "พื้นที่ไม่มีขยะ ฝุ่น หรือคราบสกปรก" },
+  { key: "cooperation", label: "ความร่วมมือในการทำเวรของนักเรียนแต่ละคน", hint: "นักเรียนเวรมาทำตามเวลา และช่วยกันครบทุกคน" },
+  { key: "arrangement", label: "การจัดสิ่งของในบริเวณรอบ ๆ ให้สะอาดเรียบร้อยอยู่ตลอดเวลา", hint: "โต๊ะ เก้าอี้ และอุปกรณ์จัดเข้าที่ ไม่เกะกะทางเดินหรือหอประชุม" },
+  { key: "upkeep", label: "การรักษาความสะอาดจนถึงเวลาเลิกเรียน", hint: "พื้นที่ยังสะอาดเรียบร้อยจนถึงเวลาเลิกเรียน" },
+];
 const CLEANING_SCALE = [
   { value: 5, label: "ดีเยี่ยม" }, { value: 4, label: "ดี" }, { value: 3, label: "พอใช้" },
   { value: 2, label: "ควรปรับปรุง" }, { value: 1, label: "ต้องแก้ไขเร่งด่วน" }, { value: 0, label: "ไม่ได้ดำเนินการ" },
 ];
 // เกณฑ์จัดการได้โดยผู้บริหาร เก็บใน config.criteria · ผลการตรวจแต่ละครั้งเก็บสำเนาเกณฑ์ของตัวเอง (criteria) ไว้
-// คะแนนเต็ม = จำนวนเกณฑ์ × 5 · ผลการตรวจเก่าที่ไม่มีสำเนาเกณฑ์ = ใช้ 5 เกณฑ์ตั้งต้น
+// คะแนนเต็ม = จำนวนเกณฑ์ × 5 · ผลการตรวจเก่าที่ไม่มีสำเนาเกณฑ์ ใช้ชุดเกณฑ์ตามคีย์คะแนนที่เก็บไว้
 const CLEANING_CRITERIA_LIMIT = 15;
+const CLEANING_LEGACY_KEYS = new Set(CLEANING_CRITERIA_LEGACY.map(c => c.key));
+function isLegacyCleaningCriteria(list) {
+  if (!Array.isArray(list) || list.length !== CLEANING_CRITERIA_LEGACY.length) return false;
+  const keys = list.map(c => c?.key || c);
+  return CLEANING_CRITERIA_LEGACY.every(c => keys.includes(c.key));
+}
 function cleanCleaningCriteria(raw, fallback = CLEANING_CRITERIA) {
   if (!Array.isArray(raw)) return fallback.map(c => ({ key: c.key, label: c.label, hint: c.hint || "" }));
   const seen = new Set();
-  return raw.map(c => ({ key: String(c?.key || "").trim().slice(0, 40), label: String(c?.label || "").trim().slice(0, 60), hint: String(c?.hint || "").trim().slice(0, 200) }))
+  return raw.map(c => ({ key: String(c?.key || "").trim().slice(0, 40), label: String(c?.label || "").trim().slice(0, 80), hint: String(c?.hint || "").trim().slice(0, 200) }))
     .filter(c => c.key && c.label && !seen.has(c.key) && seen.add(c.key)).slice(0, CLEANING_CRITERIA_LIMIT);
 }
 const cleaningMaxOf = criteria => criteria.length * 5;
@@ -8090,7 +8103,12 @@ function cleanCleaningConfig(raw) {
     kind: "config",
     id: "config",
     rooms: (Array.isArray(raw?.rooms) ? raw.rooms : []).map(cleanCleaningRoom).filter(room => room.name),
-    criteria: (() => { const list = cleanCleaningCriteria(raw?.criteria); return list.length ? list : cleanCleaningCriteria(null); })(),
+    criteria: (() => {
+      const list = cleanCleaningCriteria(raw?.criteria);
+      const resolved = list.length ? list : cleanCleaningCriteria(null);
+      // เกณฑ์ตั้งต้นชุดเก่าใน config (หรือค่าว่างที่เคย fallback เป็นชุดเก่า) แสดงเป็นชุดใหม่ในเครื่อง โดยไม่เขียนฐานข้อมูล
+      return isLegacyCleaningCriteria(resolved) ? cleanCleaningCriteria(null) : resolved;
+    })(),
     updated_at: String(raw?.updated_at || ""),
     row_id: raw?.row_id || null,
     pending: !!raw?.pending,
@@ -8101,13 +8119,36 @@ function cleaningTotal(scores, criteria = CLEANING_CRITERIA) {
   return criteria.reduce((sum, item) => sum + (Number(scores?.[item.key]) || 0), 0);
 }
 
+function cleaningInspectionCriteria(raw) {
+  const listed = Array.isArray(raw?.criteria) ? cleanCleaningCriteria(raw.criteria, []) : [];
+  const scoreKeys = Object.keys(raw?.scores || {}).filter(Boolean);
+  let criteria = listed.map(c => ({ key: c.key, label: c.label }));
+  if (!criteria.length) {
+    const fallback = scoreKeys.length && scoreKeys.every(key => CLEANING_LEGACY_KEYS.has(key))
+      ? CLEANING_CRITERIA_LEGACY
+      : CLEANING_CRITERIA;
+    criteria = fallback.map(c => ({ key: c.key, label: c.label }));
+  }
+  const seen = new Set(criteria.map(c => c.key));
+  scoreKeys.forEach(key => {
+    if (seen.has(key)) return;
+    const known = CLEANING_CRITERIA_LEGACY.find(c => c.key === key) || CLEANING_CRITERIA.find(c => c.key === key);
+    criteria.push({ key, label: known?.label || key });
+    seen.add(key);
+  });
+  return criteria;
+}
+
 function cleanCleaningInspection(raw) {
-  const criteria = cleanCleaningCriteria(raw?.criteria).map(c => ({ key: c.key, label: c.label }));
+  const criteria = cleaningInspectionCriteria(raw);
   const scores = {};
   criteria.forEach(item => {
     const value = Number(raw?.scores?.[item.key]);
     scores[item.key] = Number.isFinite(value) ? Math.max(0, Math.min(5, Math.round(value))) : 0;
   });
+  const computed = cleaningTotal(scores, criteria);
+  const storedTotal = Number(raw?.total);
+  const storedMax = Number(raw?.max);
   return {
     kind: "inspection",
     id: String(raw?.id || newSupervisionId()),
@@ -8117,8 +8158,8 @@ function cleanCleaningInspection(raw) {
     date: /^\d{4}-\d{2}-\d{2}$/.test(raw?.date || "") ? raw.date : todayISO(),
     criteria,
     scores,
-    total: cleaningTotal(scores, criteria),
-    max: cleaningMaxOf(criteria),
+    total: computed > 0 || !Number.isFinite(storedTotal) ? computed : storedTotal,
+    max: criteria.length ? cleaningMaxOf(criteria) : (Number.isFinite(storedMax) ? storedMax : cleaningMaxOf(CLEANING_CRITERIA)),
     note: String(raw?.note || "").slice(0, 1000),
     photos: (Array.isArray(raw?.photos) ? raw.photos : []).filter(photo => photo?.url || photo?.dataUrl || photo?.path).slice(0, CLEANING_PHOTO_LIMIT),
     by: String(raw?.by || "").slice(0, 120),
@@ -8341,7 +8382,7 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
     const name = newRoom.trim();
     if (!name) return;
     if (rooms.some(room => room.name === name)) { setError(`มีห้อง ${name} อยู่แล้ว`); return; }
-    saveConfig([...rooms, cleanCleaningRoom({ name, areas: ["ห้องเรียน"] })], `เพิ่มห้อง ${name} แล้ว`);
+    saveConfig([...rooms, cleanCleaningRoom({ name, areas: [] })], `เพิ่มห้อง ${name} แล้ว`);
     setNewRoom("");
   };
   const removeRoom = room => {
@@ -8444,7 +8485,7 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
 
   const submitInspection = async () => {
     const room = rooms.find(item => item.id === form.room_id);
-    if (!room) { setError("กรุณาเลือกห้องเรียน"); return; }
+    if (!room) { setError("กรุณาเลือกห้องที่รับผิดชอบ"); return; }
     if (!form.area) { setError("กรุณาเลือกพื้นที่รับผิดชอบ"); return; }
     if (scoringBlocked(room)) { setError("ไม่สามารถประเมินห้องของตนเองได้"); return; }
     const now = new Date().toISOString();
@@ -8580,7 +8621,7 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
   const header = (
     <div style={{ background: "linear-gradient(90deg, #008CFF, #3EBFFB)", borderRadius: 18, padding: "1rem 1.2rem", color: "#fff", boxShadow: "0 4px 24px rgba(0,140,255,0.2)" }}>
       <div style={{ fontSize: "1.2rem", fontWeight: 800 }}>เวรความสะอาด / เวรพื้นที่</div>
-      <div style={{ fontSize: "0.85rem", opacity: 0.9 }}>{canManage ? "บันทึกผลการตรวจความสะอาดพื้นที่รับผิดชอบของแต่ละห้องเรียน (ผู้บริหารประเมินได้ทุกห้อง)" : "ครูประจำชั้นประเมินได้ทุกห้อง ยกเว้นห้องประจำชั้นของตนเอง"}</div>
+      <div style={{ fontSize: "0.85rem", opacity: 0.9 }}>{canManage ? "บันทึกผลการตรวจความสะอาดบริเวณรอบโรงเรียนตามพื้นที่รับผิดชอบของแต่ละห้อง (ผู้บริหารประเมินได้ทุกพื้นที่)" : "ครูประจำชั้นประเมินได้ทุกห้อง ยกเว้นห้องประจำชั้นของตนเอง"}</div>
     </div>
   );
 
@@ -8598,7 +8639,7 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
       {message && <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", borderRadius: 10, padding: "0.5rem 0.8rem", color: "#166534", fontWeight: 700, fontSize: "0.88rem" }}>{message}</div>}
 
       {tab !== "rooms" && rooms.length === 0 && (
-        <Card><div style={{ color: "#9a4a00", fontWeight: 700 }}>ยังไม่มีทะเบียนห้องเรียน กรุณาเพิ่มห้องและพื้นที่รับผิดชอบที่แท็บ "ทะเบียนห้องและพื้นที่" ก่อนบันทึกผลการตรวจ</div></Card>
+        <Card><div style={{ color: "#9a4a00", fontWeight: 700 }}>ยังไม่มีทะเบียนห้อง กรุณาเพิ่มห้องและพื้นที่รับผิดชอบที่แท็บ "ทะเบียนห้อง พื้นที่ และเกณฑ์" ก่อนบันทึกผลการตรวจ</div></Card>
       )}
 
       {tab === "inspect" && rooms.length > 0 && (
@@ -8609,7 +8650,7 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
               {editingId && <span style={{ fontSize: "0.75rem", color: "#9a4a00", background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 999, padding: "0.1rem 0.55rem" }}>แก้ไขวันที่ ห้อง พื้นที่ คะแนน บันทึก และรูปได้</span>}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 140px), 1fr))", gap: "0.6rem" }}>
-              <Field label="ห้องเรียน">
+              <Field label="ห้องที่รับผิดชอบ">
                 <select value={form.room_id} onChange={event => { const room = rooms.find(item => item.id === event.target.value); setForm(current => ({ ...current, room_id: event.target.value, area: room?.areas?.[0] || "" })); }} style={small}>
                   {rooms.map(room => <option key={room.id} value={room.id}>{room.name}{blockedRoomIds.has(room.id) ? " (ห้องของตนเอง — ประเมินไม่ได้)" : ""}</option>)}
                 </select>
@@ -8688,7 +8729,7 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
               {detail.count > 0 && (
                 <div style={{ display: "grid", gap: "0.25rem" }}>
                   {detail.byCriterion.map(c => (
-                    <div key={c.key} style={{ display: "grid", gridTemplateColumns: "12rem 1fr 3rem", gap: "0.5rem", alignItems: "center", fontSize: "0.8rem" }}>
+                    <div key={c.key} style={{ display: "grid", gridTemplateColumns: "minmax(12rem, 24rem) 1fr 3rem", gap: "0.5rem", alignItems: "center", fontSize: "0.8rem" }}>
                       <span style={{ color: c.active ? "#233862" : "#94a3b8", fontWeight: 700 }}>{c.label}{!c.active ? " (เลิกใช้)" : ""}{c.n < detail.count ? ` · ${c.n} ครั้ง` : ""}</span>
                       <div style={{ background: "#F3F8FD", borderRadius: 8, height: 12 }}><div style={{ width: `${(c.avg / 5) * 100}%`, height: "100%", borderRadius: 8, background: c.active ? "linear-gradient(90deg, #008CFF, #3EBFFB)" : "#cbd5e1" }} /></div>
                       <span style={{ textAlign: "right", fontWeight: 800 }}>{c.n ? c.avg.toFixed(1) : "-"}</span>
@@ -8701,7 +8742,7 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 620 }}>
-                <thead><tr>{["อันดับ", "ห้องเรียน", "จำนวนครั้งที่ตรวจ", "คะแนนรวม", "คะแนนเฉลี่ย", "ร้อยละ", "ระดับ"].map(label => <th key={label} style={th}>{label}</th>)}</tr></thead>
+                <thead><tr>{["อันดับ", "ห้องที่รับผิดชอบ", "จำนวนครั้งที่ตรวจ", "คะแนนรวม", "คะแนนเฉลี่ย", "ร้อยละ", "ระดับ"].map(label => <th key={label} style={th}>{label}</th>)}</tr></thead>
                 <tbody>
                   {summary.map(row => (
                     <tr key={row.id} onClick={() => setDetailRoom(row.id)} style={{ cursor: "pointer" }} title="ดูรายละเอียดและรูปถ่าย">
@@ -8759,7 +8800,7 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
             ))}
           </div>
           <div style={{ display: "flex", gap: "0.45rem", marginTop: "0.7rem", flexWrap: "wrap" }}>
-            <input value={criterionDraft.label} onChange={event => setCriterionDraft(current => ({ ...current, label: event.target.value }))} placeholder="ชื่อเกณฑ์ใหม่ เช่น ห้องน้ำ/อ่างล้างมือ" aria-label="ชื่อเกณฑ์ใหม่" style={{ ...small, flex: "1 1 180px" }} />
+            <input value={criterionDraft.label} onChange={event => setCriterionDraft(current => ({ ...current, label: event.target.value }))} placeholder="ชื่อเกณฑ์ใหม่ เช่น ความเป็นระเบียบของทางเดิน" aria-label="ชื่อเกณฑ์ใหม่" style={{ ...small, flex: "1 1 180px" }} />
             <input value={criterionDraft.hint} onChange={event => setCriterionDraft(current => ({ ...current, hint: event.target.value }))} onKeyDown={event => { if (event.key === "Enter") addCriterion(); }} placeholder="คำอธิบาย (ไม่บังคับ)" aria-label="คำอธิบายเกณฑ์ใหม่" style={{ ...small, flex: "2 1 240px" }} />
             <button type="button" onClick={addCriterion} disabled={criteria.length >= CLEANING_CRITERIA_LIMIT} style={{ ...btnPrimary, flex: "none", padding: "0.45rem 1rem", background: "linear-gradient(90deg, #008CFF, #3EBFFB)", color: "#fff", cursor: "pointer" }}><Plus size={15} /> เพิ่มเกณฑ์</button>
           </div>
@@ -8768,12 +8809,12 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
 
       {tab === "rooms" && canManage && (
         <Card>
-          <div style={{ fontWeight: 800, color: "#233862", marginBottom: "0.6rem" }}>ทะเบียนห้องเรียนและพื้นที่รับผิดชอบ</div>
+          <div style={{ fontWeight: 800, color: "#233862", marginBottom: "0.6rem" }}>ทะเบียนห้องและพื้นที่รับผิดชอบ</div>
           <div style={{ display: "flex", gap: "0.45rem", marginBottom: "0.8rem", flexWrap: "wrap" }}>
             <input value={newRoom} onChange={event => setNewRoom(event.target.value)} onKeyDown={event => { if (event.key === "Enter") addRoom(); }} placeholder="ชื่อห้อง เช่น ป.1/1" aria-label="ชื่อห้องใหม่" style={{ ...small, flex: "1 1 200px" }} />
-            <button type="button" onClick={addRoom} style={{ ...btnPrimary, flex: "none", padding: "0.45rem 1rem", background: "linear-gradient(90deg, #008CFF, #3EBFFB)", color: "#fff", cursor: "pointer" }}><Plus size={15} /> เพิ่มห้องเรียน</button>
+            <button type="button" onClick={addRoom} style={{ ...btnPrimary, flex: "none", padding: "0.45rem 1rem", background: "linear-gradient(90deg, #008CFF, #3EBFFB)", color: "#fff", cursor: "pointer" }}><Plus size={15} /> เพิ่มห้อง</button>
           </div>
-          {rooms.length === 0 ? <div style={{ color: "#94a3b8" }}>ยังไม่มีห้องเรียนในทะเบียน</div> : (
+          {rooms.length === 0 ? <div style={{ color: "#94a3b8" }}>ยังไม่มีห้องในทะเบียน</div> : (
             <div style={{ display: "grid", gap: "0.55rem" }}>
               {rooms.map(room => (
                 <div key={room.id} style={{ border: "1px solid #E4EEF8", borderRadius: 14, padding: "0.65rem 0.8rem", display: "grid", gap: "0.45rem" }}>

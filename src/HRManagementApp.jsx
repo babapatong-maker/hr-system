@@ -8286,6 +8286,14 @@ async function writeCleaningRow(item, employeeId) {
 // ตามย้อนหลังครั้งเดียว: วันศุกร์ 20 พ.ย. 2569 ตรวจย้อนหลัง จ. 16 – ศ. 20 พ.ย. (เฉพาะวันที่มาทำงาน)
 // หลังจากวันนั้นตรวจเฉพาะวันนี้ตามปกติ
 const CLEANING_CATCHUP = { on: "2026-11-20", start: "2026-11-16", end: "2026-11-20" };
+// ผู้บริหารที่ต้องให้คะแนนเวรพื้นที่ก่อนลงเวลากลับบ้านเหมือนครูประจำชั้น (ให้คะแนนได้ทุกพื้นที่)
+// จักรพล พลโสภาพ, เรณู เล็กดี · ผู้บริหารคนอื่นต้องให้คะแนนเฉพาะเมื่อตั้งชั้นที่สอนไว้
+const CLEANING_REQUIRED_EXECUTIVE_IDS = new Set(["193538b9-9672-4c18-b29d-114dcc5befaf", "c5306809-307e-47ae-bce1-42c2a9b38f1d"]);
+const CLEANING_REQUIRED_EXECUTIVE_NAMES = new Set(["จักรพล พลโสภาพ", "เรณู เล็กดี"].map(normalizePersonName));
+function isCleaningRequiredExecutive(user) {
+  if (!user) return false;
+  return CLEANING_REQUIRED_EXECUTIVE_IDS.has(String(user.id || "")) || CLEANING_REQUIRED_EXECUTIVE_NAMES.has(normalizePersonName(user.name));
+}
 const CLEANING_SAVED_EVENT = "hr-cleaning-saved";
 const CLEANING_PREFILL_EVENT = "hr-cleaning-prefill";
 const CLEANING_PREFILL_KEY = "hr_cleaning_prefill_date";
@@ -8374,9 +8382,9 @@ const cleaningRoomShortName = room => cleaningGradeToken(room?.name || room?.roo
 async function fetchCleaningCheckoutStatus(user) {
   const free = reason => ({ required: false, done: true, reason, missingDates: [], pendingRooms: [] });
   if (!user?.id) return free("no-user");
-  if (isExecutiveUser(user)) return free("executive");
   if (isTestTeacher(user)) return free("test-teacher");
-  if (isNonTeachingStaff(user)) return free("non-teaching");
+  const requiredExec = isCleaningRequiredExecutive(user);
+  if (!requiredExec && !isExecutiveUser(user) && isNonTeachingStaff(user)) return free("non-teaching");
   const today = todayISO();
   const catchup = cleaningCatchupActive(today);
   const dates = catchup ? cleaningCatchupDates(today) : (isBangkokWeekend(`${today}T12:00:00+07:00`) ? [] : [today]);
@@ -8384,7 +8392,7 @@ async function fetchCleaningCheckoutStatus(user) {
   const grades = await loadTeachingGrades();
   const grade = teachingGradeOf(grades, user);
   const homeroom = !!cleaningGradeToken(grade) || isKgHomeroomTeacher(user);
-  if (!homeroom) return free("no-homeroom");
+  if (!requiredExec && !homeroom) return free(isExecutiveUser(user) ? "executive" : "no-homeroom");
   const id = String(user.id);
   const first = dates[0];
   const [holidayRes, leaveRes, attRes, mineRes, todayRes, cfgRes] = await Promise.all([
@@ -8497,7 +8505,7 @@ function CleaningCheckoutBlockNotice({ status, onOpenCleaning, compact = false }
         ))}
       </div>
       <div style={{ fontSize: compact ? "1.05rem" : "1.2rem", fontWeight: 900, color: "#991b1b" }}>กรุณาลงเวรให้เรียบร้อยก่อนจึงจะลงเวลากลับบ้านได้</div>
-      <div style={{ fontSize: "0.85rem", fontWeight: 700, marginTop: "0.35rem", color: "#7f1d1d" }}>ครูประจำชั้นให้คะแนนพื้นที่อื่นได้ทุกพื้นที่ ยกเว้นพื้นที่ของห้องตัวเอง (อย่างน้อยวันละ 1 พื้นที่)</div>
+      <div style={{ fontSize: "0.85rem", fontWeight: 700, marginTop: "0.35rem", color: "#7f1d1d" }}>ให้คะแนนพื้นที่ใดก็ได้ ยกเว้นพื้นที่ของห้องตัวเอง (อย่างน้อยวันละ 1 พื้นที่)</div>
       {missing.includes(today) && rooms.length > 0 && (
         <div style={{ fontSize: "0.82rem", marginTop: "0.35rem", color: "#7c2d12" }}>
           พื้นที่ที่ยังไม่มีใครตรวจวันนี้: {rooms.slice(0, 12).join(", ")}{rooms.length > 12 ? ` และอีก ${rooms.length - 12} พื้นที่` : ""}

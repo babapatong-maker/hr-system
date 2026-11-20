@@ -37,6 +37,9 @@ function PreviewBanner() {
 const SCHOOL_LAT = 15.596741;
 const SCHOOL_LNG = 100.652199;
 const GEOFENCE_RADIUS = 200;
+// ยกเว้นล็อก GPS (ลงเวลาเข้า/ออกได้จากทุกที่ หรือแม้หาตำแหน่งไม่ได้): ศักดิ์ศิริ มีสมสืบ คนเดียว
+const GPS_EXEMPT_IDS = new Set(["1c21605d-3404-4424-a640-d2eb25361c19"]);
+const isGpsExempt = (employeeId) => GPS_EXEMPT_IDS.has(String(employeeId || ""));
 const DEFAULT_DUTY_RATES = {
   "ไม่มีเวร": 0,
   "เวรรถ": 30,
@@ -1575,7 +1578,8 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
 
   useEffect(() => { fetchLocation(); }, [fetchLocation]);
 
-  const isInZone = distance !== null && distance <= GEOFENCE_RADIUS;
+  const gpsExempt = isGpsExempt(selectedEmp);
+  const isInZone = gpsExempt || (distance !== null && distance <= GEOFENCE_RADIUS);
 
   const handleSubmit = async () => {
     if (!isInZone || done || !selectedEmp || savingAttendance) return;
@@ -1672,7 +1676,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
   const circumference = 2 * Math.PI * 54;
   const ringColor = gpsState === "success" ? (isInZone ? (mode === "in" ? "#10b981" : "#f59e0b") : "#ef4444") : "#94a3b8";
   const pct = distance !== null ? Math.min(distance / GEOFENCE_RADIUS, 1) : 0;
-  const canSubmit = isInZone && !done && !savingAttendance && gpsState === "success" && selectedEmp && (mode === "in" ? !openAttendance : openAttendance && !cleaningBlocked);
+  const canSubmit = isInZone && !done && !savingAttendance && (gpsExempt || gpsState === "success") && selectedEmp && (mode === "in" ? !openAttendance : openAttendance && !cleaningBlocked);
 
   return (
     <Modal title={mode === "in" ? "ลงเวลาเข้างาน" : "ลงเวลากลับบ้าน"} subtitle={`📍 รัศมี ${GEOFENCE_RADIUS} เมตรจากโรงเรียน`} onClose={onClose} icon={mode === "in" ? LogIn : LogOut} color={mode === "in" ? "#0072D9" : "#d97706"}>
@@ -1756,14 +1760,20 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
         </div>
       </div>
 
-      {gpsState === "error" && (
+      {gpsExempt && (
+        <div style={{ textAlign: "center", marginBottom: "1.25rem", background: "#eff6ff", border: "1.5px solid #93c5fd", borderRadius: "12px", padding: "0.75rem", color: "#1d4ed8", fontWeight: 700 }}>
+          🔓 บัญชีนี้ได้รับยกเว้นการล็อก GPS · ลงเวลาได้จากทุกที่
+          {gpsState === "success" && <div style={{ fontSize: "0.8rem", color: "#64748b", marginTop: "0.25rem", fontWeight: 400 }}>ห่างจากโรงเรียน {distance} เมตร (บันทึกไว้เป็นข้อมูล)</div>}
+        </div>
+      )}
+      {!gpsExempt && gpsState === "error" && (
         <div style={{ textAlign: "center", marginBottom: "1.25rem", background: "#fef2f2", border: "1.5px solid #fca5a5", borderRadius: "12px", padding: "0.75rem", color: "#dc2626", fontWeight: 700 }}>
           ❌ หาตำแหน่ง GPS ไม่ได้ ลงเวลาไม่ได้
           <div style={{ fontSize: "0.8rem", color: "#64748b", marginTop: "0.25rem", fontWeight: 400 }}>เปิด GPS และอนุญาตให้เว็บเข้าถึงตำแหน่ง แล้วลองใหม่</div>
           <button type="button" onClick={fetchLocation} style={{ ...btnSecondary, flex: "none", margin: "0.5rem auto 0" }}>ลองหาตำแหน่งใหม่</button>
         </div>
       )}
-      {gpsState === "success" && (
+      {!gpsExempt && gpsState === "success" && (
         <div style={{ textAlign: "center", marginBottom: "1.25rem", background: isInZone ? "#ecfdf5" : "#fef2f2", border: `1.5px solid ${isInZone ? "#6ee7b7" : "#fca5a5"}`, borderRadius: "12px", padding: "0.75rem" }}>
           <div style={{ fontSize: "1rem", fontWeight: 700, color: isInZone ? "#059669" : "#dc2626" }}>{isInZone ? "✅ คุณอยู่ในพื้นที่" : "❌ อยู่นอกพื้นที่"}</div>
           <div style={{ fontSize: "0.8rem", color: "#64748b", marginTop: "0.25rem" }}>ห่างจากโรงเรียน {distance} เมตร</div>

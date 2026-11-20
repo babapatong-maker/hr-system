@@ -1464,7 +1464,7 @@ function OutingModal({ employees, currentUser, onClose, onSave }) {
 }
 
 // ─── ATTENDANCE MODAL ─────────────────────────────────────────────────────────
-function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings, mode = "in" }) {
+function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings, mode = "in", onOpenCleaning }) {
   const [myStats, setMyStats] = useState({ late: 0, early: 0, leaves: 0, outings: 0 });
   const [gpsState, setGpsState] = useState("idle");
   const [coords, setCoords] = useState(null);
@@ -1484,6 +1484,9 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
   const [trainingEndDate, setTrainingEndDate] = useState(todayISO());
   const [formError, setFormError] = useState("");
   const [savingAttendance, setSavingAttendance] = useState(false);
+  // ลงเวลากลับบ้าน: ครูประจำชั้นต้องให้คะแนนเวรพื้นที่วันนี้ก่อน (ไม่บล็อกการลงเวลาเข้างาน)
+  const [cleaningStatus, refreshCleaningStatus] = useCleaningCheckoutStatus(currentUser, mode === "out");
+  const cleaningBlocked = mode === "out" && cleaningStatus.required && !cleaningStatus.done;
 
   useEffect(() => {
     // ดึงสถิติของพนักงานคนนี้ (เดือนปัจจุบัน)
@@ -1611,6 +1614,13 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
         setSavingAttendance(false);
       }
     } else {
+      // ตรวจซ้ำตอนกดบันทึก (กันกรณีหน้าจอเก่า/กดก่อนโหลดเสร็จ)
+      const latest = await refreshCleaningStatus();
+      if (latest?.required && !latest.done) {
+        setFormError("ยังไม่ได้ให้คะแนนเวรพื้นที่วันนี้ · ครูประจำชั้นต้องให้คะแนนก่อนจึงจะลงเวลากลับบ้านได้");
+        setSavingAttendance(false);
+        return;
+      }
       const openIds = todayOpenAttendances.length > 0 ? todayOpenAttendances.map(row => row.id) : (openAttendance ? [openAttendance.id] : []);
       if (openIds.length === 0) {
         setSavingAttendance(false);
@@ -1651,7 +1661,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
   const circumference = 2 * Math.PI * 54;
   const ringColor = gpsState === "success" ? (isInZone ? (mode === "in" ? "#10b981" : "#f59e0b") : "#ef4444") : "#94a3b8";
   const pct = distance !== null ? Math.min(distance / GEOFENCE_RADIUS, 1) : 0;
-  const canSubmit = isInZone && !done && !savingAttendance && gpsState === "success" && selectedEmp && (mode === "in" ? !openAttendance : openAttendance);
+  const canSubmit = isInZone && !done && !savingAttendance && gpsState === "success" && selectedEmp && (mode === "in" ? !openAttendance : openAttendance && !cleaningBlocked);
 
   return (
     <Modal title={mode === "in" ? "ลงเวลาเข้างาน" : "ลงเวลากลับบ้าน"} subtitle={`📍 รัศมี ${GEOFENCE_RADIUS} เมตรจากโรงเรียน`} onClose={onClose} icon={mode === "in" ? LogIn : LogOut} color={mode === "in" ? "#0072D9" : "#d97706"}>
@@ -1715,6 +1725,9 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
       {mode === "out" && openAttendance && (
         <div style={{ background: "#EAF5FF", border: "1.5px solid #8FD0FF", borderRadius: "12px", padding: "0.75rem", marginBottom: "1.25rem", textAlign: "center", color: "#0072D9", fontSize: "0.85rem", fontWeight: 600 }}>🕐 เข้างานเมื่อ {fmtTime(openAttendance.check_in)} น.</div>
       )}
+
+      {mode === "out" && !done && formError && <ErrorBox>{formError}</ErrorBox>}
+      {mode === "out" && !done && <CleaningCheckoutBlockNotice status={cleaningStatus} compact onOpenCleaning={onOpenCleaning ? () => { onClose && onClose(); onOpenCleaning(); } : null} />}
 
       <div style={{ display: "flex", justifyContent: "center", marginBottom: "1.25rem" }}>
         <div style={{ position: "relative", width: 140, height: 140 }}>
@@ -1811,7 +1824,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
         <button onClick={fetchLocation} style={btnSecondary}><RefreshCw size={16} /> อัปเดต GPS</button>
         <button onClick={handleSubmit} disabled={!canSubmit} style={{ ...btnPrimary, background: done ? "#dcfce7" : canSubmit ? (mode === "in" ? "linear-gradient(135deg, #008CFF, #0072D9)" : "linear-gradient(135deg, #f59e0b, #d97706)") : "#e2e8f0", color: done ? "#16a34a" : canSubmit ? "#fff" : "#94a3b8", cursor: canSubmit ? "pointer" : "not-allowed" }}>
           {mode === "in" ? <LogIn size={18} /> : <LogOut size={18} />}
-          {done ? "บันทึกแล้ว" : mode === "in" ? "ลงเวลาเข้างาน" : "ลงเวลากลับบ้าน"}
+          {done ? "บันทึกแล้ว" : mode === "in" ? "ลงเวลาเข้างาน" : cleaningBlocked ? "ให้คะแนนเวรพื้นที่ก่อน" : "ลงเวลากลับบ้าน"}
         </button>
       </div>
     </Modal>
@@ -2030,15 +2043,17 @@ function PostNoteMissingWarning({ currentUser, onOpenAcademic }) {
   );
 }
 
-function AttendancePage({ employees, activityLog, currentUser, settings, onRefresh, onOpenAcademic }) {
+function AttendancePage({ employees, activityLog, currentUser, settings, onRefresh, onOpenAcademic, onOpenCleaning }) {
   const [showIn, setShowIn] = useState(false);
   const [showOut, setShowOut] = useState(false);
   const filtered = hasAdminRights(currentUser) ? activityLog : activityLog.filter(a => a.employee_id === currentUser?.id);
+  const [cleaningStatus] = useCleaningCheckoutStatus(currentUser, true);
 
   return (
     <div>
       <PageHeader title="ลงเวลาเข้า-ออก" count={filtered.length} />
       <PostNoteMissingWarning currentUser={currentUser} onOpenAcademic={onOpenAcademic} />
+      <CleaningCheckoutBlockNotice status={cleaningStatus} onOpenCleaning={onOpenCleaning} />
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
         <button onClick={() => setShowIn(true)} style={{ background: "linear-gradient(135deg, #008CFF, #0072D9)", border: "none", borderRadius: "1rem", padding: "1.5rem", color: "#fff", cursor: "pointer", fontFamily: "inherit", boxShadow: "0 8px 24px rgba(0,140,255,0.3)", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
           <LogIn size={32} /><div style={{ fontSize: "1.1rem", fontWeight: 800 }}>ลงเวลาเข้างาน</div>
@@ -2125,7 +2140,7 @@ function AttendancePage({ employees, activityLog, currentUser, settings, onRefre
       </Card>
 
       {showIn && <AttendanceModal mode="in" onClose={() => { setShowIn(false); onRefresh(); }} onCheckin={() => onRefresh()} employees={employees} currentUser={currentUser} settings={settings} />}
-      {showOut && <AttendanceModal mode="out" onClose={() => { setShowOut(false); onRefresh(); }} onCheckin={() => onRefresh()} employees={employees} currentUser={currentUser} settings={settings} />}
+      {showOut && <AttendanceModal mode="out" onClose={() => { setShowOut(false); onRefresh(); }} onCheckin={() => onRefresh()} employees={employees} currentUser={currentUser} settings={settings} onOpenCleaning={onOpenCleaning} />}
     </div>
   );
 }
@@ -8262,6 +8277,123 @@ async function writeCleaningRow(item, employeeId) {
   return result.data.id;
 }
 
+// ─── บังคับครูประจำชั้นให้คะแนนเวรพื้นที่ก่อนลงเวลากลับบ้าน ─────────────────────────
+// กติกา: ครูประจำชั้น (ตั้ง "ชั้นที่สอน" ไว้ หรือเป็นครูอนุบาลประจำห้อง) ต้องบันทึกผลการตรวจเวรพื้นที่
+// อย่างน้อย 1 ครั้ง ลงวันที่วันนี้ ก่อนลงเวลากลับบ้าน
+// ยกเว้น: ผู้บริหาร, ครูทดลองระบบ, เจ้าหน้าที่ที่ไม่สอน, ครูที่ไม่ได้ประจำชั้น, เสาร์-อาทิตย์,
+// วันหยุดที่ตั้งไว้ (ตั้งค่าหักคะแนน), วันที่มีใบลาอนุมัติแล้ว, วันที่ลงเวลาแบบไปอบรม
+// ถ้าโหลดสถานะไม่ได้ (เน็ตมีปัญหา) จะไม่บล็อก เพื่อไม่ให้ครูติดอยู่กลับบ้านไม่ได้
+const CLEANING_SAVED_EVENT = "hr-cleaning-saved";
+function notifyCleaningSaved() {
+  try { window.dispatchEvent(new Event(CLEANING_SAVED_EVENT)); } catch { /* ignore */ }
+}
+const cleaningRoomShortName = room => cleaningGradeToken(room?.name || room?.room_name || "") || String(room?.name || room?.room_name || "").slice(0, 30);
+
+async function fetchCleaningCheckoutStatus(user) {
+  const free = reason => ({ required: false, done: true, reason, pendingRooms: [] });
+  if (!user?.id) return free("no-user");
+  if (isExecutiveUser(user)) return free("executive");
+  if (isTestTeacher(user)) return free("test-teacher");
+  if (isNonTeachingStaff(user)) return free("non-teaching");
+  const today = todayISO();
+  if (isBangkokWeekend(`${today}T12:00:00+07:00`)) return free("weekend");
+  const grades = await loadTeachingGrades();
+  const grade = teachingGradeOf(grades, user);
+  const homeroom = !!cleaningGradeToken(grade) || isKgHomeroomTeacher(user);
+  if (!homeroom) return free("no-homeroom");
+  const id = String(user.id);
+  const [holidayRes, leaveRes, attRes, inspRes, cfgRes] = await Promise.all([
+    supabase.from("teaching_schedule").select("subject").eq("class_room", TEACHER_EVAL_ROOM).like("subject", "%\"deduct_settings\"%"),
+    supabase.from("leaves").select("id, start_date, end_date, status").eq("employee_id", id).eq("status", "approved").lte("start_date", today).gte("start_date", shiftDateKey(today, -90)),
+    supabase.from("attendance").select("id, work_activity, check_in").eq("employee_id", id).gte("check_in", `${today}T00:00:00+07:00`).lte("check_in", `${today}T23:59:59+07:00`),
+    supabase.from("teaching_schedule").select("id, subject").eq("class_room", CLEANING_DUTY_ROOM).eq("period", 2).like("subject", `%"date":"${today}"%`),
+    supabase.from("teaching_schedule").select("id, subject").eq("class_room", CLEANING_DUTY_ROOM).eq("period", 1),
+  ]);
+  if (inspRes.error) throw new Error(inspRes.error.message);
+  // วันหยุดที่ตั้งไว้ในหน้าตั้งค่าหักคะแนน (ใช้ชุดล่าสุด)
+  let latestSettings = null;
+  (holidayRes.data || []).forEach(row => {
+    try {
+      const parsed = JSON.parse(row.subject || "{}");
+      if (parsed.kind === "deduct_settings" && (!latestSettings || String(parsed.updated_at || "") > String(latestSettings.updated_at || ""))) latestSettings = parsed;
+    } catch { /* ignore */ }
+  });
+  if (Array.isArray(latestSettings?.holidays) && latestSettings.holidays.includes(today)) return free("holiday");
+  if ((leaveRes.data || []).some(row => (row.end_date || row.start_date) >= today)) return free("leave");
+  if ((attRes.data || []).some(row => row.work_activity === "training")) return free("training");
+  const todays = [];
+  (inspRes.data || []).forEach(row => {
+    try {
+      const parsed = JSON.parse(row.subject || "{}");
+      if (parsed.kind === "inspection" && parsed.date === today) todays.push(parsed);
+    } catch { /* ignore */ }
+  });
+  // ผลที่บันทึกในเครื่องนี้แต่ยังซิงก์ไม่ได้ก็นับว่าให้คะแนนแล้ว
+  const local = readCleaningLocal();
+  const localMine = local.inspections.filter(item => item.date === today && String(item.by_id) === id);
+  const done = todays.some(item => String(item.by_id) === id) || localMine.length > 0;
+  let config = null;
+  (cfgRes.data || []).forEach(row => {
+    try {
+      const parsed = JSON.parse(row.subject || "{}");
+      if (parsed.kind === "config") { const next = cleanCleaningConfig(parsed); if (!config || next.updated_at > config.updated_at) config = next; }
+    } catch { /* ignore */ }
+  });
+  const rooms = roomsWithCleaningDefaults((config || cleanCleaningConfig(null)).rooms);
+  const scoredRoomIds = new Set(todays.map(item => String(item.room_id)));
+  const pendingRooms = rooms
+    .filter(room => !isOwnCleaningAssignment(room, grade, user) && !scoredRoomIds.has(String(room.id)))
+    .map(cleaningRoomShortName);
+  return { required: true, done, reason: done ? "done" : "missing", pendingRooms };
+}
+
+function useCleaningCheckoutStatus(user, enabled = true) {
+  const [status, setStatus] = useState({ loading: true, required: false, done: true, pendingRooms: [] });
+  const userId = user?.id;
+  const refresh = useCallback(async () => {
+    if (!enabled || !user?.id) { setStatus({ loading: false, required: false, done: true, pendingRooms: [] }); return null; }
+    try {
+      const next = await fetchCleaningCheckoutStatus(user);
+      setStatus({ loading: false, ...next });
+      return next;
+    } catch {
+      setStatus({ loading: false, required: false, done: true, pendingRooms: [], error: true });
+      return null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, enabled]);
+  useEffect(() => {
+    refresh();
+    const onSaved = () => refresh();
+    const onVisible = () => { if (document.visibilityState === "visible") refresh(); };
+    window.addEventListener(CLEANING_SAVED_EVENT, onSaved);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { window.removeEventListener(CLEANING_SAVED_EVENT, onSaved); document.removeEventListener("visibilitychange", onVisible); };
+  }, [refresh]);
+  return [status, refresh];
+}
+
+function CleaningCheckoutBlockNotice({ status, onOpenCleaning, compact = false }) {
+  if (!status?.required || status.done) return null;
+  const rooms = status.pendingRooms || [];
+  return (
+    <div role="alert" style={{ background: "#fff7ed", border: "3px solid #ea580c", borderRadius: "16px", padding: compact ? "0.85rem" : "1rem 1.1rem", marginBottom: "1.25rem", color: "#9a3412", boxShadow: "0 10px 28px rgba(234,88,12,0.18)" }}>
+      <div style={{ fontSize: compact ? "1.02rem" : "1.12rem", fontWeight: 900, marginBottom: "0.35rem" }}>🧹 ยังไม่ได้ให้คะแนนเวรพื้นที่วันนี้</div>
+      <div style={{ fontSize: "0.88rem", fontWeight: 700, lineHeight: 1.6 }}>
+        ครูประจำชั้นต้องให้คะแนนเวรพื้นที่อย่างน้อย 1 พื้นที่ (ไม่ใช่พื้นที่ของห้องตัวเอง) ก่อน จึงจะลงเวลากลับบ้านได้
+      </div>
+      {rooms.length > 0 && (
+        <div style={{ fontSize: "0.82rem", marginTop: "0.4rem", color: "#7c2d12" }}>
+          พื้นที่ที่ยังไม่มีใครตรวจวันนี้: {rooms.slice(0, 12).join(", ")}{rooms.length > 12 ? ` และอีก ${rooms.length - 12} พื้นที่` : ""}
+        </div>
+      )}
+      {onOpenCleaning && (
+        <button type="button" onClick={onOpenCleaning} style={{ marginTop: "0.65rem", background: "#ea580c", color: "#fff", border: "none", borderRadius: "10px", padding: "0.55rem 1rem", fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>ไปให้คะแนนเวรพื้นที่ →</button>
+      )}
+    </div>
+  );
+}
+
 async function storeCleaningPhoto(file) {
   const blob = await compressImageBlob(file);
   const objectPath = `cleaning/${todayISO()}/${newSupervisionId()}.jpg`;
@@ -8556,6 +8688,7 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
       setError(`${err.message || "บันทึกไม่สำเร็จ"} · เก็บไว้ในเครื่องนี้แล้ว จะซิงก์เมื่อเปิดหน้านี้ครั้งถัดไป`);
     }
     commit(config, original ? inspections.map(entry => (entry.id === original.id ? item : entry)) : [item, ...inspections]);
+    notifyCleaningSaved();
     setEditingId("");
     setForm(current => ({ ...emptyCleaningForm(rooms, criteria, blockedRoomIds), room_id: scoringBlocked(current) ? "" : current.room_id, area: scoringBlocked(current) ? "" : current.area, date: original ? todayISO() : current.date }));
     setBusy(false);
@@ -8592,6 +8725,7 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
       if (delError) nextDeleted = [...deleted, item.id];
     }
     commit(config, inspections.filter(entry => entry.id !== item.id), nextDeleted);
+    notifyCleaningSaved();
     if (editingId === item.id) cancelEdit();
     setMessage("ลบผลการตรวจแล้ว");
   };
@@ -12368,7 +12502,7 @@ export default function HRApp() {
                 </>
               )}
               {activePage === "employee" && <EmployeePage employees={employees} currentUser={currentUser} onRefresh={fetchData} />}
-              {activePage === "attendance" && <AttendancePage employees={employees} activityLog={activityLog} currentUser={actingUser} settings={settings} onRefresh={fetchData} onOpenAcademic={() => setActivePage("academic")} />}
+              {activePage === "attendance" && <AttendancePage employees={employees} activityLog={activityLog} currentUser={actingUser} settings={settings} onRefresh={fetchData} onOpenAcademic={() => setActivePage("academic")} onOpenCleaning={() => openNavItem("cleaningDuty")} />}
               {activePage === "leave" && <LeavePage employees={employees} leaves={leaves} currentUser={actingUser} onRefresh={fetchData} />}
               {activePage === "outing" && <OutingPage employees={employees} outings={outings} currentUser={actingUser} onRefresh={fetchData} />}
               {activePage === "finance" && isSalaryOwner(currentUser) && isSalaryOwner(actingUser) && <FinancePortal employees={employees} attendance={activityLog} leaves={leaves} settings={settings} />}
@@ -12388,7 +12522,7 @@ export default function HRApp() {
         </main>
       </div>
 
-      {showAttendance && <AttendanceModal mode={attMode} onClose={() => { setShowAttendance(false); fetchData(); }} onCheckin={() => fetchData()} employees={employees} currentUser={actingUser} settings={settings} />}
+      {showAttendance && <AttendanceModal mode={attMode} onClose={() => { setShowAttendance(false); fetchData(); }} onCheckin={() => fetchData()} employees={employees} currentUser={actingUser} settings={settings} onOpenCleaning={() => openNavItem("cleaningDuty")} />}
     </div>
   );
 }

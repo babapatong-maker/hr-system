@@ -8333,18 +8333,21 @@ function takeCleaningPrefill() {
     return value;
   } catch { return ""; }
 }
-// เสียงเตือน "ปี๊ป ปี๊ป ปี๊ป" (WebAudio ไม่ต้องใช้ไฟล์เสียง) · ถ้าเบราว์เซอร์บล็อก จะเล่นตอนแตะหน้าจอครั้งแรก
+// เสียงเตือนเวรพื้นที่: ไฟล์ /cleaning-alert.mp3 (Alarm Sound Effect, ปรับดังสุดโดยไม่แตกแล้ว) เล่นด้วย <audio> ธรรมดา
+// ที่ volume 1.0 → ออกช่องเสียง "สื่อ/Media" เหมือนดู YouTube (เว็บปรับเกินระดับเสียง/ปิดเสียงของเครื่องไม่ได้)
+// ถ้าเบราว์เซอร์บล็อกการเล่นอัตโนมัติ จะเล่นทันทีเมื่อแตะ/กดปุ่มใด ๆ ครั้งแรก
+// ใช้เสียงปี๊ป 1000 Hz (WebAudio) เฉพาะเมื่อโหลดไฟล์เสียงไม่ได้เท่านั้น
+const CLEANING_ALERT_SRC = `${import.meta.env.BASE_URL || "/"}cleaning-alert.mp3`;
+let cleaningAlertAudio = null;
+let cleaningAlertFailed = false;
 let cleaningBeepAt = 0;
 let cleaningBeepWaiting = false;
-function playCleaningAlertBeep() {
-  const now = Date.now();
-  if (now - cleaningBeepAt < 1500) return;
+function playCleaningFallbackBeep() {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return;
     const ctx = new AudioCtx();
     const schedule = () => {
-      cleaningBeepAt = Date.now();
       [0, 0.32, 0.64].forEach(offset => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -8362,22 +8365,57 @@ function playCleaningAlertBeep() {
       });
       setTimeout(() => { try { ctx.close(); } catch { /* ignore */ } }, 1500);
     };
-    if (ctx.state === "running") { schedule(); return; }
-    ctx.resume().then(() => { if (ctx.state === "running") schedule(); else throw new Error("blocked"); }).catch(() => {
-      try { ctx.close(); } catch { /* ignore */ }
-      if (cleaningBeepWaiting) return;
-      cleaningBeepWaiting = true;
-      const once = () => {
-        cleaningBeepWaiting = false;
-        window.removeEventListener("pointerdown", once, true);
-        window.removeEventListener("keydown", once, true);
-        cleaningBeepAt = 0;
-        playCleaningAlertBeep();
-      };
-      window.addEventListener("pointerdown", once, true);
-      window.addEventListener("keydown", once, true);
-    });
+    if (ctx.state === "running") schedule();
+    else ctx.resume().then(() => { if (ctx.state === "running") schedule(); }).catch(() => { /* ignore */ });
   } catch { /* เสียงเป็นส่วนเสริม */ }
+}
+function getCleaningAlertAudio() {
+  if (cleaningAlertAudio || typeof Audio === "undefined") return cleaningAlertAudio;
+  const audio = new Audio();
+  audio.preload = "auto";
+  audio.setAttribute("playsinline", "");
+  audio.setAttribute("webkit-playsinline", "");
+  audio.volume = 1;
+  audio.addEventListener("error", () => { cleaningAlertFailed = true; });
+  audio.src = CLEANING_ALERT_SRC;
+  cleaningAlertAudio = audio;
+  return audio;
+}
+function waitForGestureThenPlay() {
+  if (cleaningBeepWaiting) return;
+  cleaningBeepWaiting = true;
+  const events = ["pointerdown", "touchstart", "keydown"];
+  const once = () => {
+    events.forEach(name => window.removeEventListener(name, once, true));
+    cleaningBeepWaiting = false;
+    playCleaningAlertBeep({ force: true });
+  };
+  events.forEach(name => window.addEventListener(name, once, true));
+}
+function playCleaningAlertBeep({ force = false } = {}) {
+  const now = Date.now();
+  if (!force && now - cleaningBeepAt < 1500) return;
+  cleaningBeepAt = now;
+  const audio = getCleaningAlertAudio();
+  if (!audio || cleaningAlertFailed) { playCleaningFallbackBeep(); return; }
+  try {
+    // เล่นซ้ำจากต้น ไม่ซ้อนกัน (ใช้ <audio> ตัวเดียวทั้งแอป)
+    audio.pause();
+    audio.currentTime = 0;
+    audio.volume = 1;
+    audio.muted = false;
+    const played = audio.play();
+    if (played && typeof played.catch === "function") {
+      played.catch(err => {
+        if (err && err.name === "NotAllowedError") { cleaningBeepAt = 0; waitForGestureThenPlay(); return; }
+        cleaningAlertFailed = true;
+        playCleaningFallbackBeep();
+      });
+    }
+  } catch {
+    cleaningAlertFailed = true;
+    playCleaningFallbackBeep();
+  }
 }
 const cleaningRoomShortName = room => cleaningGradeToken(room?.name || room?.room_name || "") || String(room?.name || room?.room_name || "").slice(0, 30);
 
@@ -8507,6 +8545,7 @@ function CleaningCheckoutBlockNotice({ status, onOpenCleaning, compact = false }
         ))}
       </div>
       <div style={{ fontSize: compact ? "1.05rem" : "1.2rem", fontWeight: 900, color: "#991b1b" }}>กรุณาลงเวรให้เรียบร้อยก่อนจึงจะลงเวลากลับบ้านได้</div>
+      <button type="button" onClick={() => playCleaningAlertBeep({ force: true })} style={{ marginTop: "0.5rem", background: "#fff", color: "#b91c1c", border: "2px solid #dc2626", borderRadius: "999px", padding: "0.3rem 0.85rem", fontWeight: 800, fontSize: "0.85rem", cursor: "pointer", fontFamily: "inherit" }}>🔊 ฟังเสียงเตือน</button>
       <div style={{ fontSize: "0.85rem", fontWeight: 700, marginTop: "0.35rem", color: "#7f1d1d" }}>ให้คะแนนพื้นที่ใดก็ได้ ยกเว้นพื้นที่ของห้องตัวเอง (อย่างน้อยวันละ 1 พื้นที่)</div>
       {missing.includes(today) && rooms.length > 0 && (
         <div style={{ fontSize: "0.82rem", marginTop: "0.35rem", color: "#7c2d12" }}>

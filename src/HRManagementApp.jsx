@@ -8513,6 +8513,49 @@ async function fetchCleaningCheckoutStatus(user) {
   return { required: true, done, reason: done ? "done" : "missing", missingDates, pendingRooms, catchup };
 }
 
+// ให้คะแนนเวรพื้นที่ของ "วันนี้" ได้ตั้งแต่ 12:00 น. (ตามนาฬิกาเครื่อง/โทรศัพท์) เพื่อให้ดูความสะอาดจนถึงเวลาเที่ยง
+// วันที่ย้อนหลัง (ลงเวรที่ขาด) ไม่ติดเงื่อนไขนี้ เพราะวันนั้นผ่านไปแล้ว
+const CLEANING_OPEN_HOUR = 12;
+const CLEANING_NOON_REASON = "เพราะต้องการให้ดูความสะอาดของพื้นที่จนถึงเวลาเที่ยง";
+function cleaningScoringOpen(now = new Date()) {
+  return now.getHours() >= CLEANING_OPEN_HOUR;
+}
+function cleaningDateLocked(date, now = new Date()) {
+  return date === todayISO() && !cleaningScoringOpen(now);
+}
+function cleaningOpensInText(now = new Date()) {
+  const open = new Date(now);
+  open.setHours(CLEANING_OPEN_HOUR, 0, 0, 0);
+  const ms = Math.max(0, open - now);
+  const totalMin = Math.ceil(ms / 60000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (totalMin <= 0) return "เปิดแล้ว";
+  return `อีก ${h ? `${h} ชม. ` : ""}${m} นาที`;
+}
+// นาฬิกาสำหรับปลดล็อกอัตโนมัติตอน 12:00 โดยไม่ต้องรีโหลด
+function useCleaningClock() {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    // ก่อนเที่ยงเช็คทุก 5 วินาที (ปลดล็อกทันทีที่ถึง 12:00) · หลังเที่ยงเช็คทุกนาที (ไว้ข้ามวัน)
+    let t;
+    const tick = () => {
+      setNow(Date.now());
+      t = setTimeout(tick, cleaningScoringOpen() ? 60000 : 5000);
+    };
+    t = setTimeout(tick, cleaningScoringOpen() ? 60000 : 5000);
+    return () => clearTimeout(t);
+  }, []);
+  return new Date(now);
+}
+function CleaningNoonLockNotice({ now, compact = false }) {
+  return (
+    <div role="status" style={{ background: "#eff6ff", border: "2px solid #3b82f6", borderRadius: "14px", padding: compact ? "0.6rem 0.75rem" : "0.8rem 1rem", color: "#1e3a8a", textAlign: "center", marginBottom: compact ? 0 : "0.8rem" }}>
+      <div style={{ fontWeight: 900, fontSize: compact ? "0.95rem" : "1.05rem", lineHeight: 1.45 }}>🔒 ให้คะแนนเวรพื้นที่ได้ตั้งแต่ 12:00 น. เป็นต้นไป — {CLEANING_NOON_REASON}</div>
+      <div style={{ fontSize: "0.85rem", fontWeight: 700, marginTop: "0.2rem" }}>เปิดให้ลงคะแนนเวลา 12:00 น. ({cleaningOpensInText(now)}) · ตอนนี้ {now.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.</div>
+    </div>
+  );
+}
 // สถานะล็อกปุ่มกลับบ้าน: ระหว่างโหลด หรือโหลดไม่สำเร็จ ถือว่าล็อก (ไม่ปล่อยผ่าน)
 function cleaningCheckoutLock(status) {
   if (!status || status.loading) return "loading";
@@ -8551,6 +8594,7 @@ function useCleaningCheckoutStatus(user, enabled = true) {
 // เสียงเตือน: หน้าลงเวลา/ป๊อปอัปกลับบ้าน เล่นทุกครั้งที่เปิด · หน้าหลักเล่นครั้งเดียวต่อรายการวันที่ขาด (ไม่รบกวนตอนเปลี่ยนหน้า)
 const cleaningOnceSounded = new Set();
 function CleaningCheckoutBlockNotice({ status, onOpenCleaning, onRetry, compact = false, sound = "always" }) {
+  const clockNow = useCleaningClock();
   const lock = cleaningCheckoutLock(status);
   const blocked = lock === "missing";
   const missingKey = (status?.missingDates || []).join(",");
@@ -8583,11 +8627,14 @@ function CleaningCheckoutBlockNotice({ status, onOpenCleaning, onRetry, compact 
         {missing.map(date => (
           <div key={date} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.6rem", flexWrap: "wrap", background: "#fff", border: "2px solid #fca5a5", borderRadius: "12px", padding: "0.5rem 0.7rem" }}>
             <span style={{ fontSize: compact ? "1.15rem" : "1.3rem", fontWeight: 900, color: "#b91c1c" }}>{date === today ? `วันนี้ (${thaiDayLabel(date)})` : thaiDayLabel(date)}</span>
-            {onOpenCleaning && <button type="button" onClick={() => onOpenCleaning(date)} style={{ background: "#dc2626", color: "#fff", border: "none", borderRadius: "10px", padding: "0.5rem 0.95rem", fontWeight: 800, fontSize: "0.95rem", cursor: "pointer", fontFamily: "inherit" }}>ไปให้คะแนน →</button>}
+            {onOpenCleaning && (cleaningDateLocked(date, clockNow)
+              ? <button type="button" disabled aria-disabled="true" title={`ให้คะแนนได้ตั้งแต่ 12:00 น. ${CLEANING_NOON_REASON}`} style={{ background: "#cbd5e1", color: "#334155", border: "none", borderRadius: "10px", padding: "0.5rem 0.95rem", fontWeight: 800, fontSize: "0.9rem", cursor: "not-allowed", fontFamily: "inherit" }}>🔒 เปิดให้คะแนน 12:00 น. ({cleaningOpensInText(clockNow)})</button>
+              : <button type="button" onClick={() => onOpenCleaning(date)} style={{ background: "#dc2626", color: "#fff", border: "none", borderRadius: "10px", padding: "0.5rem 0.95rem", fontWeight: 800, fontSize: "0.95rem", cursor: "pointer", fontFamily: "inherit" }}>ไปให้คะแนน →</button>)}
           </div>
         ))}
       </div>
       <div style={{ fontSize: compact ? "1.05rem" : "1.2rem", fontWeight: 900, color: "#991b1b" }}>กรุณาลงเวรให้เรียบร้อยก่อนจึงจะลงเวลากลับบ้านได้</div>
+      {missing.includes(today) && !cleaningScoringOpen(clockNow) && <div style={{ fontSize: "0.88rem", fontWeight: 800, marginTop: "0.35rem", color: "#1e3a8a" }}>🔒 ให้คะแนนเวรพื้นที่ของวันนี้ได้ตั้งแต่ 12:00 น. เป็นต้นไป — {CLEANING_NOON_REASON}</div>}
       <div style={{ fontSize: "0.85rem", fontWeight: 700, marginTop: "0.35rem", color: "#7f1d1d" }}>ให้คะแนนพื้นที่ใดก็ได้ ยกเว้นพื้นที่ของห้องตัวเอง (อย่างน้อยวันละ 1 พื้นที่)</div>
       {missing.includes(today) && rooms.length > 0 && (
         <div style={{ fontSize: "0.82rem", marginTop: "0.35rem", color: "#7c2d12" }}>
@@ -8762,6 +8809,7 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false,
   const [criterionDraft, setCriterionDraft] = useState({ label: "", hint: "" }); // { title, text, confirmLabel, onConfirm }
   const rooms = roomsWithCleaningDefaults(config.rooms);
   // ครู (ไม่ใช่ผู้บริหาร) ลงวันที่ตรวจได้เฉพาะวันนี้ + วันที่ขาดเวรในช่วงตามย้อนหลัง (เฉพาะวันที่ 20 พ.ย. 2569)
+  const clockNow = useCleaningClock();
   const [ownDutyStatus] = useCleaningCheckoutStatus(currentUser, !canManage && !sharedStatus);
   const dutyStatus = (!canManage && sharedStatus) || ownDutyStatus;
   const todayKey = todayISO();
@@ -8987,6 +9035,7 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false,
   };
 
   const submitInspection = async () => {
+    if (cleaningDateLocked(form.date)) { setError(`ให้คะแนนเวรพื้นที่ของวันนี้ได้ตั้งแต่ 12:00 น. เป็นต้นไป — ${CLEANING_NOON_REASON}`); return; }
     const room = rooms.find(item => item.id === form.room_id);
     const originalForDate = editingId ? inspections.find(entry => entry.id === editingId) : null;
     if (!dateAllowed(form.date, originalForDate)) { setError(`ลงวันที่ตรวจได้เฉพาะวันนี้${catchupMissing.length ? " หรือวันที่ขาดเวรในสัปดาห์นี้" : ""}`); return; }
@@ -9083,6 +9132,7 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false,
   const small = { ...inputStyle, padding: "0.4rem 0.55rem", fontSize: "0.88rem" };
   const tabs = [["inspect", "บันทึกผลการตรวจ"], ["summary", "สรุปผลและอันดับ"], ...(canManage ? [["rooms", "ทะเบียนห้อง พื้นที่ และเกณฑ์"]] : [])];
   const formRoom = rooms.find(room => room.id === form.room_id);
+  const formNoonLocked = cleaningDateLocked(form.date, clockNow);
   const formBlocked = scoringBlocked({ ...(formRoom || {}), room_id: form.room_id, area: form.area, name: formRoom?.name });
   const formCriteria = form.criteria || criteria;
   const formTotal = cleaningTotal(form.scores, formCriteria);
@@ -9154,6 +9204,7 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false,
           <Card>
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.7rem", flexWrap: "wrap" }}>
               <div style={{ fontWeight: 800, color: editingId ? "#FF7106" : "#233862" }}>{editingId ? "แก้ไขผลการตรวจ" : "แบบบันทึกผลการตรวจ"}</div>
+              {formNoonLocked && <div style={{ flexBasis: "100%" }}><CleaningNoonLockNotice now={clockNow} /></div>}
               {editingId && <span style={{ fontSize: "0.75rem", color: "#9a4a00", background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 999, padding: "0.1rem 0.55rem" }}>แก้ไขวันที่ ห้อง พื้นที่ คะแนน บันทึก และรูปได้</span>}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 140px), 1fr))", gap: "0.6rem" }}>
@@ -9217,7 +9268,7 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false,
               <CleaningLevelBadge percent={formMax ? (formTotal / formMax) * 100 : 0} />
               <span style={{ fontSize: "0.75rem", color: "#596068" }}>{formCriteria.length} เกณฑ์ × 5</span>
               {editingId && <button type="button" disabled={busy} onClick={cancelEdit} style={{ ...btnSecondary, flex: "none", marginLeft: "auto", padding: "0.6rem 1rem" }}><X size={16} /> ยกเลิกการแก้ไข</button>}
-              <button type="button" disabled={busy || formBlocked} onClick={submitInspection} style={{ ...btnPrimary, flex: "none", marginLeft: editingId ? 0 : "auto", padding: "0.6rem 1.2rem", background: "linear-gradient(90deg, #FF7106, #FF9A3C)", color: "#fff", cursor: (busy || formBlocked) ? "not-allowed" : "pointer", boxShadow: "0 4px 14px rgba(255,113,6,0.3)", opacity: formBlocked ? 0.55 : 1 }}><Save size={16} /> {editingId ? "บันทึกการแก้ไข" : "บันทึกผลการตรวจ"}</button>
+              <button type="button" disabled={busy || formBlocked || formNoonLocked} aria-disabled={busy || formBlocked || formNoonLocked} onClick={() => { if (!formNoonLocked) submitInspection(); }} style={{ ...btnPrimary, flex: "none", marginLeft: editingId ? 0 : "auto", padding: "0.6rem 1.2rem", background: formNoonLocked ? "#cbd5e1" : "linear-gradient(90deg, #FF7106, #FF9A3C)", color: formNoonLocked ? "#334155" : "#fff", cursor: (busy || formBlocked || formNoonLocked) ? "not-allowed" : "pointer", boxShadow: formNoonLocked ? "none" : "0 4px 14px rgba(255,113,6,0.3)", opacity: formBlocked ? 0.55 : 1 }}>{formNoonLocked ? "🔒" : <Save size={16} />} {formNoonLocked ? "เปิดให้คะแนน 12:00 น." : editingId ? "บันทึกการแก้ไข" : "บันทึกผลการตรวจ"}</button>
             </div>
           </Card>
           <Card>

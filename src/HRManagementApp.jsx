@@ -8545,7 +8545,6 @@ function CleaningCheckoutBlockNotice({ status, onOpenCleaning, compact = false }
         ))}
       </div>
       <div style={{ fontSize: compact ? "1.05rem" : "1.2rem", fontWeight: 900, color: "#991b1b" }}>กรุณาลงเวรให้เรียบร้อยก่อนจึงจะลงเวลากลับบ้านได้</div>
-      <button type="button" onClick={() => playCleaningAlertBeep({ force: true })} style={{ marginTop: "0.5rem", background: "#fff", color: "#b91c1c", border: "2px solid #dc2626", borderRadius: "999px", padding: "0.3rem 0.85rem", fontWeight: 800, fontSize: "0.85rem", cursor: "pointer", fontFamily: "inherit" }}>🔊 ฟังเสียงเตือน</button>
       <div style={{ fontSize: "0.85rem", fontWeight: 700, marginTop: "0.35rem", color: "#7f1d1d" }}>ให้คะแนนพื้นที่ใดก็ได้ ยกเว้นพื้นที่ของห้องตัวเอง (อย่างน้อยวันละ 1 พื้นที่)</div>
       {missing.includes(today) && rooms.length > 0 && (
         <div style={{ fontSize: "0.82rem", marginTop: "0.35rem", color: "#7c2d12" }}>

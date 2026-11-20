@@ -8305,9 +8305,9 @@ async function writeCleaningRow(item, employeeId) {
 // หลังจากวันนั้นตรวจเฉพาะวันนี้ตามปกติ
 const CLEANING_CATCHUP = { on: "2026-11-20", start: "2026-11-16", end: "2026-11-20" };
 // ผู้บริหารที่ต้องให้คะแนนเวรพื้นที่ก่อนลงเวลากลับบ้านเหมือนครูประจำชั้น (ให้คะแนนได้ทุกพื้นที่)
-// จักรพล พลโสภาพ, เรณู เล็กดี · ผู้บริหารคนอื่นต้องให้คะแนนเฉพาะเมื่อตั้งชั้นที่สอนไว้
-const CLEANING_REQUIRED_EXECUTIVE_IDS = new Set(["193538b9-9672-4c18-b29d-114dcc5befaf", "c5306809-307e-47ae-bce1-42c2a9b38f1d"]);
-const CLEANING_REQUIRED_EXECUTIVE_NAMES = new Set(["จักรพล พลโสภาพ", "เรณู เล็กดี"].map(normalizePersonName));
+// จักรพล พลโสภาพ · ผู้บริหารคนอื่น (รวมเรณู เล็กดี ตั้งแต่ 20 พ.ย. 2569) ต้องให้คะแนนเฉพาะเมื่อตั้งชั้นที่สอนไว้
+const CLEANING_REQUIRED_EXECUTIVE_IDS = new Set(["193538b9-9672-4c18-b29d-114dcc5befaf"]);
+const CLEANING_REQUIRED_EXECUTIVE_NAMES = new Set(["จักรพล พลโสภาพ"].map(normalizePersonName));
 function isCleaningRequiredExecutive(user) {
   if (!user) return false;
   return CLEANING_REQUIRED_EXECUTIVE_IDS.has(String(user.id || "")) || CLEANING_REQUIRED_EXECUTIVE_NAMES.has(normalizePersonName(user.name));

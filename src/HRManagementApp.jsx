@@ -1464,7 +1464,7 @@ function OutingModal({ employees, currentUser, onClose, onSave }) {
 }
 
 // ─── ATTENDANCE MODAL ─────────────────────────────────────────────────────────
-function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings, mode = "in", onOpenCleaning }) {
+function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings, mode = "in", onOpenCleaning, cleaningStatus: sharedCleaningStatus, refreshCleaningStatus: sharedRefreshCleaning }) {
   const [myStats, setMyStats] = useState({ late: 0, early: 0, leaves: 0, outings: 0 });
   const [gpsState, setGpsState] = useState("idle");
   const [coords, setCoords] = useState(null);
@@ -1485,8 +1485,12 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
   const [formError, setFormError] = useState("");
   const [savingAttendance, setSavingAttendance] = useState(false);
   // ลงเวลากลับบ้าน: ครูประจำชั้นต้องให้คะแนนเวรพื้นที่วันนี้ก่อน (ไม่บล็อกการลงเวลาเข้างาน)
-  const [cleaningStatus, refreshCleaningStatus] = useCleaningCheckoutStatus(currentUser, mode === "out");
-  const cleaningBlocked = mode === "out" && cleaningStatus.required && !cleaningStatus.done;
+  // ใช้สถานะร่วมจากแอปหลัก (ตัวเดียวกับปุ่มกลับบ้านทุกจุด) · ถ้าไม่ได้ส่งมาจึงโหลดเอง
+  const [ownCleaningStatus, ownRefreshCleaning] = useCleaningCheckoutStatus(currentUser, mode === "out" && !sharedCleaningStatus);
+  const cleaningStatus = sharedCleaningStatus || ownCleaningStatus;
+  const refreshCleaningStatus = sharedRefreshCleaning || ownRefreshCleaning;
+  const cleaningLock = mode === "out" ? cleaningCheckoutLock(cleaningStatus) : "";
+  const cleaningBlocked = !!cleaningLock;
 
   useEffect(() => {
     // ดึงสถิติของพนักงานคนนี้ (เดือนปัจจุบัน)
@@ -1575,6 +1579,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
 
   const handleSubmit = async () => {
     if (!isInZone || done || !selectedEmp || savingAttendance) return;
+    if (mode === "out" && cleaningBlocked) return;
     if (mode === "in" && workActivity === "training") {
       if (!trainingLocation.trim()) {
         setFormError("กรุณากรอกสถานที่อบรม");
@@ -1615,8 +1620,14 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
       }
     } else {
       // ตรวจซ้ำตอนกดบันทึก (กันกรณีหน้าจอเก่า/กดก่อนโหลดเสร็จ)
+      // ล็อกแน่นอน: โหลดไม่สำเร็จ (latest = null) ก็ไม่ให้ลงเวลากลับบ้าน
       const latest = await refreshCleaningStatus();
-      if (latest?.required && !latest.done) {
+      if (!latest) {
+        setFormError("ตรวจสอบเวรพื้นที่ไม่สำเร็จ จึงยังลงเวลากลับบ้านไม่ได้ · ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่");
+        setSavingAttendance(false);
+        return;
+      }
+      if (latest.required && !latest.done) {
         setFormError(`ยังไม่ได้ให้คะแนนเวรพื้นที่: ${(latest.missingDates || []).map(thaiDayLabel).join(", ")} · กรุณาลงเวรให้เรียบร้อยก่อนจึงจะลงเวลากลับบ้านได้`);
         setSavingAttendance(false);
         return;
@@ -1728,7 +1739,8 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
       )}
 
       {mode === "out" && !done && formError && <ErrorBox>{formError}</ErrorBox>}
-      {mode === "out" && !done && <CleaningCheckoutBlockNotice status={cleaningStatus} compact onOpenCleaning={onOpenCleaning ? date => { onClose && onClose(); onOpenCleaning(date); } : null} />}
+      {mode === "out" && !done && cleaningLock === "loading" && <div style={{ background: "#f1f5f9", border: "1.5px solid #cbd5e1", borderRadius: "12px", padding: "0.7rem", marginBottom: "1rem", textAlign: "center", color: "#475569", fontWeight: 700 }}>🔒 กำลังตรวจสอบเวรพื้นที่...</div>}
+      {mode === "out" && !done && <CleaningCheckoutBlockNotice status={cleaningStatus} compact onRetry={refreshCleaningStatus} onOpenCleaning={onOpenCleaning ? date => { onClose && onClose(); onOpenCleaning(date); } : null} />}
 
       <div style={{ display: "flex", justifyContent: "center", marginBottom: "1.25rem" }}>
         <div style={{ position: "relative", width: 140, height: 140 }}>
@@ -1825,7 +1837,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
         <button onClick={fetchLocation} style={btnSecondary}><RefreshCw size={16} /> อัปเดต GPS</button>
         <button onClick={handleSubmit} disabled={!canSubmit} style={{ ...btnPrimary, background: done ? "#dcfce7" : canSubmit ? (mode === "in" ? "linear-gradient(135deg, #008CFF, #0072D9)" : "linear-gradient(135deg, #f59e0b, #d97706)") : "#e2e8f0", color: done ? "#16a34a" : canSubmit ? "#fff" : "#94a3b8", cursor: canSubmit ? "pointer" : "not-allowed" }}>
           {mode === "in" ? <LogIn size={18} /> : <LogOut size={18} />}
-          {done ? "บันทึกแล้ว" : mode === "in" ? "ลงเวลาเข้างาน" : cleaningBlocked ? "ให้คะแนนเวรพื้นที่ก่อน" : "ลงเวลากลับบ้าน"}
+          {done ? "บันทึกแล้ว" : mode === "in" ? "ลงเวลาเข้างาน" : cleaningLock === "loading" ? "🔒 กำลังตรวจสอบเวรพื้นที่..." : cleaningLock === "error" ? "🔒 ตรวจสอบเวรพื้นที่ไม่สำเร็จ" : cleaningBlocked ? "🔒 ให้คะแนนเวรพื้นที่ก่อน" : "ลงเวลากลับบ้าน"}
         </button>
       </div>
     </Modal>
@@ -2044,25 +2056,29 @@ function PostNoteMissingWarning({ currentUser, onOpenAcademic }) {
   );
 }
 
-function AttendancePage({ employees, activityLog, currentUser, settings, onRefresh, onOpenAcademic, onOpenCleaning }) {
+function AttendancePage({ employees, activityLog, currentUser, settings, onRefresh, onOpenAcademic, onOpenCleaning, cleaningStatus: sharedCleaningStatus, refreshCleaningStatus: sharedRefreshCleaning }) {
   const [showIn, setShowIn] = useState(false);
   const [showOut, setShowOut] = useState(false);
   const filtered = hasAdminRights(currentUser) ? activityLog : activityLog.filter(a => a.employee_id === currentUser?.id);
-  const [cleaningStatus] = useCleaningCheckoutStatus(currentUser, true);
+  const [ownCleaningStatus, ownRefreshCleaning] = useCleaningCheckoutStatus(currentUser, !sharedCleaningStatus);
+  const cleaningStatus = sharedCleaningStatus || ownCleaningStatus;
+  const refreshCleaningStatus = sharedRefreshCleaning || ownRefreshCleaning;
+  const cleaningLock = cleaningCheckoutLock(cleaningStatus);
+  const outLocked = !!cleaningLock;
 
   return (
     <div>
       <PageHeader title="ลงเวลาเข้า-ออก" count={filtered.length} />
       <WeeklyCleaningWinnerBanner />
       <PostNoteMissingWarning currentUser={currentUser} onOpenAcademic={onOpenAcademic} />
-      <CleaningCheckoutBlockNotice status={cleaningStatus} onOpenCleaning={onOpenCleaning} />
+      <CleaningCheckoutBlockNotice status={cleaningStatus} onOpenCleaning={onOpenCleaning} onRetry={refreshCleaningStatus} />
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
         <button onClick={() => setShowIn(true)} style={{ background: "linear-gradient(135deg, #008CFF, #0072D9)", border: "none", borderRadius: "1rem", padding: "1.5rem", color: "#fff", cursor: "pointer", fontFamily: "inherit", boxShadow: "0 8px 24px rgba(0,140,255,0.3)", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
           <LogIn size={32} /><div style={{ fontSize: "1.1rem", fontWeight: 800 }}>ลงเวลาเข้างาน</div>
           <div style={{ fontSize: "0.75rem", opacity: 0.9 }}>เวลาทำงาน: {wsOf(currentUser?.id, settings?.work_start)?.slice(0,5)} น.</div>
         </button>
-        <button onClick={() => setShowOut(true)} style={{ background: "linear-gradient(135deg, #f59e0b, #d97706)", border: "none", borderRadius: "1rem", padding: "1.5rem", color: "#fff", cursor: "pointer", fontFamily: "inherit", boxShadow: "0 8px 24px rgba(245,158,11,0.3)", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
-          <LogOut size={32} /><div style={{ fontSize: "1.1rem", fontWeight: 800 }}>ลงเวลากลับบ้าน</div>
+        <button disabled={outLocked} aria-disabled={outLocked} onClick={() => { if (!outLocked) setShowOut(true); }} title={outLocked ? "ล็อก: ยังไม่ลงเวรพื้นที่" : "ลงเวลากลับบ้าน"} style={{ background: outLocked ? "#cbd5e1" : "linear-gradient(135deg, #f59e0b, #d97706)", border: "none", borderRadius: "1rem", padding: "1.5rem", color: outLocked ? "#475569" : "#fff", cursor: outLocked ? "not-allowed" : "pointer", fontFamily: "inherit", boxShadow: outLocked ? "none" : "0 8px 24px rgba(245,158,11,0.3)", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
+          {outLocked ? <span style={{ fontSize: "2rem", lineHeight: 1 }}>🔒</span> : <LogOut size={32} />}<div style={{ fontSize: "1.1rem", fontWeight: 800 }}>{cleaningLock === "loading" ? "กำลังตรวจสอบเวรพื้นที่..." : outLocked ? "ล็อก: ยังไม่ลงเวรพื้นที่" : "ลงเวลากลับบ้าน"}</div>
           <div style={{ fontSize: "0.75rem", opacity: 0.9 }}>เวลาเลิก: {weOf(currentUser?.id, settings?.work_end)?.slice(0,5)} น.</div>
         </button>
       </div>
@@ -2142,7 +2158,7 @@ function AttendancePage({ employees, activityLog, currentUser, settings, onRefre
       </Card>
 
       {showIn && <AttendanceModal mode="in" onClose={() => { setShowIn(false); onRefresh(); }} onCheckin={() => onRefresh()} employees={employees} currentUser={currentUser} settings={settings} />}
-      {showOut && <AttendanceModal mode="out" onClose={() => { setShowOut(false); onRefresh(); }} onCheckin={() => onRefresh()} employees={employees} currentUser={currentUser} settings={settings} onOpenCleaning={onOpenCleaning} />}
+      {showOut && !outLocked && <AttendanceModal mode="out" onClose={() => { setShowOut(false); onRefresh(); }} onCheckin={() => onRefresh()} employees={employees} currentUser={currentUser} settings={settings} onOpenCleaning={onOpenCleaning} cleaningStatus={cleaningStatus} refreshCleaningStatus={refreshCleaningStatus} />}
     </div>
   );
 }
@@ -8497,17 +8513,24 @@ async function fetchCleaningCheckoutStatus(user) {
   return { required: true, done, reason: done ? "done" : "missing", missingDates, pendingRooms, catchup };
 }
 
+// สถานะล็อกปุ่มกลับบ้าน: ระหว่างโหลด หรือโหลดไม่สำเร็จ ถือว่าล็อก (ไม่ปล่อยผ่าน)
+function cleaningCheckoutLock(status) {
+  if (!status || status.loading) return "loading";
+  if (status.error) return "error";
+  if (status.required && !status.done) return "missing";
+  return "";
+}
 function useCleaningCheckoutStatus(user, enabled = true) {
-  const [status, setStatus] = useState({ loading: true, required: false, done: true, missingDates: [], pendingRooms: [] });
-  const userId = user?.id;
+  const userId = user?.id ? String(user.id) : "";
+  const [status, setStatus] = useState({ loading: true, required: false, done: false, missingDates: [], pendingRooms: [], forUser: "" });
   const refresh = useCallback(async () => {
-    if (!enabled || !user?.id) { setStatus({ loading: false, required: false, done: true, missingDates: [], pendingRooms: [] }); return null; }
+    if (!enabled || !user?.id) { setStatus({ loading: false, required: false, done: true, missingDates: [], pendingRooms: [], forUser: userId }); return { required: false, done: true }; }
     try {
       const next = await fetchCleaningCheckoutStatus(user);
-      setStatus({ loading: false, ...next });
+      setStatus({ loading: false, error: false, ...next, forUser: userId });
       return next;
     } catch {
-      setStatus({ loading: false, required: false, done: true, missingDates: [], pendingRooms: [], error: true });
+      setStatus({ loading: false, error: true, required: true, done: false, missingDates: [], pendingRooms: [], forUser: userId });
       return null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -8520,15 +8543,35 @@ function useCleaningCheckoutStatus(user, enabled = true) {
     document.addEventListener("visibilitychange", onVisible);
     return () => { window.removeEventListener(CLEANING_SAVED_EVENT, onSaved); document.removeEventListener("visibilitychange", onVisible); };
   }, [refresh]);
-  return [status, refresh];
+  // เปลี่ยนผู้ใช้ (เช่น สลับโหมดครูทดลอง) แล้วยังไม่โหลดของคนใหม่ → ถือว่ากำลังโหลด
+  const shown = enabled && status.forUser !== userId ? { ...status, loading: true } : status;
+  return [shown, refresh];
 }
 
-function CleaningCheckoutBlockNotice({ status, onOpenCleaning, compact = false }) {
-  const blocked = !!status?.required && !status.done;
+// เสียงเตือน: หน้าลงเวลา/ป๊อปอัปกลับบ้าน เล่นทุกครั้งที่เปิด · หน้าหลักเล่นครั้งเดียวต่อรายการวันที่ขาด (ไม่รบกวนตอนเปลี่ยนหน้า)
+const cleaningOnceSounded = new Set();
+function CleaningCheckoutBlockNotice({ status, onOpenCleaning, onRetry, compact = false, sound = "always" }) {
+  const lock = cleaningCheckoutLock(status);
+  const blocked = lock === "missing";
   const missingKey = (status?.missingDates || []).join(",");
   useEffect(() => {
-    if (blocked) playCleaningAlertBeep();
-  }, [blocked, missingKey]);
+    if (!blocked) return;
+    if (sound === "once") {
+      const key = `${todayISO()}|${missingKey}`;
+      if (cleaningOnceSounded.has(key)) return;
+      cleaningOnceSounded.add(key);
+    }
+    playCleaningAlertBeep();
+  }, [blocked, missingKey, sound]);
+  if (lock === "error") {
+    return (
+      <div role="alert" style={{ background: "#fef2f2", border: "3px solid #dc2626", borderRadius: "16px", padding: "0.9rem 1rem", marginBottom: "1.25rem", color: "#7f1d1d", textAlign: "center" }}>
+        <div style={{ fontSize: "1.1rem", fontWeight: 900 }}>🔒 ตรวจสอบเวรพื้นที่ไม่สำเร็จ จึงยังลงเวลากลับบ้านไม่ได้</div>
+        <div style={{ fontSize: "0.85rem", fontWeight: 700, marginTop: "0.25rem" }}>ตรวจสอบอินเทอร์เน็ตแล้วกดลองใหม่</div>
+        {onRetry && <button type="button" onClick={onRetry} style={{ marginTop: "0.5rem", background: "#dc2626", color: "#fff", border: "none", borderRadius: "10px", padding: "0.45rem 1rem", fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>ลองตรวจสอบใหม่</button>}
+      </div>
+    );
+  }
   if (!blocked) return null;
   const today = todayISO();
   const missing = status.missingDates || [];
@@ -8667,7 +8710,7 @@ function emptyCleaningForm(rooms, criteria = CLEANING_CRITERIA, blockedRoomIds =
   return { room_id: room?.id || "", area: room?.areas?.[0] || "", date: todayISO(), criteria: criteria.map(c => ({ key: c.key, label: c.label, hint: c.hint || "" })), scores, note: "", photos: [] };
 }
 
-function CleaningDutyPage({ currentUser, teachingGrade: gradeHint }) {
+function CleaningDutyPage({ currentUser, teachingGrade: gradeHint, cleaningStatus }) {
   const isExec = isExecutiveUser(currentUser);
   const [grade, setGrade] = useState(isExec ? "" : (gradeHint ?? null));
   const [ready, setReady] = useState(isExec);
@@ -8691,10 +8734,10 @@ function CleaningDutyPage({ currentUser, teachingGrade: gradeHint }) {
   if (!canAccessCleaningDuty(currentUser, grade)) {
     return <Card><div style={{ textAlign: "center", color: "#b91c1c", fontWeight: 800, padding: "1.5rem" }}>ไม่มีสิทธิ์เข้าถึงหน้านี้ (เฉพาะผู้บริหารและครู)</div></Card>;
   }
-  return <CleaningDutyInner currentUser={currentUser} teachingGrade={grade || ""} canManage={isExec} />;
+  return <CleaningDutyInner currentUser={currentUser} teachingGrade={grade || ""} canManage={isExec} sharedStatus={cleaningStatus} />;
 }
 
-function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false }) {
+function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false, sharedStatus = null }) {
   const [tab, setTab] = useState("inspect");
   const [config, setConfig] = useState(cleanCleaningConfig(null));
   const [inspections, setInspections] = useState([]);
@@ -8719,7 +8762,8 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false 
   const [criterionDraft, setCriterionDraft] = useState({ label: "", hint: "" }); // { title, text, confirmLabel, onConfirm }
   const rooms = roomsWithCleaningDefaults(config.rooms);
   // ครู (ไม่ใช่ผู้บริหาร) ลงวันที่ตรวจได้เฉพาะวันนี้ + วันที่ขาดเวรในช่วงตามย้อนหลัง (เฉพาะวันที่ 20 พ.ย. 2569)
-  const [dutyStatus] = useCleaningCheckoutStatus(currentUser, !canManage);
+  const [ownDutyStatus] = useCleaningCheckoutStatus(currentUser, !canManage && !sharedStatus);
+  const dutyStatus = (!canManage && sharedStatus) || ownDutyStatus;
   const todayKey = todayISO();
   const catchupMissing = (dutyStatus.missingDates || []).filter(d => d !== todayKey && cleaningCatchupDates(todayKey).includes(d));
   const allowedDates = [...catchupMissing].sort().concat(todayKey);
@@ -12361,6 +12405,16 @@ export default function HRApp() {
     setActivePage("dashboard");
   };
 
+  // สถานะเวรพื้นที่ร่วมตัวเดียวทั้งแอป (ปุ่มกลับบ้านในแถบเมนู หน้าหลัก หน้าลงเวลา และป๊อปอัป)
+  const cleaningStatusUser = (() => {
+    if (!currentUser) return null;
+    const preview = allEmployees.find(emp => isTestTeacher(emp) && emp.role !== "admin");
+    return isTestTeacherOwner(currentUser) && teacherPreview && preview ? preview : currentUser;
+  })();
+  const [cleaningStatus, refreshCleaningStatus] = useCleaningCheckoutStatus(cleaningStatusUser, !!cleaningStatusUser);
+  const cleaningLock = cleaningCheckoutLock(cleaningStatus);
+  const checkoutLocked = !!cleaningLock;
+
   if (!currentUser) return <LoginPage onLogin={setCurrentUser} />;
 
   const canUseTestTeacher = isTestTeacherOwner(currentUser);
@@ -12416,7 +12470,7 @@ export default function HRApp() {
   })();
 
   const openCheckIn = () => { setAttMode("in"); setShowAttendance(true); };
-  const openCheckOut = () => { setAttMode("out"); setShowAttendance(true); };
+  const openCheckOut = () => { if (checkoutLocked) return; setAttMode("out"); setShowAttendance(true); };
   const openCleaningFor = date => { requestCleaningPrefill(date); openNavItem("cleaningDuty"); };
   const openNavItem = (key) => {
     if (key === "finance") {
@@ -12576,8 +12630,8 @@ export default function HRApp() {
             <button title="เข้างาน" aria-label="เข้างาน" onClick={() => { openCheckIn(); setSidebarOpen(false); }} style={{ background: "linear-gradient(135deg, #008CFF, #0072D9)", border: "none", borderRadius: "12px", padding: "0.85rem 0.5rem", color: "#fff", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.35rem", boxShadow: "0 4px 14px rgba(0,140,255,0.3)", fontFamily: "inherit" }}>
               <LogIn size={20} /> {!rail && "เข้างาน"}
             </button>
-            <button title="กลับบ้าน" aria-label="กลับบ้าน" onClick={() => { openCheckOut(); setSidebarOpen(false); }} style={{ background: "linear-gradient(90deg, #FF7106, #FF9A3C)", border: "none", borderRadius: "14px", padding: "0.85rem 0.5rem", color: "#fff", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.35rem", boxShadow: "0 4px 14px rgba(255,113,6,0.3)", fontFamily: "inherit" }}>
-              <LogOut size={20} /> {!rail && "กลับบ้าน"}
+            <button title={checkoutLocked ? (cleaningLock === "loading" ? "กำลังตรวจสอบเวรพื้นที่..." : "ล็อก: ยังไม่ลงเวรพื้นที่") : "กลับบ้าน"} aria-label="กลับบ้าน" disabled={checkoutLocked} aria-disabled={checkoutLocked} onClick={() => { if (checkoutLocked) return; openCheckOut(); setSidebarOpen(false); }} style={{ background: checkoutLocked ? "#cbd5e1" : "linear-gradient(90deg, #FF7106, #FF9A3C)", border: "none", borderRadius: "14px", padding: "0.85rem 0.5rem", color: checkoutLocked ? "#475569" : "#fff", fontWeight: 700, fontSize: "0.85rem", cursor: checkoutLocked ? "not-allowed" : "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.35rem", boxShadow: checkoutLocked ? "none" : "0 4px 14px rgba(255,113,6,0.3)", fontFamily: "inherit" }}>
+              {checkoutLocked ? <span style={{ fontSize: "1.15rem", lineHeight: 1 }}>🔒</span> : <LogOut size={20} />} {!rail && (checkoutLocked ? (cleaningLock === "loading" ? "กำลังตรวจสอบ..." : "ล็อก: ยังไม่ลงเวร") : "กลับบ้าน")}
             </button>
           </div>
 
@@ -12627,6 +12681,7 @@ export default function HRApp() {
               {activePage === "dashboard" && (
                 <>
                   <PageHeader title={`สวัสดี ${actingUser.name?.split(" ")[0]} 👋`} />
+                  <CleaningCheckoutBlockNotice status={cleaningStatus} onOpenCleaning={openCleaningFor} onRetry={refreshCleaningStatus} sound="once" />
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
                     {stats.map(stat => <StatCard key={stat.label} stat={stat} />)}
                   </div>
@@ -12790,7 +12845,7 @@ export default function HRApp() {
                 </>
               )}
               {activePage === "employee" && <EmployeePage employees={employees} currentUser={currentUser} onRefresh={fetchData} />}
-              {activePage === "attendance" && <AttendancePage employees={employees} activityLog={activityLog} currentUser={actingUser} settings={settings} onRefresh={fetchData} onOpenAcademic={() => setActivePage("academic")} onOpenCleaning={openCleaningFor} />}
+              {activePage === "attendance" && <AttendancePage employees={employees} activityLog={activityLog} currentUser={actingUser} settings={settings} onRefresh={fetchData} onOpenAcademic={() => setActivePage("academic")} onOpenCleaning={openCleaningFor} cleaningStatus={cleaningStatus} refreshCleaningStatus={refreshCleaningStatus} />}
               {activePage === "leave" && <LeavePage employees={employees} leaves={leaves} currentUser={actingUser} onRefresh={fetchData} />}
               {activePage === "outing" && <OutingPage employees={employees} outings={outings} currentUser={actingUser} onRefresh={fetchData} />}
               {activePage === "finance" && isSalaryOwner(currentUser) && isSalaryOwner(actingUser) && <FinancePortal employees={employees} attendance={activityLog} leaves={leaves} settings={settings} />}
@@ -12799,7 +12854,7 @@ export default function HRApp() {
               {activePage === "academic" && <AcademicPage employees={employees} currentUser={actingUser} planFocus={planFocus} />}
               {activePage === "activityPlan" && <ActivityPlanPage employees={employees} currentUser={actingUser} />}
               {activePage === "execDash" && (isExecutiveUser(actingUser) ? <ExecutiveDashboard employees={employees} leaves={leaves} settings={settings} currentUser={actingUser} onOpenEval={id => { setEvalFocus(String(id)); setActivePage("teacherEval"); }} onOpenLeave={() => openNavItem("leave")} onOpenCalendar={() => openNavItem("academicCalendar")} /> : <NoAccessCard />)}
-              {activePage === "cleaningDuty" && ((isExecutiveUser(actingUser) || teachingGrades == null || canAccessCleaningDuty(actingUser, teachingGradeOf(teachingGrades, actingUser))) ? <CleaningDutyPage currentUser={actingUser} teachingGrade={teachingGradeOf(teachingGrades, actingUser)} /> : <NoAccessCard />)}
+              {activePage === "cleaningDuty" && ((isExecutiveUser(actingUser) || teachingGrades == null || canAccessCleaningDuty(actingUser, teachingGradeOf(teachingGrades, actingUser))) ? <CleaningDutyPage currentUser={actingUser} teachingGrade={teachingGradeOf(teachingGrades, actingUser)} cleaningStatus={cleaningStatus} /> : <NoAccessCard />)}
               {activePage === "teacherEval" && (isExecutiveUser(actingUser) ? <TeacherEvalPage employees={employees} currentUser={actingUser} initialSelected={evalFocus} /> : <NoAccessCard />)}
               {activePage === "settings" && <SettingsPage settings={settings} onRefresh={fetchData} />}
               {activePage === "academicCalendar" && <AcademicCalendarWithActivities employees={employees} currentUser={actingUser} />}
@@ -12810,7 +12865,7 @@ export default function HRApp() {
         </main>
       </div>
 
-      {showAttendance && <AttendanceModal mode={attMode} onClose={() => { setShowAttendance(false); fetchData(); }} onCheckin={() => fetchData()} employees={employees} currentUser={actingUser} settings={settings} onOpenCleaning={openCleaningFor} />}
+      {showAttendance && !(attMode === "out" && checkoutLocked) && <AttendanceModal mode={attMode} onClose={() => { setShowAttendance(false); fetchData(); }} onCheckin={() => fetchData()} employees={employees} currentUser={actingUser} settings={settings} onOpenCleaning={openCleaningFor} cleaningStatus={cleaningStatus} refreshCleaningStatus={refreshCleaningStatus} />}
     </div>
   );
 }

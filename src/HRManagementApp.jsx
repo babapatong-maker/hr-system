@@ -1665,6 +1665,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
 
   return (
     <Modal title={mode === "in" ? "ลงเวลาเข้างาน" : "ลงเวลากลับบ้าน"} subtitle={`📍 รัศมี ${GEOFENCE_RADIUS} เมตรจากโรงเรียน`} onClose={onClose} icon={mode === "in" ? LogIn : LogOut} color={mode === "in" ? "#0072D9" : "#d97706"}>
+      {mode === "in" && <WeeklyCleaningWinnerBanner compact />}
       <div style={{ ...inputStyle, background: "#EAF5FF", color: "#0072D9", marginBottom: "1rem", textAlign: "center", fontWeight: 700, border: "1.5px solid #B8E0FF" }}>
         👤 {currentUser?.name}
       </div>
@@ -2052,6 +2053,7 @@ function AttendancePage({ employees, activityLog, currentUser, settings, onRefre
   return (
     <div>
       <PageHeader title="ลงเวลาเข้า-ออก" count={filtered.length} />
+      <WeeklyCleaningWinnerBanner />
       <PostNoteMissingWarning currentUser={currentUser} onOpenAcademic={onOpenAcademic} />
       <CleaningCheckoutBlockNotice status={cleaningStatus} onOpenCleaning={onOpenCleaning} />
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
@@ -8511,6 +8513,97 @@ function CleaningCheckoutBlockNotice({ status, onOpenCleaning, compact = false }
           พื้นที่ที่ยังไม่มีใครตรวจวันนี้: {rooms.slice(0, 12).join(", ")}{rooms.length > 12 ? ` และอีก ${rooms.length - 12} พื้นที่` : ""}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── ห้องที่ได้คะแนนเวรพื้นที่สูงสุดประจำสัปดาห์ (แสดงทุกวันจันทร์ บนสุดในกรอบลงเวลา) ─────────────────
+// รวมผลการตรวจของสัปดาห์ก่อน (จ.–ศ.) อัตโนมัติจากฐานข้อมูล ไม่เขียนอะไรลงฐานข้อมูล
+// สูตรเดียวกับแท็บ "สรุปผลและอันดับ" ในหน้าเวรพื้นที่: ร้อยละ = คะแนนรวม ÷ คะแนนเต็มรวม ของทุกครั้งที่ตรวจห้องนั้น
+// (เท่ากับคะแนนเฉลี่ยต่อครั้งเมื่อเต็ม 20 ทุกครั้ง) · ไม่นับผลการตรวจของครูทดลองระบบ · คะแนนเท่ากันแสดงร่วมกัน
+const cleaningWinnerCache = new Map();
+function cleaningWinnerPreviewOn() {
+  try { return new URLSearchParams(window.location.search).has("cleaningWinnerPreview"); } catch { return false; }
+}
+function thaiShortRange(start, end) {
+  const [, m1, d1] = start.split("-").map(Number);
+  const [, m2, d2] = end.split("-").map(Number);
+  return m1 === m2 ? `${d1}–${d2} ${TH_MONTH_SHORT[m2 - 1]}` : `${d1} ${TH_MONTH_SHORT[m1 - 1]} – ${d2} ${TH_MONTH_SHORT[m2 - 1]}`;
+}
+async function computeWeeklyCleaningWinner(weekStart) {
+  const weekEnd = shiftDateKey(weekStart, 4);
+  const [inspRes, cfgRes, empRes] = await Promise.all([
+    supabase.from("teaching_schedule").select("id, subject").eq("class_room", CLEANING_DUTY_ROOM).eq("period", 2).gte("created_at", `${weekStart}T00:00:00+07:00`),
+    supabase.from("teaching_schedule").select("id, subject").eq("class_room", CLEANING_DUTY_ROOM).eq("period", 1),
+    supabase.from("employees").select("id, name, username"),
+  ]);
+  if (inspRes.error) throw new Error(inspRes.error.message);
+  const testIds = new Set((empRes.data || []).filter(isTestTeacher).map(emp => String(emp.id)));
+  let config = null;
+  (cfgRes.data || []).forEach(row => {
+    try {
+      const parsed = JSON.parse(row.subject || "{}");
+      if (parsed.kind === "config") { const next = cleanCleaningConfig(parsed); if (!config || next.updated_at > config.updated_at) config = next; }
+    } catch { /* ignore */ }
+  });
+  const rooms = roomsWithCleaningDefaults((config || cleanCleaningConfig(null)).rooms);
+  const byRoom = new Map();
+  (inspRes.data || []).forEach(row => {
+    let parsed;
+    try { parsed = JSON.parse(row.subject || "{}"); } catch { return; }
+    if (parsed.kind !== "inspection") return;
+    const item = cleanCleaningInspection(parsed);
+    if (item.date < weekStart || item.date > weekEnd || !item.max) return;
+    if (testIds.has(String(item.by_id))) return;
+    const key = String(item.room_id || item.room_name);
+    const current = byRoom.get(key) || { id: key, name: rooms.find(room => String(room.id) === key)?.name || item.room_name || "ห้องที่ลบแล้ว", count: 0, total: 0, maxSum: 0 };
+    current.count += 1;
+    current.total += item.total;
+    current.maxSum += item.max;
+    byRoom.set(key, current);
+  });
+  const list = [...byRoom.values()].filter(row => row.count && row.maxSum).map(row => ({ ...row, percent: (row.total / row.maxSum) * 100, average: row.total / row.count, avgMax: row.maxSum / row.count }));
+  if (!list.length) return null;
+  const best = Math.max(...list.map(row => row.percent));
+  const winners = list.filter(row => Math.abs(row.percent - best) < 1e-9).sort((a, b) => a.name.localeCompare(b.name, "th"));
+  return { weekStart, weekEnd, winners, roomsScored: list.length, inspections: list.reduce((sum, row) => sum + row.count, 0) };
+}
+
+function WeeklyCleaningWinnerBanner({ compact = false }) {
+  const today = todayISO();
+  const isMonday = (() => { const [y, m, d] = today.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)).getUTCDay() === 1; })();
+  const show = isMonday || cleaningWinnerPreviewOn();
+  const weekStart = isMonday ? shiftDateKey(today, -7) : shiftDateKey(mondayOf(today), -7);
+  const [result, setResult] = useState(() => cleaningWinnerCache.get(weekStart) || null);
+  useEffect(() => {
+    if (!show) return;
+    let alive = true;
+    const cached = cleaningWinnerCache.get(weekStart);
+    if (cached) { setResult(cached); return; }
+    computeWeeklyCleaningWinner(weekStart)
+      .then(next => { if (!alive) return; cleaningWinnerCache.set(weekStart, next || { empty: true }); setResult(next || { empty: true }); })
+      .catch(() => { /* โหลดไม่ได้ก็ไม่แสดง */ });
+    return () => { alive = false; };
+  }, [show, weekStart]);
+  if (!show || !result || result.empty || !result.winners?.length) return null;
+  const tie = result.winners.length > 1;
+  const fmt = n => (Number.isInteger(n) ? String(n) : n.toFixed(2));
+  return (
+    <div role="status" style={{ background: "linear-gradient(135deg, #fef9c3, #fde68a)", border: "3px solid #d97706", borderRadius: "16px", padding: compact ? "0.8rem 0.9rem" : "1rem 1.2rem", marginBottom: "1rem", color: "#713f12", textAlign: "center", boxShadow: "0 10px 26px rgba(217,119,6,0.22)" }}>
+      <div style={{ fontSize: compact ? "1.1rem" : "1.3rem", fontWeight: 900, lineHeight: 1.35 }}>
+        🏆 ห้องที่ได้คะแนนเวรพื้นที่สูงที่สุดประจำสัปดาห์{tie ? " (คะแนนเท่ากัน)" : ""}
+      </div>
+      <div style={{ fontSize: "0.82rem", fontWeight: 700, marginTop: "0.15rem" }}>สัปดาห์ จ.–ศ. {thaiShortRange(result.weekStart, result.weekEnd)}</div>
+      <div style={{ display: "grid", gap: "0.4rem", margin: "0.55rem 0" }}>
+        {result.winners.map(row => (
+          <div key={row.id} style={{ background: "#fffbeb", border: "2px solid #f59e0b", borderRadius: "12px", padding: "0.45rem 0.7rem" }}>
+            <div style={{ fontSize: compact ? "1.35rem" : "1.6rem", fontWeight: 900, color: "#92400e" }}>🥇 {cleaningRoomShortName(row)}</div>
+            <div style={{ fontSize: "0.78rem", color: "#78350f" }}>{row.name}</div>
+            <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#065f46", marginTop: "0.15rem" }}>เฉลี่ย {fmt(row.average)}/{fmt(row.avgMax)} คะแนน ({row.percent.toFixed(1)}%) · ตรวจ {row.count} ครั้ง</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: compact ? "0.95rem" : "1.05rem", fontWeight: 900, color: "#9a3412" }}>(รบกวนครูเวรเสาธงติดสติ๊กเกอร์ที่ห้องชั้นนั้นให้ด้วย)</div>
     </div>
   );
 }

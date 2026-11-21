@@ -17,7 +17,7 @@ import {
   Shield, WifiOff, RefreshCw, UserPlus, DollarSign,
   Umbrella, AlertCircle, Activity, Home, X, Edit, Trash2, Save, Phone, Mail,
   Plus, Calendar, ArrowRightLeft, ArrowLeftRight, TrendingUp, User, Lock, Eye, EyeOff, Key, Menu,
-  BookOpen, ChevronLeft, ChevronUp, Copy, Upload, Download, Printer, Pencil } from "lucide-react";
+  BookOpen, ChevronLeft, ChevronUp, Copy, Upload, Download, Printer, Pencil, LayoutGrid } from "lucide-react";
 
 function isLocalPreview() {
   if (typeof window === "undefined") return false;
@@ -12270,6 +12270,99 @@ function PayrollStandaloneApp({ employees, attendance, leaves, settings, current
   );
 }
 
+// ─── แถบเมนูล่างสำหรับมือถือ (แทนเมนูข้าง) ─────────────────────────────────────
+// ใช้รายการเมนูชุดเดียวกับเมนูข้าง (กรองสิทธิ์แล้ว) และเปิดลงเวลาผ่าน openCheckIn/openCheckOut เดิม
+// ปุ่มกลับบ้านล็อกเหมือนเมนูข้างทุกประการเมื่อยังไม่ลงเวรพื้นที่
+const MOBILE_TAB_KEYS = ["dashboard", "schedule", "academic"];
+function MobileTabBar({ activePage, navItems, menuOpen, setMenuOpen, attOpen, setAttOpen, onNavigate, onCheckIn, onCheckOut, checkoutLocked, cleaningLock, userName, onLogout }) {
+  const has = key => navItems.some(item => item.key === key);
+  const menuItems = navItems.filter(item => !MOBILE_TAB_KEYS.includes(item.key));
+  const menuActive = menuOpen || (!MOBILE_TAB_KEYS.includes(activePage) && !attOpen);
+  const red = "#A6192E";
+  const tabStyle = (on, disabled) => ({ background: "none", border: "none", fontFamily: "inherit", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 2, minHeight: 54, padding: "0 2px", fontSize: "0.72rem", fontWeight: 700, color: disabled ? "#d6cfc7" : on ? red : "#7a6f66", cursor: disabled ? "not-allowed" : "pointer", position: "relative" });
+  const tab = (key, Icon, label) => {
+    const ok = has(key);
+    const on = !menuOpen && !attOpen && activePage === key;
+    return (
+      <button key={key} type="button" aria-label={label} aria-current={on ? "page" : undefined} disabled={!ok} aria-disabled={!ok} title={ok ? label : "ไม่มีสิทธิ์ใช้เมนูนี้"} onClick={() => { if (ok) onNavigate(key); }} style={tabStyle(on, !ok)}>
+        {on && <span aria-hidden="true" style={{ position: "absolute", top: -8, width: 28, height: 3, borderRadius: "0 0 3px 3px", background: red }} />}
+        <Icon size={23} strokeWidth={on ? 2.4 : 2} />
+        <span style={{ whiteSpace: "nowrap" }}>{label}</span>
+      </button>
+    );
+  };
+  const sheetWrap = { position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 131, background: "#fff", borderRadius: "24px 24px 0 0", padding: "0.6rem 1.1rem calc(6.8rem + env(safe-area-inset-bottom, 0px))", boxShadow: "0 -10px 30px rgba(0,0,0,0.2)", maxHeight: "85vh", overflowY: "auto" };
+  const grab = <div aria-hidden="true" style={{ width: 44, height: 5, borderRadius: 3, background: "#E0D6CB", margin: "0 auto 0.75rem" }} />;
+  const close = () => { setMenuOpen(false); setAttOpen(false); };
+  return (
+    <>
+      {(menuOpen || attOpen) && <div onClick={close} style={{ position: "fixed", inset: 0, background: "rgba(43,10,16,0.45)", zIndex: 130 }} />}
+      {menuOpen && (
+        <div role="dialog" aria-label="เมนูทั้งหมด" style={sheetWrap}>
+          {grab}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.8rem" }}>
+            <h3 style={{ fontSize: "1.15rem", fontWeight: 600, color: "#2B0A10" }}>เมนูทั้งหมด</h3>
+            <button type="button" aria-label="ปิดเมนู" onClick={close} style={{ background: "#FAF7F3", border: "1px solid #F0E6DC", borderRadius: "50%", width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#7a6f66" }}><X size={16} /></button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.85rem 0.4rem" }}>
+            {menuItems.map(item => {
+              const Icon = item.icon;
+              const on = activePage === item.key;
+              return (
+                <button key={item.key} type="button" aria-label={item.label} onClick={() => onNavigate(item.key)} style={{ background: "none", border: "none", fontFamily: "inherit", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.35rem", fontSize: "0.74rem", fontWeight: 600, color: "#2B0A10", lineHeight: 1.25, textAlign: "center" }}>
+                  <span style={{ width: 52, height: 52, borderRadius: 16, background: on ? red : "#FBF5E6", border: `1.5px solid ${on ? red : "#E8D6A6"}`, color: on ? "#fff" : red, display: "flex", alignItems: "center", justifyContent: "center" }}><Icon size={23} /></span>
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ marginTop: "1.1rem", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem", background: "#FAF7F3", border: "1px solid #F0E6DC", borderRadius: 14, padding: "0.65rem 0.85rem" }}>
+            <span style={{ fontSize: "0.85rem", color: "#2B0A10", fontWeight: 600, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>👤 {userName}</span>
+            <button type="button" onClick={onLogout} style={{ background: "#fef2f2", border: "1.5px solid #fca5a5", borderRadius: 10, padding: "0.4rem 0.75rem", color: "#dc2626", fontWeight: 700, fontFamily: "inherit", fontSize: "0.8rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.3rem", flexShrink: 0 }}><LogOut size={14} /> ออกจากระบบ</button>
+          </div>
+        </div>
+      )}
+      {attOpen && (
+        <div role="dialog" aria-label="ลงเวลา" style={sheetWrap}>
+          {grab}
+          <h3 style={{ fontSize: "1.15rem", fontWeight: 600, color: "#2B0A10", marginBottom: "0.8rem" }}>ลงเวลา</h3>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+            <button type="button" aria-label="เข้างาน" onClick={onCheckIn} style={{ background: "linear-gradient(135deg, #A6192E, #8E1426)", border: "none", borderRadius: 18, padding: "1.1rem 0.5rem", color: "#fff", fontWeight: 700, fontSize: "1rem", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.4rem", boxShadow: "0 6px 16px rgba(166,25,46,0.3)", fontFamily: "inherit", minHeight: 96 }}>
+              <LogIn size={26} /> เข้างาน
+            </button>
+            <button type="button" aria-label="กลับบ้าน" disabled={checkoutLocked} aria-disabled={checkoutLocked} title={checkoutLocked ? (cleaningLock === "loading" ? "กำลังตรวจสอบเวรพื้นที่..." : "ล็อก: ยังไม่ลงเวรพื้นที่") : "กลับบ้าน"} onClick={() => { if (checkoutLocked) return; onCheckOut(); }} style={{ background: checkoutLocked ? "#cbd5e1" : "linear-gradient(135deg, #7A5A14, #9C7A2E)", border: "none", borderRadius: 18, padding: "1.1rem 0.5rem", color: checkoutLocked ? "#475569" : "#fff", fontWeight: 700, fontSize: "1rem", cursor: checkoutLocked ? "not-allowed" : "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.4rem", boxShadow: checkoutLocked ? "none" : "0 6px 16px rgba(122,90,20,0.3)", fontFamily: "inherit", minHeight: 96 }}>
+              {checkoutLocked ? <span style={{ fontSize: "1.5rem", lineHeight: 1 }}>🔒</span> : <LogOut size={26} />}
+              {checkoutLocked ? (cleaningLock === "loading" ? "กำลังตรวจสอบ..." : "ล็อก: ยังไม่ลงเวร") : "กลับบ้าน"}
+            </button>
+          </div>
+          {checkoutLocked && cleaningLock !== "loading" && (
+            <div style={{ marginTop: "0.75rem", background: "#FFF3C4", border: "2px solid #F59E0B", borderRadius: 14, padding: "0.6rem 0.75rem", color: "#422006", fontSize: "0.85rem", fontWeight: 700, textAlign: "center" }}>
+              {cleaningLock === "error" ? "🔒 ตรวจสอบเวรพื้นที่ไม่สำเร็จ จึงยังลงเวลากลับบ้านไม่ได้" : "🔒 กรุณาลงเวรพื้นที่ให้เรียบร้อยก่อนจึงจะลงเวลากลับบ้านได้ (ดูรายละเอียดที่หน้าแรก)"}
+            </div>
+          )}
+        </div>
+      )}
+      <nav aria-label="เมนูหลัก" style={{ position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 132, background: "#fff", borderTop: "1px solid #F0E6DC", boxShadow: "0 -6px 22px rgba(43,10,16,0.08)", display: "grid", gridTemplateColumns: "repeat(5, 1fr)", alignItems: "end", padding: "0.5rem 0.25rem calc(0.5rem + env(safe-area-inset-bottom, 0px))" }}>
+        {tab("dashboard", Home, "หน้าแรก")}
+        {tab("schedule", Calendar, "ตารางสอน")}
+        <button type="button" aria-label="ลงเวลา" aria-expanded={attOpen} onClick={() => { setMenuOpen(false); setAttOpen(open => !open); }} style={{ background: "none", border: "none", fontFamily: "inherit", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 3, cursor: "pointer", padding: 0 }}>
+          <span style={{ position: "relative", width: 64, height: 64, marginTop: -32, borderRadius: "50%", background: "linear-gradient(145deg, #B81F36, #8E1426)", border: "3px solid #fff", boxShadow: "0 0 0 3px #B8913A, 0 10px 22px rgba(142,20,38,0.4)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
+            <Clock size={28} />
+            {checkoutLocked && <span aria-label="กลับบ้านยังล็อก" style={{ position: "absolute", top: -6, right: -10, background: "#FACC15", color: "#111827", border: "2px solid #fff", borderRadius: 999, fontSize: "0.66rem", fontWeight: 700, padding: "1px 6px 1px 4px", boxShadow: "0 2px 6px rgba(0,0,0,0.25)", whiteSpace: "nowrap" }}>🔒 กลับ</span>}
+          </span>
+          <span style={{ fontSize: "0.76rem", fontWeight: 700, color: red, fontFamily: "'Kanit', 'Sarabun', sans-serif" }}>ลงเวลา</span>
+        </button>
+        {tab("academic", BookOpen, "งานวิชาการ")}
+        <button type="button" aria-label="เมนูทั้งหมด" aria-expanded={menuOpen} onClick={() => { setAttOpen(false); setMenuOpen(open => !open); }} style={tabStyle(menuActive, false)}>
+          {menuActive && <span aria-hidden="true" style={{ position: "absolute", top: -8, width: 28, height: 3, borderRadius: "0 0 3px 3px", background: red }} />}
+          <LayoutGrid size={23} strokeWidth={menuActive ? 2.4 : 2} />
+          <span style={{ whiteSpace: "nowrap" }}>เมนูทั้งหมด</span>
+        </button>
+      </nav>
+    </>
+  );
+}
+
 function StatCard({ stat }) {
   const Icon = stat.icon;
   return (
@@ -12323,6 +12416,9 @@ export default function HRApp() {
     return localStorage.getItem("hr_sidebar_collapsed") === "true";
   });
   const [isMobile, setIsMobile] = useState(typeof window !== "undefined" ? window.innerWidth < 768 : false);
+  // แถบเมนูล่าง (มือถือ): แผ่น "เมนูทั้งหมด" และแผ่นเลือก เข้างาน/กลับบ้าน จากปุ่มกลาง
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileAttOpen, setMobileAttOpen] = useState(false);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -12603,7 +12699,7 @@ export default function HRApp() {
           onClick={() => isMobile ? setSidebarOpen(open => !open) : setDesktopSidebarCollapsed(collapsed => !collapsed)}
           title={isMobile ? "เปิดเมนู" : (desktopSidebarCollapsed ? "เปิดแถบเมนู" : "พับแถบเมนู")}
           aria-label={isMobile ? "เปิดเมนู" : (desktopSidebarCollapsed ? "เปิดแถบเมนู" : "พับแถบเมนู")}
-          style={{ background: "#f1f5f9", border: "none", borderRadius: "10px", padding: "0.5rem", cursor: "pointer", color: "#475569", display: "flex", flexShrink: 0 }}
+          style={{ background: "#f1f5f9", border: "none", borderRadius: "10px", padding: "0.5rem", cursor: "pointer", color: "#475569", display: isMobile ? "none" : "flex", flexShrink: 0 }}
         >
           <Menu size={20} />
         </button>
@@ -12732,7 +12828,7 @@ export default function HRApp() {
           })}
         </aside>
 
-        <main style={{ flex: 1, padding: isMobile ? "1rem" : "1.5rem", overflowY: "auto", width: "100%", minWidth: 0 }}>
+        <main style={{ flex: 1, padding: isMobile ? "1rem 1rem calc(7.5rem + env(safe-area-inset-bottom, 0px))" : "1.5rem", overflowY: "auto", width: "100%", minWidth: 0 }}>
           {loading ? (
             <div style={{ textAlign: "center", padding: "3rem", color: "#64748b" }}>
               <RefreshCw size={32} style={{ animation: "spin 1s linear infinite", margin: "0 auto 1rem" }} />
@@ -12927,6 +13023,23 @@ export default function HRApp() {
         </main>
       </div>
 
+      {isMobile && (
+        <MobileTabBar
+          activePage={activePage}
+          navItems={visibleNavItems}
+          menuOpen={mobileMenuOpen}
+          setMenuOpen={setMobileMenuOpen}
+          attOpen={mobileAttOpen}
+          setAttOpen={setMobileAttOpen}
+          onNavigate={key => { setMobileMenuOpen(false); setMobileAttOpen(false); openNavItem(key); }}
+          onCheckIn={() => { setMobileAttOpen(false); openCheckIn(); }}
+          onCheckOut={() => { if (checkoutLocked) return; setMobileAttOpen(false); openCheckOut(); }}
+          checkoutLocked={checkoutLocked}
+          cleaningLock={cleaningLock}
+          userName={actingUser.name}
+          onLogout={() => { setMobileMenuOpen(false); handleLogout(); }}
+        />
+      )}
       {showAttendance && !(attMode === "out" && checkoutLocked) && <AttendanceModal mode={attMode} onClose={() => { setShowAttendance(false); fetchData(); }} onCheckin={() => fetchData()} employees={employees} currentUser={actingUser} settings={settings} onOpenCleaning={openCleaningFor} cleaningStatus={cleaningStatus} refreshCleaningStatus={refreshCleaningStatus} />}
     </div>
   );

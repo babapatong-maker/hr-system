@@ -899,7 +899,7 @@ const navItems = [
   { icon: Settings, label: "ตั้งค่าเวลาทำงาน", key: "settings", roles: ["admin"] },
 ];
 
-const inputStyle = { width: "100%", padding: "0.65rem 0.75rem", border: "1.5px solid #e2e8f0", borderRadius: "10px", fontSize: "0.9rem", fontFamily: "inherit", color: "#233862", outline: "none", background: "#fff" };
+const inputStyle = { width: "100%", padding: "0.65rem 0.75rem", border: "1.5px solid #e2e8f0", borderRadius: "10px", fontSize: "0.9rem", fontFamily: "inherit", color: "#2B0A10", outline: "none", background: "#fff" };
 const selectStyle = { ...inputStyle };
 const btnSecondary = { flex: 1, padding: "0.75rem", borderRadius: "10px", border: "1.5px solid #e2e8f0", background: "#f8fafc", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem", color: "#475569", fontSize: "0.9rem", fontWeight: 600, fontFamily: "inherit" };
 const btnPrimary = { flex: 2, padding: "0.75rem", borderRadius: "10px", border: "none", fontWeight: 700, fontSize: "0.95rem", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem" };
@@ -910,7 +910,7 @@ function Avatar({ name, index = 0 }) {
 }
 
 function Card({ children, padding = "1.25rem", style = {} }) {
-  return <div style={{ background: "#fff", borderRadius: "18px", padding, boxShadow: "0 4px 24px rgba(0,140,255,0.08)", border: "1px solid #E4EEF8", ...style }}>{children}</div>;
+  return <div style={{ background: "#fff", borderRadius: "18px", padding, boxShadow: "0 4px 24px rgba(166,25,46,0.08)", border: "1px solid #F0E6DC", ...style }}>{children}</div>;
 }
 
 function Field({ label, children }) {
@@ -934,7 +934,7 @@ function ButtonRow({ onCancel, onSave, saving, label = "บันทึก" }) {
   return (
     <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.5rem" }}>
       <button onClick={onCancel} style={btnSecondary}>ยกเลิก</button>
-      <button onClick={onSave} disabled={saving} style={{ ...btnPrimary, background: "linear-gradient(135deg, #008CFF, #0072D9)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}>
+      <button onClick={onSave} disabled={saving} style={{ ...btnPrimary, background: "linear-gradient(135deg, #A6192E, #8E1426)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}>
         {saving ? <RefreshCw size={16} style={{ animation: "spin 1s linear infinite" }} /> : <Save size={16} />}
         {saving ? "กำลังบันทึก..." : label}
       </button>
@@ -946,11 +946,11 @@ function PageHeader({ title, count, onAdd, addLabel }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem", flexWrap: "wrap", gap: "0.75rem" }}>
       <div>
-        <h1 style={{ fontSize: "1.4rem", fontWeight: 800, color: "#233862" }}>{title}</h1>
+        <h1 style={{ fontSize: "1.4rem", fontWeight: 800, color: "#2B0A10" }}>{title}</h1>
         {count !== undefined && <p style={{ color: "#64748b", fontSize: "0.85rem" }}>ทั้งหมด {count} รายการ</p>}
       </div>
       {onAdd && (
-        <button onClick={onAdd} style={{ background: "linear-gradient(135deg, #008CFF, #0072D9)", border: "none", borderRadius: "12px", padding: "0.65rem 1.25rem", color: "#fff", fontWeight: 700, fontSize: "0.875rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.5rem", fontFamily: "inherit", boxShadow: "0 4px 14px rgba(0,140,255,0.3)" }}>
+        <button onClick={onAdd} style={{ background: "linear-gradient(135deg, #A6192E, #8E1426)", border: "none", borderRadius: "12px", padding: "0.65rem 1.25rem", color: "#fff", fontWeight: 700, fontSize: "0.875rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.5rem", fontFamily: "inherit", boxShadow: "0 4px 14px rgba(166,25,46,0.3)" }}>
           <Plus size={16} /> {addLabel}
         </button>
       )}
@@ -958,10 +958,10 @@ function PageHeader({ title, count, onAdd, addLabel }) {
   );
 }
 
-function Modal({ title, subtitle, onClose, icon: Icon, color = "#0072D9", children }) {
+function Modal({ title, subtitle, onClose, icon: Icon, color = "#8E1426", children }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.7)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "1rem" }}>
-      <div style={{ background: "#fff", borderRadius: "1.5rem", width: "100%", maxWidth: "480px", boxShadow: "0 32px 80px rgba(0,0,0,0.25)", overflow: "hidden", fontFamily: "'Anuphan', 'Sarabun', sans-serif", maxHeight: "90vh", display: "flex", flexDirection: "column" }}>
+      <div style={{ background: "#fff", borderRadius: "1.5rem", width: "100%", maxWidth: "480px", boxShadow: "0 32px 80px rgba(0,0,0,0.25)", overflow: "hidden", fontFamily: "'Sarabun', 'Noto Sans Thai', sans-serif", maxHeight: "90vh", display: "flex", flexDirection: "column" }}>
         <div style={{ background: `linear-gradient(135deg, ${color}, ${color}dd)`, padding: "1.5rem", position: "relative", flexShrink: 0 }}>
           <button onClick={onClose} style={{ position: "absolute", top: "1rem", right: "1rem", background: "rgba(255,255,255,0.2)", border: "none", borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#fff" }}><X size={16} /></button>
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", color: "#fff" }}>
@@ -1014,17 +1014,17 @@ function LoginPage({ onLogin }) {
   };
 
   return (
-    <div style={{ fontFamily: "'Anuphan', 'Sarabun', sans-serif", minHeight: "100vh", background: "linear-gradient(135deg, #0072D9 0%, #008CFF 55%, #3EBFFB 100%)", display: "flex", flexDirection: "column" }}>
+    <div style={{ fontFamily: "'Sarabun', 'Noto Sans Thai', sans-serif", minHeight: "100vh", background: "linear-gradient(135deg, #8E1426 0%, #A6192E 55%, #C8323F 100%)", display: "flex", flexDirection: "column" }}>
       <PreviewBanner />
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600;700&family=Sarabun:wght@400;600;700&display=swap'); * { box-sizing: border-box; margin: 0; padding: 0; } @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700;800&display=swap'); * { box-sizing: border-box; margin: 0; padding: 0; } @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } h1, h2, h3, [style*="font-weight: 800"], [style*="font-weight: 900"] { font-family: 'Kanit', 'Sarabun', 'Noto Sans Thai', sans-serif; letter-spacing: 0.1px; } [style*="font-weight: 900"] { font-weight: 700 !important; } [style*="font-weight: 800"] { font-weight: 600 !important; } @keyframes cleaningPulse { 0%, 100% { box-shadow: 0 0 0 5px rgba(245,158,11,0.25), 0 10px 22px rgba(180,83,9,0.18); } 50% { box-shadow: 0 0 0 9px rgba(245,158,11,0.12), 0 10px 22px rgba(180,83,9,0.18); } } @media (prefers-reduced-motion: reduce) { [style*="cleaningPulse"] { animation: none !important; } }`}</style>
 
       <div style={{ background: "#fff", borderRadius: "1.5rem", padding: "2.5rem 2rem", width: "100%", maxWidth: 400, boxShadow: "0 32px 80px rgba(0,0,0,0.3)" }}>
         <div style={{ textAlign: "center", marginBottom: "2rem" }}>
-          <div style={{ width: 72, height: 72, borderRadius: "20px", background: "linear-gradient(135deg, #008CFF, #0072D9)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1rem", boxShadow: "0 8px 24px rgba(0,140,255,0.4)" }}>
+          <div style={{ width: 72, height: 72, borderRadius: "20px", background: "linear-gradient(135deg, #A6192E, #8E1426)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1rem", boxShadow: "0 8px 24px rgba(166,25,46,0.4)" }}>
             <Shield size={36} color="#fff" />
           </div>
-          <h1 style={{ fontSize: "1.4rem", fontWeight: 800, color: "#233862" }}>HR System</h1>
+          <h1 style={{ fontSize: "1.4rem", fontWeight: 800, color: "#2B0A10" }}>HR System</h1>
           <p style={{ color: "#64748b", fontSize: "0.85rem", marginTop: "0.25rem" }}>โรงเรียนนิมิตศึกษา</p>
         </div>
 
@@ -1046,13 +1046,13 @@ function LoginPage({ onLogin }) {
               </button>
             </div>
           </Field>
-          <button onClick={handleLogin} disabled={loading} style={{ padding: "0.85rem", borderRadius: "10px", border: "none", background: "linear-gradient(135deg, #008CFF, #0072D9)", color: "#fff", fontWeight: 700, fontSize: "0.95rem", cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem", boxShadow: "0 4px 14px rgba(0,140,255,0.3)" }}>
+          <button onClick={handleLogin} disabled={loading} style={{ padding: "0.85rem", borderRadius: "10px", border: "none", background: "linear-gradient(135deg, #A6192E, #8E1426)", color: "#fff", fontWeight: 700, fontSize: "0.95rem", cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem", boxShadow: "0 4px 14px rgba(166,25,46,0.3)" }}>
             {loading ? <RefreshCw size={18} style={{ animation: "spin 1s linear infinite" }} /> : <LogIn size={18} />}
             {loading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
           </button>
         </div>
 
-        <div style={{ marginTop: "1.5rem", padding: "0.75rem", background: "#EAF5FF", borderRadius: "10px", fontSize: "0.78rem", color: "#0072D9", textAlign: "center" }}>
+        <div style={{ marginTop: "1.5rem", padding: "0.75rem", background: "#FBF5E6", borderRadius: "10px", fontSize: "0.78rem", color: "#8E1426", textAlign: "center" }}>
           💡 ทดสอบ: username <strong>admin1</strong> / password <strong>admin123</strong>
         </div>
       </div>
@@ -1144,7 +1144,7 @@ function EmployeeModal({ employee, onClose, onSave, canSeePay = false }) {
           </select>
         </Field>
         <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.9rem", display: "grid", gap: "0.85rem" }}>
-          <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "#233862" }}>{canSeePay ? "ข้อมูลเงินเดือนและการสอนแทน" : "ระดับครู"}</div>
+          <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "#2B0A10" }}>{canSeePay ? "ข้อมูลเงินเดือนและการสอนแทน" : "ระดับครู"}</div>
           <Field label="ระดับครู *">
             <select value={payrollConfig.teacher_level || ""} onChange={e => setPayrollConfig(f => ({ ...f, teacher_level: e.target.value }))} style={selectStyle}>
               <option value="">-- เลือกระดับครู --</option>
@@ -1319,7 +1319,7 @@ function LeaveModal({ employees, currentUser, onClose, onSave }) {
     <Modal title="ขอลา" onClose={onClose} icon={Umbrella} color="#059669">
       <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
         {error && <ErrorBox>{error}</ErrorBox>}
-        <div style={{ ...inputStyle, background: "#EAF5FF", color: "#0072D9", textAlign: "center", fontWeight: 700, border: "1.5px solid #B8E0FF" }}>
+        <div style={{ ...inputStyle, background: "#FBF5E6", color: "#8E1426", textAlign: "center", fontWeight: 700, border: "1.5px solid #E8D6A6" }}>
           👤 {currentUser?.name}
         </div>
         <Field label="ประเภทการลา">
@@ -1403,13 +1403,13 @@ function LeaveModal({ employees, currentUser, onClose, onSave }) {
               {leavePayType === "monthly" ? " รายเดือนที่มีหลักฐานจะไม่ถูกหักค่าลา" : " รายวันจะไม่ได้ค่าจ้างในวันที่ไม่ได้มาทำงานตามเดิม"}
             </div>
             {uploading && (
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#0072D9", fontSize: "0.82rem", fontWeight: 600 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#8E1426", fontSize: "0.82rem", fontWeight: 600 }}>
                 <RefreshCw size={15} style={{ animation: "spin 1s linear infinite" }} />
                 กำลังเตรียมรูปภาพ...
               </div>
             )}
             {form.document_url && (
-              <div style={{ border: "1px solid #DCEFFF", borderRadius: "12px", padding: "0.75rem", background: "#EAF5FF" }}>
+              <div style={{ border: "1px solid #F6EBCF", borderRadius: "12px", padding: "0.75rem", background: "#FBF5E6" }}>
                 <img src={form.document_url} alt="เอกสารลา" style={{ width: "100%", borderRadius: "10px", maxHeight: 220, objectFit: "cover", marginBottom: "0.75rem" }} />
                 <div style={{ color: "#166534", fontSize: "0.78rem", fontWeight: 800, marginBottom: "0.65rem" }}>
                   แนบหลักฐานแล้ว{leavePayType === "monthly" ? " รายการนี้ไม่หักค่าลา" : ""}
@@ -1451,7 +1451,7 @@ function OutingModal({ employees, currentUser, onClose, onSave }) {
     <Modal title="ขอออกนอกสถานที่" onClose={onClose} icon={ArrowRightLeft} color="#d97706">
       <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
         {error && <ErrorBox>{error}</ErrorBox>}
-        <div style={{ ...inputStyle, background: "#EAF5FF", color: "#0072D9", textAlign: "center", fontWeight: 700, border: "1.5px solid #B8E0FF" }}>
+        <div style={{ ...inputStyle, background: "#FBF5E6", color: "#8E1426", textAlign: "center", fontWeight: 700, border: "1.5px solid #E8D6A6" }}>
           👤 {currentUser?.name}
         </div>
         <Field label="สถานที่ปลายทาง">
@@ -1679,9 +1679,9 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
   const canSubmit = isInZone && !done && !savingAttendance && (gpsExempt || gpsState === "success") && selectedEmp && (mode === "in" ? !openAttendance : openAttendance && !cleaningBlocked);
 
   return (
-    <Modal title={mode === "in" ? "ลงเวลาเข้างาน" : "ลงเวลากลับบ้าน"} subtitle={`📍 รัศมี ${GEOFENCE_RADIUS} เมตรจากโรงเรียน`} onClose={onClose} icon={mode === "in" ? LogIn : LogOut} color={mode === "in" ? "#0072D9" : "#d97706"}>
+    <Modal title={mode === "in" ? "ลงเวลาเข้างาน" : "ลงเวลากลับบ้าน"} subtitle={`📍 รัศมี ${GEOFENCE_RADIUS} เมตรจากโรงเรียน`} onClose={onClose} icon={mode === "in" ? LogIn : LogOut} color={mode === "in" ? "#8E1426" : "#d97706"}>
       {mode === "in" && <WeeklyCleaningWinnerBanner compact />}
-      <div style={{ ...inputStyle, background: "#EAF5FF", color: "#0072D9", marginBottom: "1rem", textAlign: "center", fontWeight: 700, border: "1.5px solid #B8E0FF" }}>
+      <div style={{ ...inputStyle, background: "#FBF5E6", color: "#8E1426", marginBottom: "1rem", textAlign: "center", fontWeight: 700, border: "1.5px solid #E8D6A6" }}>
         👤 {currentUser?.name}
       </div>
 
@@ -1729,7 +1729,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
       )}
 
       {mode === "in" && openAttendance && (
-        <div style={{ background: "#EAF5FF", border: "1.5px solid #8FD0FF", borderRadius: "12px", padding: "0.75rem", marginBottom: "1.25rem", textAlign: "center", color: "#0072D9", fontSize: "0.85rem", fontWeight: 700 }}>
+        <div style={{ background: "#FBF5E6", border: "1.5px solid #D9BC74", borderRadius: "12px", padding: "0.75rem", marginBottom: "1.25rem", textAlign: "center", color: "#8E1426", fontSize: "0.85rem", fontWeight: 700 }}>
           ลงเวลาเข้างานวันนี้แล้ว เวลา {fmtTime(openAttendance.check_in)} น. ถ้าจะกลับบ้านให้กดเมนูกลับบ้าน
         </div>
       )}
@@ -1739,7 +1739,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
       )}
 
       {mode === "out" && openAttendance && (
-        <div style={{ background: "#EAF5FF", border: "1.5px solid #8FD0FF", borderRadius: "12px", padding: "0.75rem", marginBottom: "1.25rem", textAlign: "center", color: "#0072D9", fontSize: "0.85rem", fontWeight: 600 }}>🕐 เข้างานเมื่อ {fmtTime(openAttendance.check_in)} น.</div>
+        <div style={{ background: "#FBF5E6", border: "1.5px solid #D9BC74", borderRadius: "12px", padding: "0.75rem", marginBottom: "1.25rem", textAlign: "center", color: "#8E1426", fontSize: "0.85rem", fontWeight: 600 }}>🕐 เข้างานเมื่อ {fmtTime(openAttendance.check_in)} น.</div>
       )}
 
       {mode === "out" && !done && formError && <ErrorBox>{formError}</ErrorBox>}
@@ -1753,7 +1753,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
             <circle cx={70} cy={70} r={54} fill="none" stroke={ringColor} strokeWidth={10} strokeDasharray={circumference} strokeDashoffset={gpsState === "success" ? circumference * (1 - pct) : circumference} strokeLinecap="round" style={{ transition: "stroke-dashoffset 0.8s ease, stroke 0.4s ease" }} />
           </svg>
           <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-            {gpsState === "loading" && <RefreshCw size={28} color="#008CFF" style={{ animation: "spin 1s linear infinite" }} />}
+            {gpsState === "loading" && <RefreshCw size={28} color="#A6192E" style={{ animation: "spin 1s linear infinite" }} />}
             {gpsState === "success" && <><Navigation size={20} color={ringColor} /><div style={{ fontSize: "1.5rem", fontWeight: 800, color: ringColor, lineHeight: 1.1 }}>{distance}</div><div style={{ fontSize: "0.7rem", color: "#64748b" }}>เมตร</div></>}
             {gpsState === "error" && <WifiOff size={28} color="#ef4444" />}
           </div>
@@ -1790,7 +1790,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
               let badge;
               if (doneStatus.type === "weekend") badge = <div style={{ marginTop: "0.5rem", background: "#dcfce7", border: "1px solid #86efac", color: "#16a34a", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>🤝 {WEEKEND_HELP_LABEL} (วันหยุด)</div>;
               else if (doneStatus.type === "late") badge = <div style={{ marginTop: "0.5rem", background: "#fef2f2", border: "1px solid #fca5a5", color: "#dc2626", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>⚠️ มาสาย {formatMinutes(doneStatus.minutes)}</div>;
-              else if (doneStatus.type === "early") badge = <div style={{ marginTop: "0.5rem", background: "#EAF5FF", border: "1px solid #8FD0FF", color: "#008CFF", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>⏰ เข้าก่อนเวลา {formatMinutes(doneStatus.minutes)}</div>;
+              else if (doneStatus.type === "early") badge = <div style={{ marginTop: "0.5rem", background: "#FBF5E6", border: "1px solid #D9BC74", color: "#A6192E", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>⏰ เข้าก่อนเวลา {formatMinutes(doneStatus.minutes)}</div>;
               else badge = <div style={{ marginTop: "0.5rem", color: "#16a34a", fontSize: "0.8rem", fontWeight: 600 }}>✓ มาตรงเวลา</div>;
               return (
                 <>
@@ -1834,9 +1834,9 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
                 <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#7c3aed" }}>{myStats.leaves}</div>
                 <div style={{ fontSize: "0.65rem", color: "#7c3aed", fontWeight: 600 }}>ลา</div>
               </div>
-              <div style={{ background: "#EAF5FF", borderRadius: "8px", padding: "0.4rem", textAlign: "center" }}>
-                <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#008CFF" }}>{myStats.outings}</div>
-                <div style={{ fontSize: "0.65rem", color: "#008CFF", fontWeight: 600 }}>ออกนอก</div>
+              <div style={{ background: "#FBF5E6", borderRadius: "8px", padding: "0.4rem", textAlign: "center" }}>
+                <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#A6192E" }}>{myStats.outings}</div>
+                <div style={{ fontSize: "0.65rem", color: "#A6192E", fontWeight: 600 }}>ออกนอก</div>
               </div>
             </div>
           </div>
@@ -1845,7 +1845,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
 
       <div style={{ display: "flex", gap: "0.75rem" }}>
         <button onClick={fetchLocation} style={btnSecondary}><RefreshCw size={16} /> อัปเดต GPS</button>
-        <button onClick={handleSubmit} disabled={!canSubmit} style={{ ...btnPrimary, background: done ? "#dcfce7" : canSubmit ? (mode === "in" ? "linear-gradient(135deg, #008CFF, #0072D9)" : "linear-gradient(135deg, #f59e0b, #d97706)") : "#e2e8f0", color: done ? "#16a34a" : canSubmit ? "#fff" : "#94a3b8", cursor: canSubmit ? "pointer" : "not-allowed" }}>
+        <button onClick={handleSubmit} disabled={!canSubmit} style={{ ...btnPrimary, background: done ? "#dcfce7" : canSubmit ? (mode === "in" ? "linear-gradient(135deg, #A6192E, #8E1426)" : "linear-gradient(135deg, #f59e0b, #d97706)") : "#e2e8f0", color: done ? "#16a34a" : canSubmit ? "#fff" : "#94a3b8", cursor: canSubmit ? "pointer" : "not-allowed" }}>
           {mode === "in" ? <LogIn size={18} /> : <LogOut size={18} />}
           {done ? "บันทึกแล้ว" : mode === "in" ? "ลงเวลาเข้างาน" : cleaningLock === "loading" ? "🔒 กำลังตรวจสอบเวรพื้นที่..." : cleaningLock === "error" ? "🔒 ตรวจสอบเวรพื้นที่ไม่สำเร็จ" : cleaningBlocked ? "🔒 ให้คะแนนเวรพื้นที่ก่อน" : "ลงเวลากลับบ้าน"}
         </button>
@@ -1959,7 +1959,7 @@ function EmployeePage({ employees, currentUser, onRefresh }) {
                     <td style={{ padding: "0.75rem 1rem", minWidth: "11rem" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
                         <Avatar name={emp.name} index={i} />
-                        <span style={{ fontWeight: 600, color: "#233862" }}>{emp.name}</span>
+                        <span style={{ fontWeight: 600, color: "#2B0A10" }}>{emp.name}</span>
                       </div>
                       <label style={{ display: "grid", gap: "0.15rem", marginTop: "0.4rem" }}>
                         <span style={{ fontSize: "0.68rem", color: "#64748b", fontWeight: 700 }}>ชั้นที่สอน</span>
@@ -1974,14 +1974,14 @@ function EmployeePage({ employees, currentUser, onRefresh }) {
                       </label>
                     </td>
                     <td style={{ padding: "0.75rem 1rem", color: "#475569", fontFamily: "monospace", fontSize: "0.8rem" }}>{emp.username || "-"}</td>
-                    <td style={{ padding: "0.75rem 1rem" }}><span style={{ background: "#EAF5FF", color: "#008CFF", fontSize: "0.75rem", fontWeight: 600, padding: "0.2rem 0.6rem", borderRadius: "20px" }}>{emp.department || "-"}</span></td>
+                    <td style={{ padding: "0.75rem 1rem" }}><span style={{ background: "#FBF5E6", color: "#A6192E", fontSize: "0.75rem", fontWeight: 600, padding: "0.2rem 0.6rem", borderRadius: "20px" }}>{emp.department || "-"}</span></td>
                     <td style={{ padding: "0.75rem 1rem", color: "#475569", whiteSpace: "nowrap" }}>{salaryMeta.teacher_level ? `ครู${salaryMeta.teacher_level}` : "-"}</td>
                     {canSeePay && (<>
                     <td style={{ padding: "0.75rem 1rem", whiteSpace: "nowrap" }}>
-                      <div style={{ color: "#233862", fontWeight: 800 }}>{formatMoney(salaryRow?.daily_rate || 0)}</div>
+                      <div style={{ color: "#2B0A10", fontWeight: 800 }}>{formatMoney(salaryRow?.daily_rate || 0)}</div>
                       <div style={{ color: "#64748b", fontSize: "0.7rem" }}>{salaryMeta.pay_type === "monthly" ? "รายเดือน" : "รายวัน"}</div>
                     </td>
-                    <td style={{ padding: "0.75rem 1rem", color: "#233862", fontWeight: 800, whiteSpace: "nowrap" }}>{formatMoney(salaryMeta.bank_deposit || 0)}</td>
+                    <td style={{ padding: "0.75rem 1rem", color: "#2B0A10", fontWeight: 800, whiteSpace: "nowrap" }}>{formatMoney(salaryMeta.bank_deposit || 0)}</td>
                     </>)}
                     <td style={{ padding: "0.75rem 1rem" }}>
                       {emp.role === "admin"
@@ -2003,7 +2003,7 @@ function EmployeePage({ employees, currentUser, onRefresh }) {
                         {device && emp.role !== "admin" && (
                           <button onClick={() => handleUnlock(emp.id, emp.name)} title="ปลดล็อกเครื่อง" style={iconBtn("#fef3c7", "#d97706")}><Key size={15} /></button>
                         )}
-                        <button onClick={() => { setEditEmp(emp); setShowModal(true); }} style={iconBtn("#EAF5FF", "#008CFF")}><Edit size={15} /></button>
+                        <button onClick={() => { setEditEmp(emp); setShowModal(true); }} style={iconBtn("#FBF5E6", "#A6192E")}><Edit size={15} /></button>
                         <button onClick={() => handleDelete(emp.id)} disabled={deleting === emp.id} style={iconBtn("#fef2f2", "#dc2626")}>
                           {deleting === emp.id ? <RefreshCw size={15} style={{ animation: "spin 1s linear infinite" }} /> : <Trash2 size={15} />}
                         </button>
@@ -2083,7 +2083,7 @@ function AttendancePage({ employees, activityLog, currentUser, settings, onRefre
       <PostNoteMissingWarning currentUser={currentUser} onOpenAcademic={onOpenAcademic} />
       <CleaningCheckoutBlockNotice status={cleaningStatus} onOpenCleaning={onOpenCleaning} onRetry={refreshCleaningStatus} />
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
-        <button onClick={() => setShowIn(true)} style={{ background: "linear-gradient(135deg, #008CFF, #0072D9)", border: "none", borderRadius: "1rem", padding: "1.5rem", color: "#fff", cursor: "pointer", fontFamily: "inherit", boxShadow: "0 8px 24px rgba(0,140,255,0.3)", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
+        <button onClick={() => setShowIn(true)} style={{ background: "linear-gradient(135deg, #A6192E, #8E1426)", border: "none", borderRadius: "1rem", padding: "1.5rem", color: "#fff", cursor: "pointer", fontFamily: "inherit", boxShadow: "0 8px 24px rgba(166,25,46,0.3)", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
           <LogIn size={32} /><div style={{ fontSize: "1.1rem", fontWeight: 800 }}>ลงเวลาเข้างาน</div>
           <div style={{ fontSize: "0.75rem", opacity: 0.9 }}>เวลาทำงาน: {wsOf(currentUser?.id, settings?.work_start)?.slice(0,5)} น.</div>
         </button>
@@ -2116,13 +2116,13 @@ function AttendancePage({ employees, activityLog, currentUser, settings, onRefre
                     <td style={{ padding: "0.65rem 0.75rem" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                         <Avatar name={row.employees?.name} index={i} />
-                        <span style={{ fontWeight: 600, color: "#233862" }}>{row.employees?.name || "-"}</span>
+                        <span style={{ fontWeight: 600, color: "#2B0A10" }}>{row.employees?.name || "-"}</span>
                       </div>
                     </td>
                     <td style={{ padding: "0.65rem 0.75rem", color: "#475569" }}>{fmtDate(row.check_in)}</td>
                     <td style={{ padding: "0.65rem 0.75rem" }}>
                       <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", minWidth: 150 }}>
-                        <span style={{ background: isTraining ? "#DCEFFF" : "#f1f5f9", color: isTraining ? "#0072D9" : "#475569", fontSize: "0.7rem", fontWeight: 800, padding: "0.2rem 0.5rem", borderRadius: "20px", width: "fit-content" }}>
+                        <span style={{ background: isTraining ? "#F6EBCF" : "#f1f5f9", color: isTraining ? "#8E1426" : "#475569", fontSize: "0.7rem", fontWeight: 800, padding: "0.2rem 0.5rem", borderRadius: "20px", width: "fit-content" }}>
                           {isTraining ? `อบรม: ${row.training_location || "-"}` : (row.duty || "ไม่มีเวร")}
                         </span>
                         {isTraining && (
@@ -2143,7 +2143,7 @@ function AttendancePage({ employees, activityLog, currentUser, settings, onRefre
                           <span style={{ background: "#fef2f2", color: "#dc2626", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>⚠️ สาย {formatMinutes(lateInfo.minutes)}</span>
                         )}
                         {lateInfo?.early && (
-                          <span style={{ background: "#EAF5FF", color: "#008CFF", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>⏰ เข้าก่อน {formatMinutes(lateInfo.minutes)}</span>
+                          <span style={{ background: "#FBF5E6", color: "#A6192E", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>⏰ เข้าก่อน {formatMinutes(lateInfo.minutes)}</span>
                         )}
                         {!lateInfo?.late && !lateInfo?.early && lateInfo && (
                           <span style={{ background: "#dcfce7", color: "#16a34a", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>{lateInfo.weekend ? `🤝 ${WEEKEND_HELP_LABEL}` : "✓ ตรงเวลา"}</span>
@@ -2207,7 +2207,7 @@ function LeavePage({ employees, leaves, currentUser, onRefresh }) {
                   <td style={{ padding: "0.65rem 0.75rem" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                       <Avatar name={row.employees?.name} index={i} />
-                      <span style={{ fontWeight: 600, color: "#233862" }}>{row.employees?.name || "-"}</span>
+                      <span style={{ fontWeight: 600, color: "#2B0A10" }}>{row.employees?.name || "-"}</span>
                     </div>
                   </td>
                   <td style={{ padding: "0.65rem 0.75rem", color: "#475569" }}>{row.leave_type}</td>
@@ -2245,7 +2245,7 @@ function LeavePage({ employees, leaves, currentUser, onRefresh }) {
                   <td style={{ padding: "0.65rem 0.75rem" }}>
                     {row.document_url
                       ? (
-                        <a href={row.document_url === LAZY_LEAVE_DOCUMENT ? "#" : row.document_url} onClick={event => { if (row.document_url === LAZY_LEAVE_DOCUMENT || String(row.document_url).startsWith("data:")) { event.preventDefault(); openLeaveDocument(row); } }} target="_blank" rel="noreferrer" style={{ background: "#EAF5FF", color: "#0072D9", fontSize: "0.72rem", fontWeight: 700, padding: "0.28rem 0.6rem", borderRadius: "20px", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
+                        <a href={row.document_url === LAZY_LEAVE_DOCUMENT ? "#" : row.document_url} onClick={event => { if (row.document_url === LAZY_LEAVE_DOCUMENT || String(row.document_url).startsWith("data:")) { event.preventDefault(); openLeaveDocument(row); } }} target="_blank" rel="noreferrer" style={{ background: "#FBF5E6", color: "#8E1426", fontSize: "0.72rem", fontWeight: 700, padding: "0.28rem 0.6rem", borderRadius: "20px", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
                           <FileText size={13} /> ใบนัดหมอ · ไม่หักลา
                         </a>
                       ) : <span style={{ color: "#94a3b8", fontSize: "0.78rem" }}>—</span>}
@@ -2301,7 +2301,7 @@ function OutingPage({ employees, outings, currentUser, onRefresh }) {
                   <td style={{ padding: "0.65rem 0.75rem" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                       <Avatar name={row.employees?.name} index={i} />
-                      <span style={{ fontWeight: 600, color: "#233862" }}>{row.employees?.name || "-"}</span>
+                      <span style={{ fontWeight: 600, color: "#2B0A10" }}>{row.employees?.name || "-"}</span>
                     </div>
                   </td>
                   <td style={{ padding: "0.65rem 0.75rem", color: "#475569" }}>{fmtDate(row.out_time)}</td>
@@ -2476,7 +2476,7 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
   };
 
   const reportTabs = [
-    { key: "summary", label: "สรุปภาพรวม", icon: BarChart3, color: "#008CFF" },
+    { key: "summary", label: "สรุปภาพรวม", icon: BarChart3, color: "#A6192E" },
     { key: "attendance", label: "การเข้า-ออก", icon: Clock, color: "#059669" },
     { key: "dailySummary", label: "รายวันครบคน", icon: Calendar, color: "#0f766e" },
     { key: "late", label: "มาสาย", icon: AlertCircle, color: "#dc2626" },
@@ -2489,7 +2489,7 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.75rem" }}>
         <div>
-          <h1 style={{ fontSize: "1.4rem", fontWeight: 800, color: "#233862" }}>รายงาน</h1>
+          <h1 style={{ fontSize: "1.4rem", fontWeight: 800, color: "#2B0A10" }}>รายงาน</h1>
           <p style={{ color: "#64748b", fontSize: "0.85rem" }}>เดือน {new Date(month + "-01").toLocaleDateString("th-TH", { month: "long", year: "numeric" })}</p>
         </div>
         <button onClick={exportCSV} style={{ background: "linear-gradient(135deg, #059669, #047857)", border: "none", borderRadius: "12px", padding: "0.65rem 1.25rem", color: "#fff", fontWeight: 700, fontSize: "0.875rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.5rem", fontFamily: "inherit", boxShadow: "0 4px 14px rgba(5,150,105,0.3)" }}>
@@ -2506,9 +2506,9 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
               {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
             </select>
           </Field>
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "1rem", padding: "0.65rem 1rem", background: "#EAF5FF", borderRadius: "10px" }}>
-            <Calendar size={16} color="#008CFF" />
-            <div><div style={{ fontSize: "0.72rem", color: "#64748b" }}>วันทำงาน</div><div style={{ fontWeight: 800, color: "#0072D9" }}>{workDays} วัน</div></div>
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "1rem", padding: "0.65rem 1rem", background: "#FBF5E6", borderRadius: "10px" }}>
+            <Calendar size={16} color="#A6192E" />
+            <div><div style={{ fontSize: "0.72rem", color: "#64748b" }}>วันทำงาน</div><div style={{ fontWeight: 800, color: "#8E1426" }}>{workDays} วัน</div></div>
           </div>
         </div>
       </Card>
@@ -2560,19 +2560,19 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
                       <td style={{ padding: "0.6rem 0.75rem" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                           <Avatar name={r.emp.name} index={i} />
-                          <span style={{ fontWeight: 600, color: "#233862", whiteSpace: "nowrap" }}>{r.emp.name}</span>
+                          <span style={{ fontWeight: 600, color: "#2B0A10", whiteSpace: "nowrap" }}>{r.emp.name}</span>
                         </div>
                       </td>
                       <td style={{ padding: "0.6rem 0.75rem", color: "#64748b" }}>{r.emp.department || "-"}</td>
                       <td style={{ padding: "0.6rem 0.75rem" }}><span style={{ color: "#16a34a", fontWeight: 700 }}>{r.attended}</span></td>
                       <td style={{ padding: "0.6rem 0.75rem", color: r.lateCount > 0 ? "#dc2626" : "#94a3b8", fontWeight: 700 }}>{r.lateCount}</td>
-                      <td style={{ padding: "0.6rem 0.75rem", color: "#008CFF", fontWeight: 600 }}>{r.earlyArrival}</td>
+                      <td style={{ padding: "0.6rem 0.75rem", color: "#A6192E", fontWeight: 600 }}>{r.earlyArrival}</td>
                       <td style={{ padding: "0.6rem 0.75rem", color: r.earlyDeparture > 0 ? "#dc2626" : "#94a3b8", fontWeight: 600 }}>{r.earlyDeparture}</td>
                       <td style={{ padding: "0.6rem 0.75rem", color: "#16a34a", fontWeight: 600 }}>{r.overtime}</td>
                       <td style={{ padding: "0.6rem 0.75rem", color: "#7c3aed", fontWeight: 600 }}>{r.leaveDays}</td>
                       <td style={{ padding: "0.6rem 0.75rem", color: r.absent > 0 ? "#dc2626" : "#94a3b8", fontWeight: 700 }}>{r.absent}</td>
                       <td style={{ padding: "0.6rem 0.75rem", color: "#d97706", fontWeight: 600 }}>{r.outingCount}</td>
-                      <td style={{ padding: "0.6rem 0.75rem", color: "#0072D9", fontWeight: 700 }}>{r.totalHours}</td>
+                      <td style={{ padding: "0.6rem 0.75rem", color: "#8E1426", fontWeight: 700 }}>{r.totalHours}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -2595,14 +2595,14 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
                     const hours = a.check_out ? ((new Date(a.check_out) - new Date(a.check_in)) / 3600000).toFixed(1) : "-";
                     return (
                       <tr key={a.id} style={{ borderBottom: "1px solid #f8fafc", background: i % 2 === 0 ? "#fff" : "#fafafa" }}>
-                        <td style={{ padding: "0.6rem 0.75rem", fontWeight: 600, color: "#233862" }}>{a.employees?.name || "-"}</td>
+                        <td style={{ padding: "0.6rem 0.75rem", fontWeight: 600, color: "#2B0A10" }}>{a.employees?.name || "-"}</td>
                         <td style={{ padding: "0.6rem 0.75rem", color: "#475569" }}>{fmtDate(a.check_in)}</td>
                         <td style={{ padding: "0.6rem 0.75rem", color: "#16a34a", fontWeight: 600 }}>{fmtTime(a.check_in)}</td>
                         <td style={{ padding: "0.6rem 0.75rem", color: "#d97706", fontWeight: 600 }}>{a.check_out ? fmtTime(a.check_out) : "-"}</td>
                         <td style={{ padding: "0.6rem 0.75rem", fontWeight: 600 }}>{hours} ชม.</td>
                         <td style={{ padding: "0.6rem 0.75rem" }}>
                           {li?.late ? <span style={{ background: "#fef2f2", color: "#dc2626", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>สาย {formatMinutes(li.minutes)}</span>
-                          : li?.early ? <span style={{ background: "#EAF5FF", color: "#008CFF", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>เข้าก่อน {formatMinutes(li.minutes)}</span>
+                          : li?.early ? <span style={{ background: "#FBF5E6", color: "#A6192E", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>เข้าก่อน {formatMinutes(li.minutes)}</span>
                           : <span style={{ background: "#dcfce7", color: "#16a34a", fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "20px" }}>ตรงเวลา</span>}
                         </td>
                         <td style={{ padding: "0.6rem 0.75rem" }}>
@@ -2620,7 +2620,7 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
 
             {reportType === "dailySummary" && (
               <div style={{ minWidth: "760px", padding: "1rem" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "120px 100px", justifyContent: "center", gap: "0.25rem 1rem", color: "#233862", fontSize: "0.9rem", fontWeight: 800, marginBottom: "1rem" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "120px 100px", justifyContent: "center", gap: "0.25rem 1rem", color: "#2B0A10", fontSize: "0.9rem", fontWeight: 800, marginBottom: "1rem" }}>
                   <div style={{ textAlign: "right" }}>เวลาเริ่มงาน</div>
                   <div>{settings?.work_start?.slice(0, 5) || "-"} น.</div>
                   <div style={{ textAlign: "right" }}>เวลาเลิกงาน</div>
@@ -2631,33 +2631,33 @@ function ReportPage({ employees, attendance, leaves, outings, settings }) {
                   return (
                     <div key={date.key} style={{ marginBottom: "1.25rem" }}>
                       <div style={{ background: "#0f766e", color: "#fff", fontWeight: 900, padding: "0.45rem 0.75rem", border: "1px solid #0f766e", borderBottom: "none" }}>{date.label}</div>
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem", border: "2px solid #233862" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem", border: "2px solid #2B0A10" }}>
                         <thead>
                           <tr>
-                            <th rowSpan={2} style={{ background: "#DCEFFF", border: "1px solid #233862", padding: "0.5rem", textAlign: "center", width: 64 }}>ลำดับ</th>
-                            <th rowSpan={2} style={{ background: "#DCEFFF", border: "1px solid #233862", padding: "0.5rem", textAlign: "center", minWidth: 220 }}>ชื่อ - นามสกุล</th>
-                            <th rowSpan={2} style={{ background: "#DCEFFF", border: "1px solid #233862", padding: "0.5rem", textAlign: "center", width: 110 }}>ลงเวลาเข้า</th>
-                            <th rowSpan={2} style={{ background: "#DCEFFF", border: "1px solid #233862", padding: "0.5rem", textAlign: "center", width: 110 }}>ลงเวลาออก</th>
-                            <th colSpan={2} style={{ background: "#fed7aa", border: "1px solid #233862", padding: "0.5rem", textAlign: "center" }}>มาสาย</th>
-                            <th colSpan={2} style={{ background: "#fed7aa", border: "1px solid #233862", padding: "0.5rem", textAlign: "center" }}>เลิกก่อน</th>
+                            <th rowSpan={2} style={{ background: "#F6EBCF", border: "1px solid #2B0A10", padding: "0.5rem", textAlign: "center", width: 64 }}>ลำดับ</th>
+                            <th rowSpan={2} style={{ background: "#F6EBCF", border: "1px solid #2B0A10", padding: "0.5rem", textAlign: "center", minWidth: 220 }}>ชื่อ - นามสกุล</th>
+                            <th rowSpan={2} style={{ background: "#F6EBCF", border: "1px solid #2B0A10", padding: "0.5rem", textAlign: "center", width: 110 }}>ลงเวลาเข้า</th>
+                            <th rowSpan={2} style={{ background: "#F6EBCF", border: "1px solid #2B0A10", padding: "0.5rem", textAlign: "center", width: 110 }}>ลงเวลาออก</th>
+                            <th colSpan={2} style={{ background: "#fed7aa", border: "1px solid #2B0A10", padding: "0.5rem", textAlign: "center" }}>มาสาย</th>
+                            <th colSpan={2} style={{ background: "#fed7aa", border: "1px solid #2B0A10", padding: "0.5rem", textAlign: "center" }}>เลิกก่อน</th>
                           </tr>
                           <tr>
                             {["ช.ม.", "นาที", "ช.ม.", "นาที"].map((h, index) => (
-                              <th key={`${h}-${index}`} style={{ background: "#fed7aa", border: "1px solid #233862", padding: "0.45rem", textAlign: "center", width: 78 }}>{h}</th>
+                              <th key={`${h}-${index}`} style={{ background: "#fed7aa", border: "1px solid #2B0A10", padding: "0.45rem", textAlign: "center", width: 78 }}>{h}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
                           {rows.map((row, index) => (
                             <tr key={`${date.key}-${row.emp.id}`} style={{ background: index % 2 === 0 ? "#fff" : "#f8fafc" }}>
-                              <td style={{ border: "1px solid #233862", padding: "0.45rem", textAlign: "center", fontWeight: 800 }}>{index + 1}</td>
-                              <td style={{ border: "1px solid #233862", padding: "0.45rem 0.6rem", fontWeight: 700, color: "#233862" }}>{row.emp.name}</td>
-                              <td style={{ border: "1px solid #233862", padding: "0.45rem", textAlign: "center", fontWeight: 800, color: row.checkInText === "-" ? "#94a3b8" : "#233862" }}>{row.checkInText === "-" ? "-" : `${row.checkInText} น.`}</td>
-                              <td style={{ border: "1px solid #233862", padding: "0.45rem", textAlign: "center", fontWeight: 800, color: row.checkOutText.includes("ยังไม่กลับ") ? "#dc2626" : "#233862" }}>{row.checkOutText === "-" ? "-" : `${row.checkOutText} น.`}</td>
-                              <td style={{ border: "1px solid #233862", padding: "0.45rem", textAlign: "center", color: row.lateHours !== "" ? "#dc2626" : "#233862", fontWeight: row.lateHours !== "" ? 900 : 500 }}>{row.lateHours}</td>
-                              <td style={{ border: "1px solid #233862", padding: "0.45rem", textAlign: "center", color: row.lateMinutes !== "" ? "#dc2626" : "#233862", fontWeight: row.lateMinutes !== "" ? 900 : 500 }}>{row.lateMinutes}</td>
-                              <td style={{ border: "1px solid #233862", padding: "0.45rem", textAlign: "center", color: row.earlyHours !== "" ? "#dc2626" : "#233862", fontWeight: row.earlyHours !== "" ? 900 : 500 }}>{row.earlyHours}</td>
-                              <td style={{ border: "1px solid #233862", padding: "0.45rem", textAlign: "center", color: row.earlyMinutes !== "" ? "#dc2626" : "#233862", fontWeight: row.earlyMinutes !== "" ? 900 : 500 }}>{row.earlyMinutes}</td>
+                              <td style={{ border: "1px solid #2B0A10", padding: "0.45rem", textAlign: "center", fontWeight: 800 }}>{index + 1}</td>
+                              <td style={{ border: "1px solid #2B0A10", padding: "0.45rem 0.6rem", fontWeight: 700, color: "#2B0A10" }}>{row.emp.name}</td>
+                              <td style={{ border: "1px solid #2B0A10", padding: "0.45rem", textAlign: "center", fontWeight: 800, color: row.checkInText === "-" ? "#94a3b8" : "#2B0A10" }}>{row.checkInText === "-" ? "-" : `${row.checkInText} น.`}</td>
+                              <td style={{ border: "1px solid #2B0A10", padding: "0.45rem", textAlign: "center", fontWeight: 800, color: row.checkOutText.includes("ยังไม่กลับ") ? "#dc2626" : "#2B0A10" }}>{row.checkOutText === "-" ? "-" : `${row.checkOutText} น.`}</td>
+                              <td style={{ border: "1px solid #2B0A10", padding: "0.45rem", textAlign: "center", color: row.lateHours !== "" ? "#dc2626" : "#2B0A10", fontWeight: row.lateHours !== "" ? 900 : 500 }}>{row.lateHours}</td>
+                              <td style={{ border: "1px solid #2B0A10", padding: "0.45rem", textAlign: "center", color: row.lateMinutes !== "" ? "#dc2626" : "#2B0A10", fontWeight: row.lateMinutes !== "" ? 900 : 500 }}>{row.lateMinutes}</td>
+                              <td style={{ border: "1px solid #2B0A10", padding: "0.45rem", textAlign: "center", color: row.earlyHours !== "" ? "#dc2626" : "#2B0A10", fontWeight: row.earlyHours !== "" ? 900 : 500 }}>{row.earlyHours}</td>
+                              <td style={{ border: "1px solid #2B0A10", padding: "0.45rem", textAlign: "center", color: row.earlyMinutes !== "" ? "#dc2626" : "#2B0A10", fontWeight: row.earlyMinutes !== "" ? 900 : 500 }}>{row.earlyMinutes}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -3174,13 +3174,13 @@ function SchedulePage({ employees, currentUser, onOpenPlan }) {
     else setViewPlan({ emp: viewer || { id: viewId, name: nameOf(viewId) }, focus: { date, period } });
   };
 
-  const th = { padding: "0.45rem 0.4rem", fontSize: "0.8rem", fontWeight: 800, color: "#233862", background: "#F3F8FD", borderBottom: "1px solid #E4EEF8", textAlign: "center", whiteSpace: "nowrap" };
+  const th = { padding: "0.45rem 0.4rem", fontSize: "0.8rem", fontWeight: 800, color: "#2B0A10", background: "#FAF7F3", borderBottom: "1px solid #F0E6DC", textAlign: "center", whiteSpace: "nowrap" };
   const small = { ...inputStyle, padding: "0.4rem 0.55rem", fontSize: "0.88rem" };
   const people = canViewAll ? [...new Map([[String(currentUser.id), currentUser], ...(employees || []).map(emp => [String(emp.id), emp])]).values()] : [];
 
   return (
     <div style={{ display: "grid", gap: "1rem" }}>
-      <div style={{ background: "linear-gradient(90deg, #008CFF, #3EBFFB)", borderRadius: 18, padding: "1rem 1.2rem", color: "#fff", boxShadow: "0 4px 24px rgba(0,140,255,0.2)" }}>
+      <div style={{ background: "linear-gradient(90deg, #A6192E, #C8323F)", borderRadius: 18, padding: "1rem 1.2rem", color: "#fff", boxShadow: "0 4px 24px rgba(166,25,46,0.2)" }}>
         <div style={{ fontSize: "1.2rem", fontWeight: 800 }}>ตารางสอน</div>
         <div style={{ fontSize: "0.85rem", opacity: 0.9 }}>{isMine ? "กรอกตารางสอนของท่าน (วันจันทร์–ศุกร์ × คาบ) กดช่องเพื่อเพิ่ม/แก้ไข ข้อมูลนี้ใช้ในแผนรายคาบและหน้าผู้บริหาร" : `ตารางสอนของ ${viewer?.name || nameOf(viewId)} (ดูอย่างเดียว)`}</div>
       </div>
@@ -3197,7 +3197,7 @@ function SchedulePage({ employees, currentUser, onOpenPlan }) {
       {message && <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", borderRadius: 10, padding: "0.5rem 0.8rem", color: "#166534", fontWeight: 700, fontSize: "0.88rem" }}>{message}</div>}
       {editing && (
         <Card padding="0.9rem">
-          <div style={{ fontWeight: 800, color: "#233862", marginBottom: "0.6rem" }}>{editing.id ? "แก้ไข" : "เพิ่ม"}คาบ · วัน{DAY_NAMES[editing.day]} คาบที่ {editing.period}</div>
+          <div style={{ fontWeight: 800, color: "#2B0A10", marginBottom: "0.6rem" }}>{editing.id ? "แก้ไข" : "เพิ่ม"}คาบ · วัน{DAY_NAMES[editing.day]} คาบที่ {editing.period}</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))", gap: "0.55rem" }}>
             <Field label="วิชา *"><input aria-label="วิชา" value={editing.subject} onChange={event => setEditing(current => ({ ...current, subject: event.target.value }))} placeholder="เช่น ภาษาไทย" style={small} /></Field>
             <Field label="ห้อง/ชั้น"><input aria-label="ห้อง/ชั้น" value={editing.class_room} onChange={event => setEditing(current => ({ ...current, class_room: event.target.value }))} placeholder="เช่น ป.2/1" style={small} /></Field>
@@ -3205,7 +3205,7 @@ function SchedulePage({ employees, currentUser, onOpenPlan }) {
             <Field label="เวลาสิ้นสุด"><input type="time" value={editing.end_time} onChange={event => setEditing(current => ({ ...current, end_time: event.target.value }))} style={small} /></Field>
           </div>
           <div style={{ display: "flex", gap: "0.45rem", marginTop: "0.7rem", flexWrap: "wrap" }}>
-            <button type="button" disabled={saving} onClick={saveEdit} style={{ ...btnPrimary, flex: "none", padding: "0.5rem 1.1rem", background: "linear-gradient(90deg, #008CFF, #3EBFFB)", color: "#fff", cursor: saving ? "wait" : "pointer" }}><Save size={15} /> บันทึกคาบ</button>
+            <button type="button" disabled={saving} onClick={saveEdit} style={{ ...btnPrimary, flex: "none", padding: "0.5rem 1.1rem", background: "linear-gradient(90deg, #A6192E, #C8323F)", color: "#fff", cursor: saving ? "wait" : "pointer" }}><Save size={15} /> บันทึกคาบ</button>
             {editing.id && <button type="button" disabled={saving} onClick={removeEdit} style={{ ...btnSecondary, flex: "none", color: "#b91c1c" }}><Trash2 size={15} /> ลบคาบ</button>}
             <button type="button" onClick={() => setEditing(null)} style={{ ...btnSecondary, flex: "none" }}>ยกเลิก</button>
           </div>
@@ -3216,7 +3216,7 @@ function SchedulePage({ employees, currentUser, onOpenPlan }) {
           <>
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 4, minWidth: 720 }}>
-                <thead><tr><th style={th}>คาบ</th>{[1, 2, 3, 4, 5].map(day => <th key={day} style={{ ...th, color: day === todayDow ? "#008CFF" : th.color }}>{DAY_NAMES[day]}{day === todayDow ? " (วันนี้)" : ""}</th>)}</tr></thead>
+                <thead><tr><th style={th}>คาบ</th>{[1, 2, 3, 4, 5].map(day => <th key={day} style={{ ...th, color: day === todayDow ? "#A6192E" : th.color }}>{DAY_NAMES[day]}{day === todayDow ? " (วันนี้)" : ""}</th>)}</tr></thead>
                 <tbody>
                   {periods.map(period => (
                     <tr key={period}>
@@ -3225,16 +3225,16 @@ function SchedulePage({ employees, currentUser, onOpenPlan }) {
                         const items = cellRows(day, period);
                         const active = editing && editing.day === day && editing.period === period;
                         return (
-                          <td key={day} style={{ verticalAlign: "top", border: `1px ${items.length ? "solid" : "dashed"} ${active ? "#008CFF" : items.length ? "#B8E0FF" : "#E4EEF8"}`, background: items.length ? "#EAF5FF" : "#fff", borderRadius: 12, padding: "0.4rem 0.45rem", minWidth: 120, height: 64 }}>
+                          <td key={day} style={{ verticalAlign: "top", border: `1px ${items.length ? "solid" : "dashed"} ${active ? "#A6192E" : items.length ? "#E8D6A6" : "#F0E6DC"}`, background: items.length ? "#FBF5E6" : "#fff", borderRadius: 12, padding: "0.4rem 0.45rem", minWidth: 120, height: 64 }}>
                             {items.length === 0 ? (
-                              isMine ? <button type="button" aria-label={`เพิ่มวัน${DAY_NAMES[day]} คาบ ${period}`} onClick={() => startEdit(day, period)} style={{ width: "100%", height: "100%", minHeight: 48, border: "none", background: "transparent", color: "#8FD0FF", fontSize: "1.2rem", cursor: "pointer" }}>+</button> : <span style={{ color: "#cbd5e1" }}>–</span>
+                              isMine ? <button type="button" aria-label={`เพิ่มวัน${DAY_NAMES[day]} คาบ ${period}`} onClick={() => startEdit(day, period)} style={{ width: "100%", height: "100%", minHeight: 48, border: "none", background: "transparent", color: "#D9BC74", fontSize: "1.2rem", cursor: "pointer" }}>+</button> : <span style={{ color: "#cbd5e1" }}>–</span>
                             ) : items.map(row => (
                               <div key={row.id} style={{ display: "grid", gap: "0.2rem" }}>
                                 <button type="button" onClick={() => startEdit(day, period)} disabled={!isMine} style={{ border: "none", background: "transparent", padding: 0, textAlign: "left", cursor: isMine ? "pointer" : "default", fontFamily: "inherit" }}>
-                                  <div style={{ fontWeight: 800, color: "#233862", fontSize: "0.85rem" }}>{row.subject}</div>
+                                  <div style={{ fontWeight: 800, color: "#2B0A10", fontSize: "0.85rem" }}>{row.subject}</div>
                                   <div style={{ color: "#596068", fontSize: "0.75rem" }}>{row.class_room || "-"}{row.start_time && row.start_time !== "00:00:00" ? ` · ${String(row.start_time).slice(0, 5)}` : ""}</div>
                                 </button>
-                                <button type="button" onClick={() => openPlan(day, period)} style={{ border: "none", background: "linear-gradient(90deg, #FF7106, #FF9A3C)", color: "#fff", borderRadius: 999, padding: "0.12rem 0.5rem", fontSize: "0.7rem", fontWeight: 800, cursor: "pointer", width: "fit-content", fontFamily: "inherit" }}>แผนรายคาบ</button>
+                                <button type="button" onClick={() => openPlan(day, period)} style={{ border: "none", background: "linear-gradient(135deg, #7A5A14, #9C7A2E)", color: "#fff", borderRadius: 999, padding: "0.12rem 0.5rem", fontSize: "0.7rem", fontWeight: 800, cursor: "pointer", width: "fit-content", fontFamily: "inherit" }}>แผนรายคาบ</button>
                               </div>
                             ))}
                           </td>
@@ -3321,7 +3321,7 @@ function SupervisionStatusBadge({ status }) {
     missing: { bg: "#fee2e2", color: "#b91c1c", label: "ยังไม่ส่ง" },
     pending: { bg: "#fff7ed", color: "#c2410c", label: "รอท้ายคาบ" },
     recorded: { bg: "#dcfce7", color: "#166534", label: "บันทึกแล้ว" },
-    approved: { bg: "#DCEFFF", color: "#0072D9", label: "รับทราบแล้ว" },
+    approved: { bg: "#F6EBCF", color: "#8E1426", label: "รับทราบแล้ว" },
   };
   const item = map[status] || map.missing;
   return <span style={{ background: item.bg, color: item.color, fontSize: "0.72rem", fontWeight: 800, padding: "0.2rem 0.6rem", borderRadius: "20px", whiteSpace: "nowrap" }}>{item.label}</span>;
@@ -3347,7 +3347,7 @@ function WeekSwitcher({ weekStart, onChange, disabled = false }) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
         <button type="button" disabled={disabled} onClick={() => onChange(shiftDateKey(weekStart, -7))} style={buttonStyle}><ChevronLeft size={16} /> สัปดาห์ก่อน</button>
         <div style={{ textAlign: "center", minWidth: 200 }}>
-          <div style={{ fontWeight: 800, color: "#233862" }}>{formatWeekLabel(weekStart)}</div>
+          <div style={{ fontWeight: 800, color: "#2B0A10" }}>{formatWeekLabel(weekStart)}</div>
           <div style={{ fontSize: "0.75rem", color: "#64748b" }}>จันทร์–ศุกร์</div>
         </div>
         <button type="button" disabled={disabled} onClick={() => onChange(shiftDateKey(weekStart, 7))} style={buttonStyle}>สัปดาห์ถัดไป <ChevronRight size={16} /></button>
@@ -3366,7 +3366,7 @@ function SupervisionFileBlock({ file }) {
   return (
     <div style={{ display: "grid", gap: "0.75rem" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-        <div style={{ fontWeight: 800, color: "#233862", wordBreak: "break-word" }}>{file.name || "ไฟล์"}</div>
+        <div style={{ fontWeight: 800, color: "#2B0A10", wordBreak: "break-word" }}>{file.name || "ไฟล์"}</div>
         <a href={file.dataUrl} download={file.name || "ไฟล์"} style={{ ...btnSecondary, flex: "none", textDecoration: "none" }}>ดาวน์โหลด</a>
       </div>
       {isImage && <img src={file.dataUrl} alt={file.name || "ไฟล์แผน"} style={{ width: "100%", maxHeight: 320, objectFit: "contain", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }} />}
@@ -3377,7 +3377,7 @@ function SupervisionFileBlock({ file }) {
 
 function FullText({ value }) {
   const text = String(value || "").trim();
-  return <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", color: text ? "#233862" : "#94a3b8", lineHeight: 1.65, fontSize: "0.95rem" }}>{text || "ไม่มีข้อมูล"}</div>;
+  return <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", color: text ? "#2B0A10" : "#94a3b8", lineHeight: 1.65, fontSize: "0.95rem" }}>{text || "ไม่มีข้อมูล"}</div>;
 }
 
 function LinkLines({ value }) {
@@ -3387,8 +3387,8 @@ function LinkLines({ value }) {
     <div style={{ display: "grid", gap: "0.35rem" }}>
       {lines.map((line, index) => (
         /^https?:\/\//i.test(line)
-          ? <a key={`${line}-${index}`} href={line} target="_blank" rel="noreferrer" style={{ color: "#0072D9", wordBreak: "break-all" }}>{line}</a>
-          : <div key={`${line}-${index}`} style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", color: "#233862" }}>{line}</div>
+          ? <a key={`${line}-${index}`} href={line} target="_blank" rel="noreferrer" style={{ color: "#8E1426", wordBreak: "break-all" }}>{line}</a>
+          : <div key={`${line}-${index}`} style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", color: "#2B0A10" }}>{line}</div>
       ))}
     </div>
   );
@@ -3563,7 +3563,7 @@ function WorksheetLink({ file }) {
   return (
     <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
       <FileText size={18} color="#dc2626" />
-      <span style={{ fontWeight: 700, color: "#233862", wordBreak: "break-word" }}>{file.name || "ใบงาน.pdf"}</span>
+      <span style={{ fontWeight: 700, color: "#2B0A10", wordBreak: "break-word" }}>{file.name || "ใบงาน.pdf"}</span>
       <a href={href} target="_blank" rel="noreferrer" style={{ ...btnSecondary, flex: "none", textDecoration: "none" }}>เปิดดู</a>
       <a href={href} download={file.name || "ใบงาน.pdf"} style={{ ...btnSecondary, flex: "none", textDecoration: "none" }}>ดาวน์โหลด</a>
       {file.storage === "inline" && <span style={{ fontSize: "0.75rem", color: "#b45309" }}>(เก็บในแผน ยังไม่ได้ใช้ Storage)</span>}
@@ -3574,7 +3574,7 @@ function WorksheetLink({ file }) {
 function YoutubePreview({ url }) {
   const [play, setPlay] = useState(false);
   const id = youtubeId(url);
-  if (!id) return <a href={url} target="_blank" rel="noreferrer" style={{ color: "#0072D9", wordBreak: "break-all" }}>{url}</a>;
+  if (!id) return <a href={url} target="_blank" rel="noreferrer" style={{ color: "#8E1426", wordBreak: "break-all" }}>{url}</a>;
   return (
     <div style={{ display: "grid", gap: "0.35rem", minWidth: 0 }}>
       {play ? (
@@ -3585,7 +3585,7 @@ function YoutubePreview({ url }) {
           <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2.4rem", color: "#fff", textShadow: "0 2px 8px rgba(0,0,0,0.6)" }}>▶</span>
         </button>
       )}
-      <a href={url} target="_blank" rel="noreferrer" style={{ color: "#0072D9", fontSize: "0.8rem", wordBreak: "break-all" }}>{url}</a>
+      <a href={url} target="_blank" rel="noreferrer" style={{ color: "#8E1426", fontSize: "0.8rem", wordBreak: "break-all" }}>{url}</a>
     </div>
   );
 }
@@ -3675,8 +3675,8 @@ function PostNoteEditor({ note, disabled, teacherName, onChange }) {
 
 function PostNoteAdminRead({ note }) {
   return (
-    <div style={{ background: "#EAF5FF", border: "1px solid #B8E0FF", borderRadius: "12px", padding: "0.6rem 0.75rem" }}>
-      <div style={{ fontWeight: 800, color: "#0072D9" }}>5. ความเห็นผู้บริหาร/หัวหน้างานวิชาการ</div>
+    <div style={{ background: "#FBF5E6", border: "1px solid #E8D6A6", borderRadius: "12px", padding: "0.6rem 0.75rem" }}>
+      <div style={{ fontWeight: 800, color: "#8E1426" }}>5. ความเห็นผู้บริหาร/หัวหน้างานวิชาการ</div>
       <FullText value={note?.admin_comment} />
       {(note?.admin_sign || note?.admin_date) && <div style={{ fontSize: "0.85rem", color: "#334155", marginTop: "0.3rem" }}>ลงชื่อ {note.admin_sign || "-"} {note.admin_date ? `· ${formatThaiDateKey(note.admin_date)}` : ""}</div>}
     </div>
@@ -3689,16 +3689,16 @@ function PostNoteRead({ note }) {
   if (value.not_used) return (
     <div style={{ display: "grid", gap: "0.45rem" }}>
       <div style={{ fontWeight: 800, color: "#9a3412" }}>ไม่ได้ใช้แผนนี้ในคาบนี้</div>
-      <div><div style={{ fontWeight: 800, color: "#233862" }}>เหตุผล</div><FullText value={value.not_used_reason} /></div>
+      <div><div style={{ fontWeight: 800, color: "#2B0A10" }}>เหตุผล</div><FullText value={value.not_used_reason} /></div>
       <div style={{ color: "#334155", fontSize: "0.9rem" }}>ลงชื่อผู้สอน {value.teacher_sign || "-"} {value.teacher_date ? `· ${formatThaiDateKey(value.teacher_date)}` : ""}</div>
       <PostNoteAdminRead note={value} />
     </div>
   );
   return (
     <div style={{ display: "grid", gap: "0.45rem" }}>
-      <div><div style={{ fontWeight: 800, color: "#233862" }}>1. ผลการจัดกิจกรรมการเรียนรู้ (K/P/A)</div><FullText value={value.kpa_text} /></div>
+      <div><div style={{ fontWeight: 800, color: "#2B0A10" }}>1. ผลการจัดกิจกรรมการเรียนรู้ (K/P/A)</div><FullText value={value.kpa_text} /></div>
       {POST_NOTE_TEXTS.map(({ key, label }) => (
-        <div key={key}><div style={{ fontWeight: 800, color: "#233862" }}>{label}</div><FullText value={value[key]} /></div>
+        <div key={key}><div style={{ fontWeight: 800, color: "#2B0A10" }}>{label}</div><FullText value={value[key]} /></div>
       ))}
       <div style={{ color: "#334155", fontSize: "0.9rem" }}>ลงชื่อผู้สอน {value.teacher_sign || "-"} {value.teacher_date ? `· ${formatThaiDateKey(value.teacher_date)}` : ""}</div>
       <PostNoteAdminRead note={value} />
@@ -3824,7 +3824,7 @@ function QuietFold({ title, children }) {
   return (
     <div style={{ borderTop: "1px solid #f1f5f9", minWidth: 0 }}>
       <button type="button" aria-expanded={open} onClick={() => setOpen(value => !value)} style={{ width: "100%", minHeight: 44, display: "flex", alignItems: "center", gap: "0.4rem", border: "none", background: "transparent", fontFamily: "inherit", textAlign: "left", cursor: "pointer", padding: "0.2rem 0" }}>
-        <span style={{ fontWeight: 800, color: "#233862", flex: 1 }}>{title}</span>
+        <span style={{ fontWeight: 800, color: "#2B0A10", flex: 1 }}>{title}</span>
         {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
       </button>
       {open && <div style={{ display: "grid", gap: "0.75rem", minWidth: 0, paddingBottom: "0.35rem" }}>{children}</div>}
@@ -3837,7 +3837,7 @@ function DayCard({ title, summary, children, defaultOpen = false }) {
   return (
     <Card>
       <button type="button" aria-expanded={open} onClick={() => setOpen(value => !value)} style={{ width: "100%", minHeight: 48, display: "flex", alignItems: "center", gap: "0.55rem", border: "none", background: "transparent", fontFamily: "inherit", textAlign: "left", cursor: "pointer", padding: 0 }}>
-        <span style={{ fontWeight: 800, fontSize: "1.05rem", color: "#233862", flex: "0 0 auto" }}>{title}</span>
+        <span style={{ fontWeight: 800, fontSize: "1.05rem", color: "#2B0A10", flex: "0 0 auto" }}>{title}</span>
         <span style={{ color: "#64748b", fontSize: "0.8rem", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summary}</span>
         {open ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
       </button>
@@ -3855,13 +3855,13 @@ function WeekPeriodEditor({ period, disabled, onChange, onPickFile, onPickWorksh
   const { plan } = selectedPlanParts(period);
   const summary = periodFoldSummary(period, plan);
   return (
-    <div id={`plan-${period.teach_date}-${period.period_no}`} style={{ border: `1px solid ${slot ? "#B8E0FF" : "#e2e8f0"}`, borderRadius: "12px", padding: open ? "0.75rem" : "0.35rem 0.5rem", display: "grid", gap: "0.75rem", minWidth: 0 }}>
+    <div id={`plan-${period.teach_date}-${period.period_no}`} style={{ border: `1px solid ${slot ? "#E8D6A6" : "#e2e8f0"}`, borderRadius: "12px", padding: open ? "0.75rem" : "0.35rem 0.5rem", display: "grid", gap: "0.75rem", minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", minWidth: 0 }}>
-        <button type="button" aria-expanded={open} aria-label={open ? `หุบคาบที่ ${period.period_no}` : `เปิดคาบที่ ${period.period_no}`} onClick={() => setOpen(value => !value)} style={{ width: 44, height: 44, flex: "none", border: "1px solid #e2e8f0", borderRadius: "10px", background: "#fff", color: "#0072D9", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+        <button type="button" aria-expanded={open} aria-label={open ? `หุบคาบที่ ${period.period_no}` : `เปิดคาบที่ ${period.period_no}`} onClick={() => setOpen(value => !value)} style={{ width: 44, height: 44, flex: "none", border: "1px solid #e2e8f0", borderRadius: "10px", background: "#fff", color: "#8E1426", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
           {open ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
         </button>
         <button type="button" onClick={() => setOpen(value => !value)} style={{ flex: 1, minWidth: 0, textAlign: "left", background: "transparent", border: "none", padding: "0.25rem 0", fontFamily: "inherit", cursor: "pointer" }}>
-          <div style={{ fontWeight: 800, color: "#233862" }}>คาบที่ {period.period_no}{slot && <span style={{ marginLeft: "0.4rem", fontSize: "0.72rem", fontWeight: 700, color: "#0072D9", background: "#EAF5FF", borderRadius: 999, padding: "0.05rem 0.5rem" }}>ตารางสอน: {timetableSlotLabel(slot)}</span>}</div>
+          <div style={{ fontWeight: 800, color: "#2B0A10" }}>คาบที่ {period.period_no}{slot && <span style={{ marginLeft: "0.4rem", fontSize: "0.72rem", fontWeight: 700, color: "#8E1426", background: "#FBF5E6", borderRadius: 999, padding: "0.05rem 0.5rem" }}>ตารางสอน: {timetableSlotLabel(slot)}</span>}</div>
           {!open && <div style={{ fontSize: "0.8rem", color: period.free ? "#64748b" : "#475569", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{summary}</div>}
         </button>
         <label style={{ display: "flex", alignItems: "center", gap: "0.35rem", minHeight: 44, flex: "none", fontWeight: 700, color: "#475569", cursor: disabled ? "not-allowed" : "pointer" }}>
@@ -3906,7 +3906,7 @@ function WeekPeriodEditor({ period, disabled, onChange, onPickFile, onPickWorksh
           <input value={period.subject || ""} onChange={event => onChange({ subject: event.target.value })} placeholder={subjectOptions.length ? "พิมพ์ชื่อวิชา" : "ยังไม่มีตารางสอน — พิมพ์ชื่อวิชา หรือกรอกตารางสอนที่เมนู ตารางสอน"} style={periodInput} />
         )}
         {slot && !period.subject && (
-          <button type="button" disabled={disabled} onClick={() => applySlot(slot)} style={{ ...btnSecondary, flex: "none", width: "fit-content", marginTop: "0.4rem", padding: "0.3rem 0.7rem", fontSize: "0.8rem", color: "#0072D9" }}>ใช้ตามตารางสอน: {timetableSlotLabel(slot)}</button>
+          <button type="button" disabled={disabled} onClick={() => applySlot(slot)} style={{ ...btnSecondary, flex: "none", width: "fit-content", marginTop: "0.4rem", padding: "0.3rem 0.7rem", fontSize: "0.8rem", color: "#8E1426" }}>ใช้ตามตารางสอน: {timetableSlotLabel(slot)}</button>
         )}
         {typing && subjectOptions.length > 0 && <button type="button" onClick={() => setTyping(false)} style={{ ...btnSecondary, flex: "none", width: "fit-content", marginTop: "0.4rem", padding: "0.3rem 0.7rem", fontSize: "0.8rem" }}>เลือกจากตารางสอน</button>}
       </Field>
@@ -4039,25 +4039,25 @@ function SupervisionPeriodRead({ period, defaultOpen = false, adminSlot = null, 
   return (
     <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "0.55rem 0.7rem", display: "grid", gap: "0.45rem", minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", minWidth: 0 }}>
-        <button type="button" aria-expanded={open} aria-label={open ? `หุบคาบที่ ${period.period_no}` : `เปิดคาบที่ ${period.period_no}`} onClick={() => setOpen(value => !value)} style={{ width: 44, height: 44, flex: "none", border: "1px solid #e2e8f0", borderRadius: "10px", background: "#fff", color: "#0072D9", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+        <button type="button" aria-expanded={open} aria-label={open ? `หุบคาบที่ ${period.period_no}` : `เปิดคาบที่ ${period.period_no}`} onClick={() => setOpen(value => !value)} style={{ width: 44, height: 44, flex: "none", border: "1px solid #e2e8f0", borderRadius: "10px", background: "#fff", color: "#8E1426", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
           {open ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
         </button>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 800, color: "#233862" }}>คาบที่ {period.period_no} · {clockLabel(period.start_time)} - {clockLabel(period.end_time)}</div>
+          <div style={{ fontWeight: 800, color: "#2B0A10" }}>คาบที่ {period.period_no} · {clockLabel(period.start_time)} - {clockLabel(period.end_time)}</div>
           {!open && <div style={{ fontSize: "0.8rem", color: "#475569", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{summary}</div>}
         </div>
       </div>
       {open && (
         <div style={{ display: "grid", gap: "0.45rem", minWidth: 0 }}>
           {(choice.unit || planLabel || topicLabel || period.lesson_page) && (
-            <div style={{ color: "#233862", lineHeight: 1.55 }}>
+            <div style={{ color: "#2B0A10", lineHeight: 1.55 }}>
               {choice.unit && <div><strong>หน่วย: </strong>{choice.unit.name}</div>}
               {planLabel && <div><strong>แผน: </strong>{planLabel}</div>}
               {topicLabel && <div><strong>เรื่อง: </strong>{topicLabel}</div>}
               {period.lesson_page && <div style={{ overflowWrap: "anywhere" }}><strong>หน้า: </strong>{period.lesson_page}</div>}
             </div>
           )}
-          {String(period.subject || "").trim() && <div style={{ color: "#233862" }}><strong>วิชา: </strong>{period.subject}</div>}
+          {String(period.subject || "").trim() && <div style={{ color: "#2B0A10" }}><strong>วิชา: </strong>{period.subject}</div>}
           {[
             ["1. ขั้นนำเข้าสู่บทเรียน", period.lesson_intro],
             ["2. ขั้นจัดกิจกรรมการเรียนรู้", period.lesson_activity],
@@ -4065,7 +4065,7 @@ function SupervisionPeriodRead({ period, defaultOpen = false, adminSlot = null, 
             ["4. ขั้นสรุป", period.lesson_summary],
           ].filter(([, value]) => String(value || "").trim()).length > 0 && (
             <div style={{ display: "grid", gap: "0.45rem" }}>
-              <div style={{ fontWeight: 800, color: "#233862" }}>รายละเอียดการสอน</div>
+              <div style={{ fontWeight: 800, color: "#2B0A10" }}>รายละเอียดการสอน</div>
               {[
                 ["1. ขั้นนำเข้าสู่บทเรียน", period.lesson_intro],
                 ["2. ขั้นจัดกิจกรรมการเรียนรู้", period.lesson_activity],
@@ -4073,7 +4073,7 @@ function SupervisionPeriodRead({ period, defaultOpen = false, adminSlot = null, 
                 ["4. ขั้นสรุป", period.lesson_summary],
               ].filter(([, value]) => String(value || "").trim()).map(([label, value]) => (
                 <div key={label}>
-                  <div style={{ fontWeight: 800, color: "#233862" }}>{label}</div>
+                  <div style={{ fontWeight: 800, color: "#2B0A10" }}>{label}</div>
                   <FullText value={value} />
                 </div>
               ))}
@@ -4081,37 +4081,37 @@ function SupervisionPeriodRead({ period, defaultOpen = false, adminSlot = null, 
           )}
           {String(period.media_links || "").trim() && (
             <div>
-              <div style={{ fontWeight: 800, color: "#233862" }}>ลิงก์สื่อ</div>
+              <div style={{ fontWeight: 800, color: "#2B0A10" }}>ลิงก์สื่อ</div>
               <LinkLines value={period.media_links} />
             </div>
           )}
           {String(period.media_detail || "").trim() && (
             <div>
-              <div style={{ fontWeight: 800, color: "#233862" }}>สื่อโดยละเอียด</div>
+              <div style={{ fontWeight: 800, color: "#2B0A10" }}>สื่อโดยละเอียด</div>
               <FullText value={period.media_detail} />
             </div>
           )}
           {lessonFileHref(period.worksheet_file) && (
             <div>
-              <div style={{ fontWeight: 800, color: "#233862" }}>ใบงาน (PDF)</div>
+              <div style={{ fontWeight: 800, color: "#2B0A10" }}>ใบงาน (PDF)</div>
               <WorksheetLink file={period.worksheet_file} />
             </div>
           )}
           {(period.worksheet_images || []).length > 0 && (
             <div>
-              <div style={{ fontWeight: 800, color: "#233862" }}>รูปใบงาน ({period.worksheet_images.length} รูป)</div>
+              <div style={{ fontWeight: 800, color: "#2B0A10" }}>รูปใบงาน ({period.worksheet_images.length} รูป)</div>
               <WorksheetImages images={period.worksheet_images} />
             </div>
           )}
           {cleanYoutubeLinks(period.youtube_links).length > 0 && (
             <div>
-              <div style={{ fontWeight: 800, color: "#233862" }}>YouTube ที่ใช้สอน</div>
+              <div style={{ fontWeight: 800, color: "#2B0A10" }}>YouTube ที่ใช้สอน</div>
               <YoutubeGrid links={period.youtube_links} />
             </div>
           )}
           {!hidePostNote && postNoteHasData(period.post_note) && (
             <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: "0.45rem" }}>
-              <div style={{ fontWeight: 800, color: "#233862", marginBottom: "0.3rem" }}>บันทึกหลังสอน</div>
+              <div style={{ fontWeight: 800, color: "#2B0A10", marginBottom: "0.3rem" }}>บันทึกหลังสอน</div>
               <PostNoteRead note={period.post_note} />
             </div>
           )}
@@ -4119,12 +4119,12 @@ function SupervisionPeriodRead({ period, defaultOpen = false, adminSlot = null, 
           {period.homework === "yes" && (
             <>
               <div>
-                <div style={{ fontWeight: 800, color: "#233862" }}>คืองานอะไร</div>
+                <div style={{ fontWeight: 800, color: "#2B0A10" }}>คืองานอะไร</div>
                 <FullText value={period.homework_what} />
               </div>
-              <div style={{ color: "#233862" }}><strong>หน้า: </strong>{period.homework_page || "-"}</div>
+              <div style={{ color: "#2B0A10" }}><strong>หน้า: </strong>{period.homework_page || "-"}</div>
               <div>
-                <div style={{ fontWeight: 800, color: "#233862" }}>ใบงาน</div>
+                <div style={{ fontWeight: 800, color: "#2B0A10" }}>ใบงาน</div>
                 {period.homework_file?.dataUrl ? <SupervisionFileBlock file={period.homework_file} /> : <div style={{ color: "#94a3b8" }}>ไม่ได้แนบใบงาน</div>}
               </div>
             </>
@@ -4164,11 +4164,11 @@ function KindergartenDayEditor({ day, dayName, disabled, onChange }) {
   return (
     <div style={{ border: "1px solid #e2e8f0", borderRadius: "12px", padding: open ? "0.75rem" : "0.35rem 0.5rem", display: "grid", gap: "0.75rem", minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", minWidth: 0, flexWrap: "wrap" }}>
-        <button type="button" aria-expanded={open} aria-label={open ? `หุบวัน${dayName}` : `เปิดวัน${dayName}`} onClick={() => setOpen(value => !value)} style={{ width: 44, height: 44, flex: "none", border: "1px solid #e2e8f0", borderRadius: "10px", background: "#fff", color: "#0072D9", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+        <button type="button" aria-expanded={open} aria-label={open ? `หุบวัน${dayName}` : `เปิดวัน${dayName}`} onClick={() => setOpen(value => !value)} style={{ width: 44, height: 44, flex: "none", border: "1px solid #e2e8f0", borderRadius: "10px", background: "#fff", color: "#8E1426", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
           {open ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
         </button>
         <button type="button" onClick={() => setOpen(value => !value)} style={{ flex: "1 1 120px", minWidth: 0, textAlign: "left", background: "transparent", border: "none", padding: "0.25rem 0", fontFamily: "inherit", cursor: "pointer" }}>
-          <div style={{ fontWeight: 800, color: "#233862" }}>วัน{dayName}</div>
+          <div style={{ fontWeight: 800, color: "#2B0A10" }}>วัน{dayName}</div>
           {!open && <div style={{ fontSize: "0.8rem", color: day.off ? "#64748b" : "#475569", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{summary}</div>}
         </button>
         <label style={{ display: "flex", alignItems: "center", gap: "0.35rem", minHeight: 44, flex: "none", fontWeight: 700, color: "#475569", cursor: disabled ? "not-allowed" : "pointer" }}>
@@ -4193,7 +4193,7 @@ function KindergartenWeekView({ plan, weekStart }) {
   const days = kinderDaysForEditor(plan, weekStart);
   return (
     <div style={{ display: "grid", gap: "0.75rem", minWidth: 0 }}>
-      <div style={{ fontWeight: 800, color: "#233862" }}>หน่วย {plan.unit || "-"} · ห้อง {plan.room || "-"}</div>
+      <div style={{ fontWeight: 800, color: "#2B0A10" }}>หน่วย {plan.unit || "-"} · ห้อง {plan.room || "-"}</div>
       {days.map((day, index) => (
         <KindergartenDayRead key={day.date} day={day} dayName={DAY_NAMES[index + 1]} dateLabel={formatThaiDateKey(day.date)} />
       ))}
@@ -4207,11 +4207,11 @@ function KindergartenDayRead({ day, dayName, dateLabel }) {
   return (
     <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "0.55rem 0.7rem", display: "grid", gap: "0.45rem", minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", minWidth: 0 }}>
-        <button type="button" aria-expanded={open} aria-label={open ? `หุบวัน${dayName}` : `เปิดวัน${dayName}`} onClick={() => setOpen(value => !value)} style={{ width: 44, height: 44, flex: "none", border: "1px solid #e2e8f0", borderRadius: "10px", background: "#fff", color: "#0072D9", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+        <button type="button" aria-expanded={open} aria-label={open ? `หุบวัน${dayName}` : `เปิดวัน${dayName}`} onClick={() => setOpen(value => !value)} style={{ width: 44, height: 44, flex: "none", border: "1px solid #e2e8f0", borderRadius: "10px", background: "#fff", color: "#8E1426", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
           {open ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
         </button>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 800, color: "#233862" }}>วัน{dayName} · {dateLabel}</div>
+          <div style={{ fontWeight: 800, color: "#2B0A10" }}>วัน{dayName} · {dateLabel}</div>
           {!open && <div style={{ fontSize: "0.8rem", color: "#475569", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{summary}</div>}
         </div>
       </div>
@@ -4220,7 +4220,7 @@ function KindergartenDayRead({ day, dayName, dateLabel }) {
           {day.off && <div style={{ fontWeight: 800, color: "#64748b" }}>วันนี้ไม่มีแผนสอน</div>}
           {KINDER_ACTIVITIES.filter(item => String(day.activities?.[item.key] || "").trim()).map(item => (
             <div key={item.key}>
-              <div style={{ fontWeight: 800, color: "#233862" }}>{item.label}</div>
+              <div style={{ fontWeight: 800, color: "#2B0A10" }}>{item.label}</div>
               <FullText value={day.activities[item.key]} />
             </div>
           ))}
@@ -4425,7 +4425,7 @@ function KindergartenSupervisionTeacher({ currentUser }) {
           <Card>
             <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center", flexWrap: "wrap", marginBottom: "0.9rem" }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#233862" }}>แผนอนุบาลของ {currentUser.name}</div>
+                <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#2B0A10" }}>แผนอนุบาลของ {currentUser.name}</div>
                 <div style={{ fontSize: "0.8rem", color: "#b45309", fontWeight: 700, marginTop: "0.25rem" }}>{supervisionDeadlineText(weekStart)} · แก้ไขได้ตลอด สถานะยึดเวลาส่งครั้งแรก</div>
               </div>
               <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
@@ -4442,8 +4442,8 @@ function KindergartenSupervisionTeacher({ currentUser }) {
               </Field>
             </div>
             {signoff?.at && (
-              <div style={{ background: "#EAF5FF", border: "1px solid #B8E0FF", borderRadius: "12px", padding: "0.8rem", marginBottom: "0.9rem" }}>
-                <div style={{ fontWeight: 800, color: "#0072D9" }}>ฝ่ายวิชาการรับทราบแล้ว · {signoff.by || "ผู้บริหาร"} · {fmtDate(signoff.at)} {fmtTime(signoff.at)}</div>
+              <div style={{ background: "#FBF5E6", border: "1px solid #E8D6A6", borderRadius: "12px", padding: "0.8rem", marginBottom: "0.9rem" }}>
+                <div style={{ fontWeight: 800, color: "#8E1426" }}>ฝ่ายวิชาการรับทราบแล้ว · {signoff.by || "ผู้บริหาร"} · {fmtDate(signoff.at)} {fmtTime(signoff.at)}</div>
                 <FullText value={signoff.comment} />
               </div>
             )}
@@ -4451,7 +4451,7 @@ function KindergartenSupervisionTeacher({ currentUser }) {
               <div style={{ display: "grid", gap: "0.45rem", marginBottom: "0.9rem" }}>
                 {observations.map(item => (
                   <div key={item.id} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.75rem" }}>
-                    <div style={{ fontWeight: 800, color: "#233862" }}>นิเทศในห้อง {formatThaiDateKey(item.date)} · {labelOf(OBSERVATION_MATCH, item.match) || "-"}</div>
+                    <div style={{ fontWeight: 800, color: "#2B0A10" }}>นิเทศในห้อง {formatThaiDateKey(item.date)} · {labelOf(OBSERVATION_MATCH, item.match) || "-"}</div>
                     <FullText value={item.note} />
                   </div>
                 ))}
@@ -4520,7 +4520,7 @@ function ExecutiveSupervisionSwitch({ employees, currentUser, planFocus = null }
   useEffect(() => { if (planFocus?.date) setView("mine"); }, [planFocus]);
   if (!hasPeriods) return <SupervisionAdmin employees={employees} currentUser={currentUser} />;
   const btn = (key, label) => (
-    <button type="button" onClick={() => setView(key)} aria-pressed={view === key} style={{ ...btnSecondary, flex: "none", minHeight: 40, fontWeight: 800, background: view === key ? "linear-gradient(135deg, #008CFF, #0072D9)" : "#fff", color: view === key ? "#fff" : "#233862", border: view === key ? "none" : "1px solid #cbd5e1" }}>{label}</button>
+    <button type="button" onClick={() => setView(key)} aria-pressed={view === key} style={{ ...btnSecondary, flex: "none", minHeight: 40, fontWeight: 800, background: view === key ? "linear-gradient(135deg, #A6192E, #8E1426)" : "#fff", color: view === key ? "#fff" : "#2B0A10", border: view === key ? "none" : "1px solid #cbd5e1" }}>{label}</button>
   );
   return (
     <div style={{ display: "grid", gap: "0.9rem", minWidth: 0 }}>
@@ -4805,7 +4805,7 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
         {copyPick.items.map(({ key, period }) => (
           <label key={key} style={{ display: "flex", gap: "0.5rem", alignItems: "center", padding: "0.4rem 0.5rem", border: "1px solid #e2e8f0", borderRadius: 8, cursor: "pointer", fontSize: "0.85rem" }}>
             <input type="checkbox" checked={!!copyPick.selected[key]} onChange={event => setCopyPick(c => ({ ...c, selected: { ...c.selected, [key]: event.target.checked } }))} style={{ width: 18, height: 18 }} />
-            <span style={{ fontWeight: 800, color: "#233862", minWidth: 120 }}>{new Date(`${period.teach_date}T00:00:00`).toLocaleDateString("th-TH", { weekday: "short", day: "numeric", month: "short" })} คาบ {period.period_no}</span>
+            <span style={{ fontWeight: 800, color: "#2B0A10", minWidth: 120 }}>{new Date(`${period.teach_date}T00:00:00`).toLocaleDateString("th-TH", { weekday: "short", day: "numeric", month: "short" })} คาบ {period.period_no}</span>
             <span style={{ color: "#475569" }}>{period.free ? "ว่าง" : [period.subject, period.plan_class, period.plan_title].filter(Boolean).join(" · ") || "-"}</span>
           </label>
         ))}
@@ -4911,7 +4911,7 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
           <Card>
             <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center", flexWrap: "wrap", marginBottom: "0.9rem" }}>
               <div>
-                <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#233862" }}>แผนสัปดาห์ของ {currentUser.name}</div>
+                <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#2B0A10" }}>แผนสัปดาห์ของ {currentUser.name}</div>
                 <div style={{ fontSize: "0.8rem", color: "#b45309", fontWeight: 700, marginTop: "0.25rem" }}>{supervisionDeadlineText(weekStart)} · แก้ไขได้ตลอด สถานะยึดเวลาส่งครั้งแรก</div>
               </div>
               <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
@@ -4920,8 +4920,8 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
               </div>
             </div>
             {signoff?.at && (
-              <div style={{ background: "#EAF5FF", border: "1px solid #B8E0FF", borderRadius: "12px", padding: "0.8rem", marginBottom: "0.9rem" }}>
-                <div style={{ fontWeight: 800, color: "#0072D9" }}>ฝ่ายวิชาการรับทราบแล้ว · {signoff.by || "ผู้บริหาร"} · {fmtDate(signoff.at)} {fmtTime(signoff.at)}</div>
+              <div style={{ background: "#FBF5E6", border: "1px solid #E8D6A6", borderRadius: "12px", padding: "0.8rem", marginBottom: "0.9rem" }}>
+                <div style={{ fontWeight: 800, color: "#8E1426" }}>ฝ่ายวิชาการรับทราบแล้ว · {signoff.by || "ผู้บริหาร"} · {fmtDate(signoff.at)} {fmtTime(signoff.at)}</div>
                 <FullText value={signoff.comment} />
               </div>
             )}
@@ -4929,7 +4929,7 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
               <div style={{ display: "grid", gap: "0.45rem", marginBottom: "0.9rem" }}>
                 {observations.map(item => (
                   <div key={item.id} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.75rem" }}>
-                    <div style={{ fontWeight: 800, color: "#233862" }}>นิเทศในห้อง {formatThaiDateKey(item.date)} · {labelOf(OBSERVATION_MATCH, item.match) || "-"}</div>
+                    <div style={{ fontWeight: 800, color: "#2B0A10" }}>นิเทศในห้อง {formatThaiDateKey(item.date)} · {labelOf(OBSERVATION_MATCH, item.match) || "-"}</div>
                     <FullText value={item.note} />
                   </div>
                 ))}
@@ -5160,7 +5160,7 @@ function SupervisionAdmin({ employees, currentUser }) {
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
               <Avatar name={selectedTeacher.name} />
               <div>
-                <div style={{ fontSize: "1.15rem", fontWeight: 800, color: "#233862" }}>{selectedTeacher.name}</div>
+                <div style={{ fontSize: "1.15rem", fontWeight: 800, color: "#2B0A10" }}>{selectedTeacher.name}</div>
                 <div style={{ fontSize: "0.8rem", color: "#64748b" }}>{selectedTeacher.department || "-"} · {selectedTeacher.position || "พนักงาน"}{levels[selectedTeacher.id] === "อนุบาล" ? " · อนุบาล" : ""}</div>
               </div>
             </div>
@@ -5175,8 +5175,8 @@ function SupervisionAdmin({ employees, currentUser }) {
             <div style={{ display: "grid", gap: "1rem" }}>
               {plan.submitted_at && <div style={{ fontSize: "0.8rem", color: "#64748b" }}>ส่งล่าสุด {fmtDate(plan.submitted_at)} {fmtTime(plan.submitted_at)}</div>}
               {plan.signoff?.at && (
-                <div style={{ background: "#EAF5FF", border: "1px solid #B8E0FF", borderRadius: "12px", padding: "0.8rem" }}>
-                  <div style={{ fontWeight: 800, color: "#0072D9" }}>รับทราบแล้ว · {plan.signoff.by || "ฝ่ายวิชาการ"} · {fmtDate(plan.signoff.at)} {fmtTime(plan.signoff.at)}</div>
+                <div style={{ background: "#FBF5E6", border: "1px solid #E8D6A6", borderRadius: "12px", padding: "0.8rem" }}>
+                  <div style={{ fontWeight: 800, color: "#8E1426" }}>รับทราบแล้ว · {plan.signoff.by || "ฝ่ายวิชาการ"} · {fmtDate(plan.signoff.at)} {fmtTime(plan.signoff.at)}</div>
                   <FullText value={plan.signoff.comment} />
                 </div>
               )}
@@ -5184,30 +5184,30 @@ function SupervisionAdmin({ employees, currentUser }) {
                 <div style={{ display: "grid", gap: "0.45rem" }}>
                   {plan.observations.map((item, index) => (
                     <div key={item.id || index} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.75rem" }}>
-                      <div style={{ fontWeight: 800, color: "#233862" }}>นิเทศในห้อง {formatThaiDateKey(item.date)} · {labelOf(OBSERVATION_MATCH, item.match) || "-"} · {item.by || "ฝ่ายวิชาการ"}</div>
+                      <div style={{ fontWeight: 800, color: "#2B0A10" }}>นิเทศในห้อง {formatThaiDateKey(item.date)} · {labelOf(OBSERVATION_MATCH, item.match) || "-"} · {item.by || "ฝ่ายวิชาการ"}</div>
                       <FullText value={item.note} />
                     </div>
                   ))}
                 </div>
               )}
               <div>
-                <div style={{ fontWeight: 800, color: "#233862", marginBottom: "0.75rem" }}>{plan.kind === "kindergarten" ? "แผนอนุบาลรายสัปดาห์" : "แผนรายสัปดาห์"}</div>
+                <div style={{ fontWeight: 800, color: "#2B0A10", marginBottom: "0.75rem" }}>{plan.kind === "kindergarten" ? "แผนอนุบาลรายสัปดาห์" : "แผนรายสัปดาห์"}</div>
                 {plan.kind === "kindergarten"
                   ? <KindergartenWeekView plan={plan} weekStart={weekStart} />
                   : <SupervisionWeekView periods={plan.periods} weekStart={weekStart} />}
               </div>
               <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: "1rem", display: "grid", gap: "0.75rem" }}>
-                <div style={{ fontWeight: 800, color: "#233862" }}>รับทราบ/อนุมัติ</div>
+                <div style={{ fontWeight: 800, color: "#2B0A10" }}>รับทราบ/อนุมัติ</div>
                 <div style={{ fontSize: "0.8rem", color: "#64748b" }}>ครูเห็นข้อเสนอแนะนี้ในแผนสัปดาห์ และแก้เนื้อหาแผนเองจากบัญชีครู</div>
                 <Field label="ข้อเสนอแนะถึงครู">
                   <textarea value={signoffComment} onChange={event => setSignoffComment(event.target.value)} style={supervisionTextArea} placeholder="พิมพ์คำแนะนำสั้นๆ แล้วกดรับทราบ" />
                 </Field>
-                <button type="button" onClick={() => saveReview("signoff")} disabled={savingReview} style={{ ...btnPrimary, flex: "none", background: "linear-gradient(135deg, #008CFF, #0072D9)", color: "#fff", cursor: savingReview ? "not-allowed" : "pointer" }}>
+                <button type="button" onClick={() => saveReview("signoff")} disabled={savingReview} style={{ ...btnPrimary, flex: "none", background: "linear-gradient(135deg, #A6192E, #8E1426)", color: "#fff", cursor: savingReview ? "not-allowed" : "pointer" }}>
                   <CheckCircle size={16} /> รับทราบ/อนุมัติ
                 </button>
               </div>
               <div style={{ display: "grid", gap: "0.75rem" }}>
-                <div style={{ fontWeight: 800, color: "#233862" }}>นิเทศในห้อง</div>
+                <div style={{ fontWeight: 800, color: "#2B0A10" }}>นิเทศในห้อง</div>
                 <div style={{ fontSize: "0.8rem", color: "#64748b" }}>เทียบสิ่งที่เห็นในห้องกับแผนที่ครูเขียนไว้</div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.75rem" }}>
                   <Field label="วันที่นิเทศ">
@@ -5246,7 +5246,7 @@ function SupervisionAdmin({ employees, currentUser }) {
               return (
                 <div key={group.key} style={{ marginTop: "1rem" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
-                    <div style={{ fontWeight: 800, color: "#233862" }}>{group.label}</div>
+                    <div style={{ fontWeight: 800, color: "#2B0A10" }}>{group.label}</div>
                     <SupervisionStatusBadge status={group.key} />
                     <span style={{ color: "#94a3b8", fontSize: "0.8rem" }}>{people.length} คน</span>
                   </div>
@@ -5261,7 +5261,7 @@ function SupervisionAdmin({ employees, currentUser }) {
                           <button key={teacher.id} onClick={() => openTeacher(teacher)} style={{ display: "flex", alignItems: "center", gap: "0.75rem", width: "100%", textAlign: "left", background: "#fff", border: "1px solid #e2e8f0", borderLeft: `4px solid ${tone}`, borderRadius: "12px", padding: "0.7rem 0.8rem", cursor: "pointer", fontFamily: "inherit" }}>
                             <Avatar name={teacher.name} index={index} />
                             <span style={{ flex: 1, minWidth: 0 }}>
-                              <span style={{ display: "block", fontWeight: 800, color: "#233862" }}>{teacher.name || "-"}</span>
+                              <span style={{ display: "block", fontWeight: 800, color: "#2B0A10" }}>{teacher.name || "-"}</span>
                               <span style={{ display: "block", fontSize: "0.75rem", color: "#64748b" }}>{teacher.department || "-"}{levels[teacher.id] === "อนุบาล" ? " · อนุบาล" : ""}</span>
                             </span>
                             <SupervisionStatusBadge status={status} />
@@ -5285,7 +5285,7 @@ function SupervisionAdmin({ employees, currentUser }) {
 const ROLL_STATUSES = [
   { value: "present", label: "มา", color: "#166534", bg: "#dcfce7", border: "#86efac" },
   { value: "personal", label: "ลากิจ", color: "#b45309", bg: "#fef3c7", border: "#fcd34d" },
-  { value: "sick", label: "ลาป่วย", color: "#0072D9", bg: "#DCEFFF", border: "#8FD0FF" },
+  { value: "sick", label: "ลาป่วย", color: "#8E1426", bg: "#F6EBCF", border: "#D9BC74" },
   { value: "absent", label: "ขาด", color: "#b91c1c", bg: "#fee2e2", border: "#fca5a5" },
 ];
 // "absent" เก็บไว้อ่านข้อมูลเก่าเท่านั้น หน้าเช็คชื่อใช้แค่ มา / ลา (ลากิจ หรือ ป่วย)
@@ -5330,12 +5330,12 @@ function SickScreening({ value, disabled, onChange }) {
   const tiny = { ...periodInput, minHeight: 30, padding: "0.2rem 0.4rem", fontSize: "0.8rem" };
   const highTemp = Number(health.temp) >= 37.5;
   return (
-    <div style={{ gridColumn: "1 / -1", background: "#EAF5FF", border: "1px solid #B8E0FF", borderRadius: 8, padding: "0.4rem", display: "grid", gap: "0.35rem", fontSize: "0.78rem" }}>
-      <div style={{ fontWeight: 800, color: "#0072D9" }}>คัดกรองอาการป่วย</div>
+    <div style={{ gridColumn: "1 / -1", background: "#FBF5E6", border: "1px solid #E8D6A6", borderRadius: 8, padding: "0.4rem", display: "grid", gap: "0.35rem", fontSize: "0.78rem" }}>
+      <div style={{ fontWeight: 800, color: "#8E1426" }}>คัดกรองอาการป่วย</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem" }}>
         {SICK_SYMPTOMS.map(item => {
           const on = health.symptoms.includes(item.key) || (item.key === "fever" && highTemp);
-          return <button key={item.key} type="button" disabled={disabled} aria-pressed={on} onClick={() => toggle(item.key)} style={{ border: `1px solid ${on ? "#0072D9" : "#cbd5e1"}`, background: on ? "#0072D9" : "#fff", color: on ? "#fff" : "#475569", borderRadius: 14, padding: "0.12rem 0.5rem", fontSize: "0.74rem", fontFamily: "inherit", cursor: "pointer" }}>{item.label}</button>;
+          return <button key={item.key} type="button" disabled={disabled} aria-pressed={on} onClick={() => toggle(item.key)} style={{ border: `1px solid ${on ? "#8E1426" : "#cbd5e1"}`, background: on ? "#8E1426" : "#fff", color: on ? "#fff" : "#475569", borderRadius: 14, padding: "0.12rem 0.5rem", fontSize: "0.74rem", fontFamily: "inherit", cursor: "pointer" }}>{item.label}</button>;
         })}
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", alignItems: "center" }}>
@@ -5766,7 +5766,7 @@ function RollModeSwitch({ mode, onChange }) {
       {items.map(item => {
         const active = mode === item.key;
         return (
-          <button key={item.key} type="button" onClick={() => onChange(item.key)} style={{ minHeight: 44, border: "none", borderRadius: 10, background: active ? "#EAF5FF" : "transparent", color: active ? "#0072D9" : "#64748b", fontWeight: 800, fontFamily: "inherit", fontSize: "0.92rem", cursor: "pointer" }}>
+          <button key={item.key} type="button" onClick={() => onChange(item.key)} style={{ minHeight: 44, border: "none", borderRadius: 10, background: active ? "#FBF5E6" : "transparent", color: active ? "#8E1426" : "#64748b", fontWeight: 800, fontFamily: "inherit", fontSize: "0.92rem", cursor: "pointer" }}>
             {item.label}
           </button>
         );
@@ -5783,7 +5783,7 @@ function RollMarkRow({ student, value, disabled, onChange, health, onHealth }) {
     <div style={{ display: "grid", width: "100%", boxSizing: "border-box", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "0.25rem 0.4rem", alignItems: "center", padding: "0.2rem 0", borderTop: "1px solid #f1f5f9", minWidth: 0 }}>
       <div style={{ minWidth: 0, display: "flex", gap: "0.3rem", alignItems: "center", fontSize: "0.82rem" }}>
         <span style={{ fontWeight: 700, color: "#94a3b8", flex: "0 0 auto" }}>{student.number}</span>
-        <span title={label} style={{ minWidth: 0, fontWeight: 700, color: "#233862", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
+        <span title={label} style={{ minWidth: 0, fontWeight: 700, color: "#2B0A10", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
       </div>
       <div style={{ display: "flex", gap: "0.2rem", alignItems: "center" }}>
         <button type="button" aria-pressed={value === "present"} aria-label={`${label} มา`} disabled={disabled} onClick={() => onChange?.("present")} style={btn(value === "present", "#166534", "#dcfce7")}>มา</button>
@@ -5855,12 +5855,12 @@ function SickCasesPanel({ book, month, title }) {
   return (
     <div style={{ display: "grid", gap: "0.45rem", minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-        <span style={{ fontWeight: 800, color: "#0072D9", flex: 1 }}>นักเรียนลาป่วย {cases.length} ครั้ง</span>
+        <span style={{ fontWeight: 800, color: "#8E1426", flex: 1 }}>นักเรียนลาป่วย {cases.length} ครั้ง</span>
         {cases.length > 0 && <button type="button" onClick={() => exportSickCases(cases, month, title)} style={{ ...btnSecondary, flex: "none", padding: "0.25rem 0.6rem", fontSize: "0.78rem" }}><FileText size={14} /> Excel</button>}
       </div>
       {symptomCounts.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem" }}>
-          {symptomCounts.map(item => <span key={item.label} style={{ background: "#DCEFFF", color: "#0072D9", borderRadius: 14, padding: "0.1rem 0.5rem", fontSize: "0.74rem", fontWeight: 700 }}>{item.label} {item.count}</span>)}
+          {symptomCounts.map(item => <span key={item.label} style={{ background: "#F6EBCF", color: "#8E1426", borderRadius: 14, padding: "0.1rem 0.5rem", fontSize: "0.74rem", fontWeight: 700 }}>{item.label} {item.count}</span>)}
         </div>
       )}
       {cases.length > 0 && (
@@ -5892,13 +5892,13 @@ function RollStatsPanel({ book, month, onMonth, title }) {
     <Card>
       <div style={{ display: "grid", gap: "0.8rem", minWidth: 0 }}>
         <div>
-          <div style={{ fontWeight: 800, color: "#233862", fontSize: "1.05rem" }}>{title || "สถิติการเช็คชื่อ"}</div>
+          <div style={{ fontWeight: 800, color: "#2B0A10", fontSize: "1.05rem" }}>{title || "สถิติการเช็คชื่อ"}</div>
           <div style={{ color: "#64748b", fontSize: "0.82rem" }}>นับจากวันที่บันทึกการเช็คชื่อแล้ว</div>
         </div>
         <Field label="เดือน">
           <input type="month" value={month} max={todayISO().slice(0, 7)} onChange={event => onMonth(event.target.value)} style={{ ...periodInput, width: "100%", maxWidth: 240 }} />
         </Field>
-        <div style={{ fontWeight: 800, color: "#233862" }}>เช็คชื่อแล้ว {summary.totals.days} วัน</div>
+        <div style={{ fontWeight: 800, color: "#2B0A10" }}>เช็คชื่อแล้ว {summary.totals.days} วัน</div>
         <RollCountChips counts={summary.totals} />
         {summary.totals.sick > 0 && <SickCasesPanel book={book} month={month} title={title} />}
         {book.students.length === 0 ? (
@@ -5911,7 +5911,7 @@ function RollStatsPanel({ book, month, onMonth, title }) {
               <div key={student.id} style={{ display: "grid", gap: "0.4rem", padding: "0.7rem 0", borderTop: "1px solid #f1f5f9", minWidth: 0 }}>
                 <div style={{ display: "flex", gap: "0.55rem", minWidth: 0 }}>
                   <span style={{ fontWeight: 800, color: "#64748b", minWidth: "1.6rem" }}>{student.number}</span>
-                  <span style={{ fontWeight: 800, color: "#233862", wordBreak: "break-word" }}>{studentLabel(student)}</span>
+                  <span style={{ fontWeight: 800, color: "#2B0A10", wordBreak: "break-word" }}>{studentLabel(student)}</span>
                 </div>
                 <RollCountChips counts={counts} />
               </div>
@@ -6099,7 +6099,7 @@ function ActivityPostForm({ plan, currentUser, saving, onCancel, onSave, setErro
   return (
     <Card padding="0.85rem">
       <div style={{ display: "grid", gap: "0.6rem" }}>
-        <div style={{ fontWeight: 800, fontSize: "1.05rem", color: "#233862" }}>บันทึกหลังกิจกรรม</div>
+        <div style={{ fontWeight: 800, fontSize: "1.05rem", color: "#2B0A10" }}>บันทึกหลังกิจกรรม</div>
         <div style={{ fontSize: "0.85rem", color: "#475569" }}>{plan.title} · {formatActivityRange(plan)}</div>
         {label("1. ผลการดำเนินกิจกรรม")}
         <textarea value={post.result} placeholder="กิจกรรมเป็นอย่างไร ได้ผลอย่างไร" onChange={e => set({ result: e.target.value })} style={area} />
@@ -6134,7 +6134,7 @@ function ActivityPostForm({ plan, currentUser, saving, onCancel, onSave, setErro
           <button type="button" disabled={saving || busy} onClick={() => {
             if (!String(post.result || "").trim()) { setError("กรอกผลการดำเนินกิจกรรมก่อน"); return; }
             onSave({ ...post, recorded_by: String(currentUser?.id || ""), recorded_by_name: currentUser?.name || "", recorded_at: new Date().toISOString() });
-          }} style={{ ...btnPrimary, padding: "0.55rem", background: "linear-gradient(135deg, #008CFF, #0072D9)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}><Save size={16} /> {saving ? "กำลังบันทึก..." : "บันทึก"}</button>
+          }} style={{ ...btnPrimary, padding: "0.55rem", background: "linear-gradient(135deg, #A6192E, #8E1426)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}><Save size={16} /> {saving ? "กำลังบันทึก..." : "บันทึก"}</button>
         </div>
       </div>
     </Card>
@@ -6149,7 +6149,7 @@ function ActivityDaysView({ plan }) {
       <div style={{ fontWeight: 800, color: "#334155" }}>กำหนดการรายวัน ({activityActiveDates(plan).length} วัน)</div>
       {activityDayList(plan).map(d => (
         <div key={d.date} style={{ fontSize: "0.82rem", display: "flex", gap: "0.4rem", color: d.holiday ? "#94a3b8" : "#334155" }}>
-          <b style={{ flex: "none", minWidth: 110, color: d.holiday ? "#94a3b8" : "#0072D9" }}>{activityDayLabel(d.date)}</b>
+          <b style={{ flex: "none", minWidth: 110, color: d.holiday ? "#94a3b8" : "#8E1426" }}>{activityDayLabel(d.date)}</b>
           <span style={{ whiteSpace: "pre-wrap" }}>{d.holiday ? "วันหยุด (ไม่มีกิจกรรม)" : [d.time, d.detail].filter(Boolean).join(" · ") || "-"}</span>
         </div>
       ))}
@@ -6179,14 +6179,14 @@ function ActivityDateRangeEditor({ plan, onChange, small }) {
         <button type="button" onClick={wholeWeek} style={{ ...btnSecondary, flex: "none", padding: "0.45rem 0.7rem", fontSize: "0.82rem" }}>ทั้งสัปดาห์ จ.–ศ.</button>
         {multi && <button type="button" onClick={() => onChange({ end_date: "" })} style={{ ...btnSecondary, flex: "none", padding: "0.45rem 0.7rem", fontSize: "0.82rem" }}>วันเดียว</button>}
       </div>
-      <div style={{ fontSize: "0.82rem", color: "#0072D9", fontWeight: 800 }}>จัดกิจกรรม: {formatActivityRange({ date: plan.date, end_date: end })}{multi ? ` · ${days.filter(d => !d.holiday).length} วัน` : ""}</div>
+      <div style={{ fontSize: "0.82rem", color: "#8E1426", fontWeight: 800 }}>จัดกิจกรรม: {formatActivityRange({ date: plan.date, end_date: end })}{multi ? ` · ${days.filter(d => !d.holiday).length} วัน` : ""}</div>
       {multi && (
         <div style={{ display: "grid", gap: "0.45rem" }}>
           <span style={{ fontWeight: 800, fontSize: "0.85rem", color: "#334155" }}>แผนรายวัน (เวลา + ทำอะไร)</span>
           {days.map((d, i) => (
             <div key={d.date} style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: "0.5rem", background: d.holiday ? "#f8fafc" : "#fff", display: "grid", gap: "0.35rem" }}>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", alignItems: "center" }}>
-                <b style={{ color: d.holiday ? "#94a3b8" : "#233862", flex: 1, minWidth: 120 }}>{activityDayLabel(d.date)}</b>
+                <b style={{ color: d.holiday ? "#94a3b8" : "#2B0A10", flex: 1, minWidth: 120 }}>{activityDayLabel(d.date)}</b>
                 <label style={{ fontSize: "0.8rem", color: "#b91c1c", display: "flex", gap: "0.25rem", alignItems: "center", cursor: "pointer" }}><input type="checkbox" checked={d.holiday} onChange={e => setDay(d.date, { holiday: e.target.checked })} /> วันหยุด</label>
                 {i > 0 && !d.holiday && <button type="button" onClick={() => copyFrom(days[0].date, d.date)} style={{ ...btnSecondary, flex: "none", padding: "0.2rem 0.5rem", fontSize: "0.75rem" }}>ใช้แผน{TH_DAY_NAMES[activityDowOf(days[0].date)] === "จันทร์" ? "วันจันทร์" : "วันแรก"}</button>}
                 {i > 1 && !d.holiday && <button type="button" onClick={() => copyFrom(days[i - 1].date, d.date)} style={{ ...btnSecondary, flex: "none", padding: "0.2rem 0.5rem", fontSize: "0.75rem" }}>ใช้แผนวันก่อน</button>}
@@ -6431,7 +6431,7 @@ function ActivityPlanPage({ employees, currentUser }) {
         {error && <ErrorBox>{error}</ErrorBox>}
         <Card padding="0.85rem">
           <div style={{ display: "grid", gap: "0.7rem" }}>
-            <div style={{ fontWeight: 800, fontSize: "1.05rem", color: "#233862" }}>{editing.row_id || plans.some(item => item.id === editing.id) ? "แก้ไขแผนกิจกรรม" : "เพิ่มแผนกิจกรรม"}</div>
+            <div style={{ fontWeight: 800, fontSize: "1.05rem", color: "#2B0A10" }}>{editing.row_id || plans.some(item => item.id === editing.id) ? "แก้ไขแผนกิจกรรม" : "เพิ่มแผนกิจกรรม"}</div>
             <div style={{ fontWeight: 800, fontSize: "0.85rem", color: "#334155" }}>1. กิจกรรมที่จัด</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))", gap: "0.5rem" }}>
               <input value={editing.title} placeholder="ชื่อกิจกรรม" onChange={event => set({ title: event.target.value })} style={small} />
@@ -6445,14 +6445,14 @@ function ActivityPlanPage({ employees, currentUser }) {
               <div style={{ display: "flex", flexWrap: "wrap", gap: "0.3rem", maxHeight: 180, overflowY: "auto" }}>
                 {pickableEmployees.map(emp => {
                   const on = editing.organizers.includes(String(emp.id));
-                  return <button key={emp.id} type="button" aria-pressed={on} onClick={() => toggleOrganizer(String(emp.id))} style={{ border: `1px solid ${on ? "#0072D9" : "#cbd5e1"}`, background: on ? "#0072D9" : "#fff", color: on ? "#fff" : "#475569", borderRadius: 14, padding: "0.15rem 0.6rem", fontSize: "0.8rem", fontFamily: "inherit", cursor: "pointer" }}>{emp.name}</button>;
+                  return <button key={emp.id} type="button" aria-pressed={on} onClick={() => toggleOrganizer(String(emp.id))} style={{ border: `1px solid ${on ? "#8E1426" : "#cbd5e1"}`, background: on ? "#8E1426" : "#fff", color: on ? "#fff" : "#475569", borderRadius: 14, padding: "0.15rem 0.6rem", fontSize: "0.8rem", fontFamily: "inherit", cursor: "pointer" }}>{emp.name}</button>;
                 })}
               </div>
             </div>
             <ActivityWorksheetPicker images={editing.worksheet_images || []} onChange={worksheet_images => set({ worksheet_images })} setError={setError} userId={currentUser?.id} />
             <div style={{ display: "flex", gap: "0.5rem" }}>
               <button type="button" onClick={() => { setEditing(null); setError(""); }} disabled={saving} style={{ ...btnSecondary, padding: "0.55rem" }}>ยกเลิก</button>
-              <button type="button" onClick={save} disabled={saving} style={{ ...btnPrimary, padding: "0.55rem", background: "linear-gradient(135deg, #008CFF, #0072D9)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}><Save size={16} /> {saving ? "กำลังบันทึก..." : "บันทึก"}</button>
+              <button type="button" onClick={save} disabled={saving} style={{ ...btnPrimary, padding: "0.55rem", background: "linear-gradient(135deg, #A6192E, #8E1426)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}><Save size={16} /> {saving ? "กำลังบันทึก..." : "บันทึก"}</button>
             </div>
           </div>
         </Card>
@@ -6463,9 +6463,9 @@ function ActivityPlanPage({ employees, currentUser }) {
   return (
     <div style={{ display: "grid", gap: "0.75rem", maxWidth: 900 }}>
       <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-        <div style={{ fontWeight: 800, fontSize: "1.15rem", color: "#233862", flex: 1 }}>แผนการจัดกิจกรรม <span style={{ color: "#64748b", fontSize: "0.85rem" }}>({visiblePlans.length})</span></div>
+        <div style={{ fontWeight: 800, fontSize: "1.15rem", color: "#2B0A10", flex: 1 }}>แผนการจัดกิจกรรม <span style={{ color: "#64748b", fontSize: "0.85rem" }}>({visiblePlans.length})</span></div>
         <input value={query} placeholder="ค้นหากิจกรรม/ครู" onChange={event => setQuery(event.target.value)} style={{ ...small, width: "auto", flex: "1 1 160px", maxWidth: 260 }} />
-        <button type="button" onClick={() => { setEditing(emptyActivityPlan(currentUser)); setMessage(""); setError(""); }} style={{ ...btnPrimary, flex: "none", padding: "0.5rem 0.8rem", background: "linear-gradient(135deg, #008CFF, #0072D9)", color: "#fff", cursor: "pointer" }}><Plus size={16} /> เพิ่มแผน</button>
+        <button type="button" onClick={() => { setEditing(emptyActivityPlan(currentUser)); setMessage(""); setError(""); }} style={{ ...btnPrimary, flex: "none", padding: "0.5rem 0.8rem", background: "linear-gradient(135deg, #A6192E, #8E1426)", color: "#fff", cursor: "pointer" }}><Plus size={16} /> เพิ่มแผน</button>
       </div>
       {error && <ErrorBox>{error}</ErrorBox>}
       {message && <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", borderRadius: 10, padding: "0.5rem 0.8rem", color: "#166534", fontWeight: 700, fontSize: "0.88rem" }}>{message}</div>}
@@ -6478,8 +6478,8 @@ function ActivityPlanPage({ employees, currentUser }) {
         return (
           <Card key={plan.id} padding="0.6rem 0.8rem">
             <button type="button" onClick={() => setOpenId(open ? "" : plan.id)} aria-expanded={open} style={{ width: "100%", display: "flex", gap: "0.5rem", alignItems: "center", border: "none", background: "transparent", padding: 0, fontFamily: "inherit", textAlign: "left", cursor: "pointer" }}>
-              <span style={{ fontSize: "0.78rem", color: "#0072D9", fontWeight: 800, flex: "none" }}>{formatActivityRange(plan)}</span>
-              <span style={{ fontWeight: 800, color: "#233862", flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{plan.title}</span>
+              <span style={{ fontSize: "0.78rem", color: "#8E1426", fontWeight: 800, flex: "none" }}>{formatActivityRange(plan)}</span>
+              <span style={{ fontWeight: 800, color: "#2B0A10", flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{plan.title}</span>
               {plan.pending && <span style={{ fontSize: "0.7rem", color: "#b45309", flex: "none" }}>รอซิงก์</span>}
               <span style={{ fontSize: "0.68rem", fontWeight: 800, flex: "none", borderRadius: 999, padding: "0.1rem 0.45rem", background: plan.post_record ? "#dcfce7" : "#f1f5f9", color: plan.post_record ? "#15803d" : "#64748b" }}>{plan.post_record ? "บันทึกแล้ว" : "ยังไม่บันทึก"}</span>
               {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -6552,7 +6552,7 @@ const EVAL2_LOCAL_KEY = "hr_teacher_eval_v2";
 const EVAL2_SETTINGS_PERIOD = 2;
 const EVAL_LEVELS = [
   { min: 90, label: "ดีเยี่ยม", color: "#166534", bg: "#dcfce7" },
-  { min: 80, label: "ดีมาก", color: "#0072D9", bg: "#DCEFFF" },
+  { min: 80, label: "ดีมาก", color: "#8E1426", bg: "#F6EBCF" },
   { min: 70, label: "ดี", color: "#0f766e", bg: "#ccfbf1" },
   { min: 60, label: "พอใช้", color: "#b45309", bg: "#fef3c7" },
   { min: -1, label: "ต้องปรับปรุง", color: "#b91c1c", bg: "#fee2e2" },
@@ -6983,9 +6983,9 @@ function MyEvalScoreCard({ currentUser }) {
   const msg = data.score >= 95 ? "ยอดเยี่ยมมาก รักษามาตรฐานนี้ไว้นะคะ 🌟" : data.score >= 85 ? "ดีมากค่ะ อีกนิดเดียวก็เต็มแล้ว 💪" : data.score >= 70 ? "สู้ๆ ค่ะ มาตรงเวลาและแจ้งก่อนออกนอกบริเวณ คะแนนจะกลับมาเร็ว 🙂" : "เริ่มใหม่ได้ทุกวัน ค่อยๆ เก็บคะแนนคืนนะคะ ❤️";
   const r = n => Math.round(n * 10) / 10;
   return (
-    <div style={{ border: "1.5px solid #B8E0FF", background: "#F5FAFF", borderRadius: 12, padding: "0.7rem 0.8rem", marginBottom: "0.75rem", fontSize: "0.82rem" }}>
+    <div style={{ border: "1.5px solid #E8D6A6", background: "#F5FAFF", borderRadius: 12, padding: "0.7rem 0.8rem", marginBottom: "0.75rem", fontSize: "0.82rem" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
-        <div><div style={{ fontWeight: 800, color: "#233862" }}>คะแนนประเมินของฉัน</div><div style={{ fontSize: "0.7rem", color: "#64748b" }}>ภาคเรียน {data.sem.term}/{data.sem.year} · คะแนนตั้งต้น 100</div></div>
+        <div><div style={{ fontWeight: 800, color: "#2B0A10" }}>คะแนนประเมินของฉัน</div><div style={{ fontSize: "0.7rem", color: "#64748b" }}>ภาคเรียน {data.sem.term}/{data.sem.year} · คะแนนตั้งต้น 100</div></div>
         <div style={{ textAlign: "right" }}><div style={{ fontSize: "1.6rem", fontWeight: 900, color: level.color, lineHeight: 1 }}>{data.score}</div><div style={{ fontSize: "0.7rem", fontWeight: 700, color: level.color }}>{level.label}</div></div>
       </div>
       <div style={{ marginTop: "0.4rem", fontSize: "0.72rem", color: "#64748b" }}>ทั้งเทอม: หัก −{data.deduct} · เพิ่ม +{data.bonus}</div>
@@ -6996,7 +6996,7 @@ function MyEvalScoreCard({ currentUser }) {
           <b style={{ color: g.type === "add" ? "#15803d" : "#dc2626" }}>{g.type === "add" ? "+" : "−"}{r(g.points)}</b>
         </div>
       ))}
-      <div style={{ marginTop: "0.4rem", fontSize: "0.75rem", color: "#0072D9", fontWeight: 600 }}>{msg}</div>
+      <div style={{ marginTop: "0.4rem", fontSize: "0.75rem", color: "#8E1426", fontWeight: 600 }}>{msg}</div>
     </div>
   );
 }
@@ -7056,7 +7056,7 @@ function SemesterPicker({ sem, onChange, range }) {
         {years.map(year => <option key={year} value={year}>ปีการศึกษา {year}</option>)}
       </select>
       <span style={{ fontSize: "0.78rem", color: "#64748b" }}>{formatThaiDateKey(range.start)} – {formatThaiDateKey(range.end)}</span>
-      {todayISO() < range.start && <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "#0072D9", background: "#EAF5FF", border: "1px solid #B8E0FF", borderRadius: 999, padding: "0.15rem 0.6rem" }}>ยังไม่เริ่มเทอม · ทุกคน 100 คะแนน</span>}
+      {todayISO() < range.start && <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "#8E1426", background: "#FBF5E6", border: "1px solid #E8D6A6", borderRadius: 999, padding: "0.15rem 0.6rem" }}>ยังไม่เริ่มเทอม · ทุกคน 100 คะแนน</span>}
     </div>
   );
 }
@@ -7218,7 +7218,7 @@ function TeacherDeductPage({ employees, currentUser, initialSelected = "" }) {
   const small = { ...inputStyle, padding: "0.35rem 0.5rem", fontSize: "0.85rem" };
   const header = (
     <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-      <div style={{ fontWeight: 800, fontSize: "1.15rem", color: "#233862", flex: "1 1 160px" }}>ประเมินครู <span style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: 600 }}>เริ่ม 100 คะแนน/ภาคเรียน</span></div>
+      <div style={{ fontWeight: 800, fontSize: "1.15rem", color: "#2B0A10", flex: "1 1 160px" }}>ประเมินครู <span style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: 600 }}>เริ่ม 100 คะแนน/ภาคเรียน</span></div>
       <SemesterPicker sem={sem} onChange={next => { setSem(next); setSelected(""); }} range={range} />
     </div>
   );
@@ -7292,7 +7292,7 @@ function TeacherDeductPage({ employees, currentUser, initialSelected = "" }) {
                 <div key={entry.id} style={{ display: "grid", gridTemplateColumns: "4.6rem minmax(0,1fr) auto", gap: "0.45rem", alignItems: "start", padding: "0.3rem 0", borderTop: "1px solid #f1f5f9", fontSize: "0.8rem" }}>
                   <span style={{ color: "#64748b", whiteSpace: "nowrap" }}>{formatThaiDateKey(entry.date)}</span>
                   <div style={{ minWidth: 0 }}>
-                    <span style={{ fontWeight: 800, color: "#233862" }}>{evalEntryLabel(entry)}</span>
+                    <span style={{ fontWeight: 800, color: "#2B0A10" }}>{evalEntryLabel(entry)}</span>
                     {entry.auto ? <span style={{ marginLeft: "0.3rem", background: "#e0e7ff", color: "#4338ca", fontSize: "0.65rem", fontWeight: 800, borderRadius: 10, padding: "0.05rem 0.4rem" }}>อัตโนมัติ</span> : <span style={{ marginLeft: "0.3rem", color: "#94a3b8", fontSize: "0.7rem" }}>โดย {entry.by || "-"}{entry.at ? ` · ${fmtDate(entry.at)} ${fmtTime(entry.at)}` : ""}</span>}
                     {entry.reason && <div style={{ color: "#475569", wordBreak: "break-word" }}>{entry.reason}</div>}
                   </div>
@@ -7350,7 +7350,7 @@ function TeacherDeductPage({ employees, currentUser, initialSelected = "" }) {
             {sorted.length === 0 && <tr><td colSpan={5} style={{ padding: "1rem", textAlign: "center", color: "#94a3b8" }}>ยังไม่มีครูในระบบ</td></tr>}
             {sorted.map(row => (
               <tr key={row.emp.id} onClick={() => { setSelected(String(row.emp.id)); setMessage(""); setError(""); }} style={{ borderTop: "1px solid #f1f5f9", cursor: "pointer" }}>
-                <td style={{ padding: "0.3rem 0.45rem", fontWeight: 700, color: "#0072D9", whiteSpace: "nowrap" }}>{row.name}</td>
+                <td style={{ padding: "0.3rem 0.45rem", fontWeight: 700, color: "#8E1426", whiteSpace: "nowrap" }}>{row.name}</td>
                 <td style={{ padding: "0.3rem 0.45rem", textAlign: "center", color: row.deduct ? "#dc2626" : "#94a3b8" }}>{row.deduct ? `-${row.deduct}` : "0"}</td>
                 <td style={{ padding: "0.3rem 0.45rem", textAlign: "center", color: row.bonus ? "#16a34a" : "#94a3b8" }}>{row.bonus ? `+${row.bonus}` : "0"}</td>
                 <td style={{ padding: "0.3rem 0.45rem", textAlign: "center", fontWeight: 900, color: evalLevel(row.score).color }}>{row.score.toFixed(1)}</td>
@@ -7396,7 +7396,7 @@ function EvalExplain({ entries, deduct, bonus, score }) {
             <div key={group.key} style={{ border: `1px solid ${bg}`, borderRadius: 12, overflow: "hidden" }}>
               <button type="button" aria-expanded={isOpen} onClick={() => setOpen(current => ({ ...current, [group.key]: !isOpen }))} style={{ width: "100%", display: "flex", gap: "0.5rem", alignItems: "center", padding: "0.5rem 0.7rem", background: bg, border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
                 {isOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-                <span style={{ flex: 1, fontWeight: 700, color: "#233862", fontSize: "0.85rem" }}>{group.label}{group.auto ? " (อัตโนมัติ)" : ""}</span>
+                <span style={{ flex: 1, fontWeight: 700, color: "#2B0A10", fontSize: "0.85rem" }}>{group.label}{group.auto ? " (อัตโนมัติ)" : ""}</span>
                 <span style={{ fontSize: "0.82rem", color: "#475569", whiteSpace: "nowrap" }}>{group.items.length} ครั้ง{group.uniform ? ` × ${group.unit}` : ""} = <strong style={{ color }}>{sign}{group.total}</strong></span>
               </button>
               {isOpen && (
@@ -7421,12 +7421,12 @@ function EvalExplain({ entries, deduct, bonus, score }) {
   };
   return (
     <Card padding="0.8rem">
-      <div style={{ fontWeight: 800, fontSize: "1rem", color: "#233862", marginBottom: "0.55rem" }}>ทำไมคะแนนเหลือ {score.toFixed(1)}</div>
+      <div style={{ fontWeight: 800, fontSize: "1rem", color: "#2B0A10", marginBottom: "0.55rem" }}>ทำไมคะแนนเหลือ {score.toFixed(1)}</div>
       <div style={{ display: "grid", gap: "0.75rem" }}>
         {section("deduct", "รายการที่หักคะแนน", "#dc2626", "#fee2e2")}
         {section("add", "รายการที่เพิ่มคะแนน", "#16a34a", "#dcfce7")}
-        <div style={{ background: "#EAF5FF", border: "1px solid #B8E0FF", borderRadius: 12, padding: "0.6rem 0.8rem", fontWeight: 800, color: "#233862", fontSize: "0.92rem" }}>
-          100 - หัก <span style={{ color: "#dc2626" }}>{deduct}</span> + เพิ่ม <span style={{ color: "#16a34a" }}>{bonus}</span> = คงเหลือ <span style={{ color: "#0072D9" }}>{score.toFixed(1)}</span>
+        <div style={{ background: "#FBF5E6", border: "1px solid #E8D6A6", borderRadius: 12, padding: "0.6rem 0.8rem", fontWeight: 800, color: "#2B0A10", fontSize: "0.92rem" }}>
+          100 - หัก <span style={{ color: "#dc2626" }}>{deduct}</span> + เพิ่ม <span style={{ color: "#16a34a" }}>{bonus}</span> = คงเหลือ <span style={{ color: "#8E1426" }}>{score.toFixed(1)}</span>
           {100 - deduct + bonus !== score && <span style={{ display: "block", fontSize: "0.75rem", color: "#64748b", fontWeight: 600 }}>คะแนนถูกจำกัดไว้ระหว่าง 0–100</span>}
         </div>
       </div>
@@ -7448,8 +7448,8 @@ function ExecSection({ title, icon: Icon, right, children }) {
   return (
     <Card padding="1rem">
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.7rem", flexWrap: "wrap" }}>
-        {Icon && <span style={{ width: 30, height: 30, borderRadius: 10, background: "linear-gradient(135deg, #008CFF, #3EBFFB)", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><Icon size={16} /></span>}
-        <div style={{ fontWeight: 800, color: "#233862", fontSize: "1rem", flex: 1 }}>{title}</div>
+        {Icon && <span style={{ width: 30, height: 30, borderRadius: 10, background: "linear-gradient(135deg, #A6192E, #C8323F)", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><Icon size={16} /></span>}
+        <div style={{ fontWeight: 800, color: "#2B0A10", fontSize: "1rem", flex: 1 }}>{title}</div>
         {right}
       </div>
       {children}
@@ -7547,7 +7547,7 @@ function ExecPeriodSection({ employees, leaves, onOpenPlan }) {
 
   return (
     <ExecSection title="ตารางสอนรายคาบ" icon={Calendar} right={
-      <button type="button" aria-pressed={grid} onClick={() => setGrid(value => !value)} style={{ ...navBtn, background: grid ? "#EAF5FF" : "#f8fafc", color: "#0072D9" }}>{grid ? "ดูทีละคาบ" : "ดูทั้งสัปดาห์"}</button>
+      <button type="button" aria-pressed={grid} onClick={() => setGrid(value => !value)} style={{ ...navBtn, background: grid ? "#FBF5E6" : "#f8fafc", color: "#8E1426" }}>{grid ? "ดูทีละคาบ" : "ดูทั้งสัปดาห์"}</button>
     }>
       {error && <ErrorBox>{error}</ErrorBox>}
       {!rows ? <div style={{ color: "#64748b" }}>กำลังโหลดตารางสอน...</div> : rows.length === 0 ? (
@@ -7557,16 +7557,16 @@ function ExecPeriodSection({ employees, leaves, onOpenPlan }) {
       ) : grid ? (
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
-            <thead><tr><th style={th}>คาบ</th>{[1, 2, 3, 4, 5].map(d => <th key={d} style={{ ...th, color: d === todayDow ? "#008CFF" : th.color }}>{DAY_NAMES[d]}</th>)}</tr></thead>
+            <thead><tr><th style={th}>คาบ</th>{[1, 2, 3, 4, 5].map(d => <th key={d} style={{ ...th, color: d === todayDow ? "#A6192E" : th.color }}>{DAY_NAMES[d]}</th>)}</tr></thead>
             <tbody>
               {periods.map(no => (
                 <tr key={no}>
-                  <td style={{ ...cell, fontWeight: 800, color: "#233862" }}>{no}</td>
+                  <td style={{ ...cell, fontWeight: 800, color: "#2B0A10" }}>{no}</td>
                   {[1, 2, 3, 4, 5].map(d => {
                     const items = rows.filter(row => row.day_of_week === d && Number(row.period) === no);
                     return (
-                      <td key={d} style={{ ...cell, background: d === day && no === cur ? "#EAF5FF" : "transparent", cursor: "pointer" }} onClick={() => { setDay(d); setPeriod(no); setGrid(false); }}>
-                        {items.length === 0 ? <span style={{ color: "#cbd5e1" }}>–</span> : items.map(row => <div key={row.id} style={{ fontSize: "0.76rem", lineHeight: 1.35 }}><strong style={{ color: "#233862" }}>{nameOf(row.employee_id)}</strong> · {row.subject || "-"}{row.class_room ? ` · ${row.class_room}` : ""}</div>)}
+                      <td key={d} style={{ ...cell, background: d === day && no === cur ? "#FBF5E6" : "transparent", cursor: "pointer" }} onClick={() => { setDay(d); setPeriod(no); setGrid(false); }}>
+                        {items.length === 0 ? <span style={{ color: "#cbd5e1" }}>–</span> : items.map(row => <div key={row.id} style={{ fontSize: "0.76rem", lineHeight: 1.35 }}><strong style={{ color: "#2B0A10" }}>{nameOf(row.employee_id)}</strong> · {row.subject || "-"}{row.class_room ? ` · ${row.class_room}` : ""}</div>)}
                       </td>
                     );
                   })}
@@ -7599,13 +7599,13 @@ function ExecPeriodSection({ employees, leaves, onOpenPlan }) {
                   const status = (
                     <>
                       <td style={cell}><ExecPill color={state.color} bg={state.bg}>{planState(emp.id) === "missing" ? "ยังไม่ส่ง" : "ส่งแล้ว"}</ExecPill></td>
-                      <td style={cell}>{isToday && (onLeaveToday.has(String(emp.id)) ? <ExecPill color="#0072D9" bg="#DCEFFF">ลา</ExecPill> : presentToday.has(String(emp.id)) ? <ExecPill color="#166534" bg="#dcfce7">เข้างานแล้ว</ExecPill> : <ExecPill color="#b91c1c" bg="#fee2e2">ยังไม่เข้างาน</ExecPill>)}</td>
+                      <td style={cell}>{isToday && (onLeaveToday.has(String(emp.id)) ? <ExecPill color="#8E1426" bg="#F6EBCF">ลา</ExecPill> : presentToday.has(String(emp.id)) ? <ExecPill color="#166534" bg="#dcfce7">เข้างานแล้ว</ExecPill> : <ExecPill color="#b91c1c" bg="#fee2e2">ยังไม่เข้างาน</ExecPill>)}</td>
                     </>
                   );
                   if (mine.length === 0) {
                     return (
                       <tr key={emp.id} style={{ background: "#fafcff" }}>
-                        <td style={{ ...cell, fontWeight: 700, color: "#233862" }}>{emp.name}</td>
+                        <td style={{ ...cell, fontWeight: 700, color: "#2B0A10" }}>{emp.name}</td>
                         <td style={{ ...cell, color: "#94a3b8", fontWeight: 700 }} colSpan={3}>ว่าง</td>
                         {status}
                       </tr>
@@ -7616,7 +7616,7 @@ function ExecPeriodSection({ employees, leaves, onOpenPlan }) {
                     const topic = [pp?.plan_unit, pp?.plan_title || pp?.subject].filter(text => String(text || "").trim()).join(" · ");
                     return (
                       <tr key={row.id} onClick={() => onOpenPlan(emp, weekStart, { date: dateOfDay, period: cur })} style={{ cursor: "pointer" }} title="ดูแผนคาบนี้">
-                        <td style={{ ...cell, fontWeight: 700, color: "#233862" }}>{emp.name}</td>
+                        <td style={{ ...cell, fontWeight: 700, color: "#2B0A10" }}>{emp.name}</td>
                         <td style={cell}>{row.subject || "-"}</td>
                         <td style={cell}>{row.class_room || "-"}</td>
                         <td style={{ ...cell, color: topic ? "#334155" : "#94a3b8" }}>{topic || "-"}</td>
@@ -7645,10 +7645,10 @@ function ExecPlanModal({ teacher, weekStart, onClose, focus = null }) {
   }, [teacher.id, weekStart]);
   const plan = state.plan;
   return (
-    <div role="dialog" aria-modal="true" style={{ position: "fixed", inset: 0, background: "rgba(35,56,98,0.45)", zIndex: 1000, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1rem", overflowY: "auto" }} onClick={onClose}>
-      <div onClick={event => event.stopPropagation()} style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 860, padding: "1rem", boxShadow: "0 4px 24px rgba(0,140,255,0.15)", display: "grid", gap: "0.8rem" }}>
+    <div role="dialog" aria-modal="true" style={{ position: "fixed", inset: 0, background: "rgba(43,10,16,0.45)", zIndex: 1000, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1rem", overflowY: "auto" }} onClick={onClose}>
+      <div onClick={event => event.stopPropagation()} style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 860, padding: "1rem", boxShadow: "0 4px 24px rgba(166,25,46,0.15)", display: "grid", gap: "0.8rem" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <div style={{ flex: 1, fontWeight: 800, color: "#233862", fontSize: "1.05rem" }}>แผนของ {teacher.name} · สัปดาห์ {formatThaiDateKey(weekStart)} <span style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: 600 }}>(อ่านอย่างเดียว)</span></div>
+          <div style={{ flex: 1, fontWeight: 800, color: "#2B0A10", fontSize: "1.05rem" }}>แผนของ {teacher.name} · สัปดาห์ {formatThaiDateKey(weekStart)} <span style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: 600 }}>(อ่านอย่างเดียว)</span></div>
           <button type="button" aria-label="ปิด" onClick={onClose} style={{ border: "none", background: "#f1f5f9", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><X size={16} /></button>
         </div>
         {state.error && <ErrorBox>{state.error}</ErrorBox>}
@@ -7656,14 +7656,14 @@ function ExecPlanModal({ teacher, weekStart, onClose, focus = null }) {
           <>
             {plan.submitted_at && <div style={{ fontSize: "0.8rem", color: "#64748b" }}>ส่งล่าสุด {fmtDate(plan.submitted_at)} {fmtTime(plan.submitted_at)}{plan.late ? " · ส่งช้า" : ""}</div>}
             {plan.signoff?.at && (
-              <div style={{ background: "#EAF5FF", border: "1px solid #B8E0FF", borderRadius: 12, padding: "0.7rem" }}>
-                <div style={{ fontWeight: 800, color: "#0072D9" }}>รับทราบแล้ว · {plan.signoff.by || "ฝ่ายวิชาการ"} · {fmtDate(plan.signoff.at)} {fmtTime(plan.signoff.at)}</div>
+              <div style={{ background: "#FBF5E6", border: "1px solid #E8D6A6", borderRadius: 12, padding: "0.7rem" }}>
+                <div style={{ fontWeight: 800, color: "#8E1426" }}>รับทราบแล้ว · {plan.signoff.by || "ฝ่ายวิชาการ"} · {fmtDate(plan.signoff.at)} {fmtTime(plan.signoff.at)}</div>
                 <FullText value={plan.signoff.comment} />
               </div>
             )}
             {(plan.observations || []).map((item, index) => (
               <div key={item.id || index} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 12, padding: "0.7rem" }}>
-                <div style={{ fontWeight: 800, color: "#233862" }}>นิเทศในห้อง {formatThaiDateKey(item.date)} · {labelOf(OBSERVATION_MATCH, item.match) || "-"} · {item.by || "ฝ่ายวิชาการ"}</div>
+                <div style={{ fontWeight: 800, color: "#2B0A10" }}>นิเทศในห้อง {formatThaiDateKey(item.date)} · {labelOf(OBSERVATION_MATCH, item.match) || "-"} · {item.by || "ฝ่ายวิชาการ"}</div>
                 <FullText value={item.note} />
               </div>
             ))}
@@ -7761,10 +7761,10 @@ function ExecActivityReport({ employees }) {
             <button type="button" onClick={() => printActivityReport(shown, nameOf, heading)} disabled={!shown.length} style={{ ...btnSecondary, flex: "none", padding: "0.35rem 0.7rem", fontSize: "0.8rem" }}><Printer size={14} /> พิมพ์</button>
           </div>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", fontSize: "0.8rem" }}>
-            <span style={{ background: "#EAF5FF", color: "#0072D9", borderRadius: 999, padding: "0.15rem 0.6rem", fontWeight: 700 }}>{shown.length} กิจกรรม</span>
+            <span style={{ background: "#FBF5E6", color: "#8E1426", borderRadius: 999, padding: "0.15rem 0.6rem", fontWeight: 700 }}>{shown.length} กิจกรรม</span>
             <span style={{ background: "#dcfce7", color: "#15803d", borderRadius: 999, padding: "0.15rem 0.6rem", fontWeight: 700 }}>บันทึกหลังกิจกรรมแล้ว {shown.filter(p => p.post_record).length}</span>
             <span style={{ background: "#fef3c7", color: "#b45309", borderRadius: 999, padding: "0.15rem 0.6rem", fontWeight: 700 }}>ขอเบิก {reqSum.length} รายการ</span>
-            <button type="button" onClick={() => setShowSum(!showSum)} style={{ border: "none", background: "none", color: "#0072D9", cursor: "pointer", fontFamily: "inherit", fontWeight: 700, fontSize: "0.8rem" }}>{showSum ? "ซ่อนสรุปรวม" : "ดูสรุปของรวม"}</button>
+            <button type="button" onClick={() => setShowSum(!showSum)} style={{ border: "none", background: "none", color: "#8E1426", cursor: "pointer", fontFamily: "inherit", fontWeight: 700, fontSize: "0.8rem" }}>{showSum ? "ซ่อนสรุปรวม" : "ดูสรุปของรวม"}</button>
           </div>
           {showSum && <div style={{ background: "#f8fafc", borderRadius: 10, padding: "0.6rem", display: "grid", gap: "0.5rem" }}>{sumBox("ของที่ใช้เบิกรวม", reqSum)}{sumBox("สิ่งของที่ใช้รวม", sumActivityItems(shown, "materials"))}</div>}
           {shown.length === 0 ? <div style={{ color: "#94a3b8", textAlign: "center", padding: "1rem" }}>ไม่มีกิจกรรมในช่วงนี้</div> : (
@@ -7775,9 +7775,9 @@ function ExecActivityReport({ employees }) {
                   <div key={p.id} style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: "0.5rem 0.65rem" }}>
                     <button type="button" onClick={() => setDetail(isOpen ? "" : p.id)} style={{ width: "100%", border: "none", background: "none", padding: 0, textAlign: "left", cursor: "pointer", fontFamily: "inherit" }}>
                       <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap" }}>
-                        <span style={{ fontSize: "0.75rem", color: "#0072D9", fontWeight: 800 }}>{formatActivityRange(p)}</span>
-                        <span style={{ fontWeight: 800, color: "#233862", flex: 1, minWidth: 120 }}>{p.title}</span>
-                        {p.approval?.status && <span style={{ fontSize: "0.68rem", fontWeight: 800, borderRadius: 999, padding: "0.1rem 0.45rem", background: "#EAF5FF", color: "#0072D9" }}>{p.approval.status}</span>}
+                        <span style={{ fontSize: "0.75rem", color: "#8E1426", fontWeight: 800 }}>{formatActivityRange(p)}</span>
+                        <span style={{ fontWeight: 800, color: "#2B0A10", flex: 1, minWidth: 120 }}>{p.title}</span>
+                        {p.approval?.status && <span style={{ fontSize: "0.68rem", fontWeight: 800, borderRadius: 999, padding: "0.1rem 0.45rem", background: "#FBF5E6", color: "#8E1426" }}>{p.approval.status}</span>}
                         <span style={{ fontSize: "0.68rem", fontWeight: 800, borderRadius: 999, padding: "0.1rem 0.45rem", background: p.post_record ? "#dcfce7" : "#f1f5f9", color: p.post_record ? "#15803d" : "#64748b" }}>{p.post_record ? "บันทึกแล้ว" : "ยังไม่บันทึก"}</span>
                         {(p.worksheet_images || []).length > 0 && <span style={{ fontSize: "0.68rem", color: "#64748b" }}>ใบงาน {p.worksheet_images.length}</span>}
                       </div>
@@ -7868,7 +7868,7 @@ function ExecHolidayAttendance({ employees, currentUser, onOpenEval }) {
                 const isHoliday = !isBangkokWeekend(row.check_in);
                 return (
                   <tr key={row.id}>
-                    <td style={{ ...cell, fontWeight: 700, color: "#233862" }}>{emp.name}{row.work_activity === "training" && <span style={{ color: "#0072D9", fontSize: "0.7rem" }}> (อบรม)</span>}</td>
+                    <td style={{ ...cell, fontWeight: 700, color: "#2B0A10" }}>{emp.name}{row.work_activity === "training" && <span style={{ color: "#8E1426", fontSize: "0.7rem" }}> (อบรม)</span>}</td>
                     <td style={cell}>{fmtDate(row.check_in)}{isHoliday && <span style={{ color: "#b45309", fontSize: "0.7rem" }}> วันหยุด</span>}</td>
                     <td style={cell}>{fmtTime(row.check_in)}</td>
                     <td style={cell}>{row.check_out ? fmtTime(row.check_out) : "-"}</td>
@@ -7995,18 +7995,18 @@ function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEv
   const distribution = EVAL_LEVELS.map(level => ({ ...level, count: (evalRows || []).filter(row => evalLevel(row.score).label === level.label).length }));
   const maxCount = Math.max(1, ...distribution.map(level => level.count));
   const tile = (label, value, color) => (
-    <div style={{ flex: "1 1 110px", background: "#F3F8FD", border: "1px solid #E4EEF8", borderRadius: 14, padding: "0.6rem 0.75rem" }}>
+    <div style={{ flex: "1 1 110px", background: "#FAF7F3", border: "1px solid #F0E6DC", borderRadius: 14, padding: "0.6rem 0.75rem" }}>
       <div style={{ fontSize: "0.75rem", color: "#596068" }}>{label}</div>
       <div style={{ fontSize: "1.5rem", fontWeight: 900, color }}>{value}</div>
     </div>
   );
-  const nameCell = emp => <span style={{ fontWeight: 700, color: "#233862" }}>{emp.name}</span>;
+  const nameCell = emp => <span style={{ fontWeight: 700, color: "#2B0A10" }}>{emp.name}</span>;
   const listBox = { display: "grid", gap: "0.3rem", maxHeight: 260, overflowY: "auto" };
   const line = { display: "flex", justifyContent: "space-between", gap: "0.5rem", fontSize: "0.83rem", padding: "0.3rem 0.1rem", borderTop: "1px solid #f1f5f9" };
 
   return (
     <div style={{ display: "grid", gap: "1rem" }}>
-      <div style={{ background: "linear-gradient(90deg, #008CFF, #3EBFFB)", borderRadius: 18, padding: "1rem 1.2rem", color: "#fff", boxShadow: "0 4px 24px rgba(0,140,255,0.2)" }}>
+      <div style={{ background: "linear-gradient(90deg, #A6192E, #C8323F)", borderRadius: 18, padding: "1rem 1.2rem", color: "#fff", boxShadow: "0 4px 24px rgba(166,25,46,0.2)" }}>
         <div style={{ fontSize: "1.25rem", fontWeight: 800 }}>หน้าผู้บริหาร</div>
         <div style={{ fontSize: "0.85rem", opacity: 0.9 }}>สวัสดี {currentUser?.name} · ภาพรวมวันที่ {formatThaiDateKey(today)}</div>
       </div>
@@ -8022,8 +8022,8 @@ function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEv
                 {distribution.map(level => (
                   <div key={level.label} style={{ display: "grid", gridTemplateColumns: "6.5rem 1fr 2rem", alignItems: "center", gap: "0.4rem", fontSize: "0.78rem" }}>
                     <span style={{ color: level.color, fontWeight: 700 }}>{level.label}</span>
-                    <div style={{ background: "#F3F8FD", borderRadius: 8, height: 14 }}><div style={{ width: `${(level.count / maxCount) * 100}%`, background: level.color, opacity: 0.8, height: "100%", borderRadius: 8, minWidth: level.count ? 6 : 0 }} /></div>
-                    <span style={{ fontWeight: 800, color: "#233862", textAlign: "right" }}>{level.count}</span>
+                    <div style={{ background: "#FAF7F3", borderRadius: 8, height: 14 }}><div style={{ width: `${(level.count / maxCount) * 100}%`, background: level.color, opacity: 0.8, height: "100%", borderRadius: 8, minWidth: level.count ? 6 : 0 }} /></div>
+                    <span style={{ fontWeight: 800, color: "#2B0A10", textAlign: "right" }}>{level.count}</span>
                   </div>
                 ))}
               </div>
@@ -8041,8 +8041,8 @@ function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEv
 
         <ExecSection title="ลงเวลา" icon={Clock} right={<input type="date" aria-label="เลือกวันที่" value={date} max={today} onChange={event => event.target.value && setDate(event.target.value)} style={{ ...inputStyle, width: "auto", padding: "0.3rem 0.5rem", fontSize: "0.82rem" }} />}>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.6rem" }}>
-            {tile("ลงเวลาเข้า", checkedIn.length, "#008CFF")}
-            {tile("มาสาย", lateList.length, "#FF7106")}
+            {tile("ลงเวลาเข้า", checkedIn.length, "#A6192E")}
+            {tile("มาสาย", lateList.length, "#C2410C")}
             {tile("ลงเวลาออก", outList.length, "#16a34a")}
             {tile("ยังไม่ลงเวลา", notIn.length, "#dc2626")}
           </div>
@@ -8061,18 +8061,18 @@ function ExecutiveDashboard({ employees, leaves, settings, currentUser, onOpenEv
               {notIn.map(item => (
                 <div key={item.emp.id} style={line}>
                   {nameCell(item.emp)}
-                  {onLeave.has(String(item.emp.id)) ? <ExecPill color="#0072D9" bg="#DCEFFF">ลา</ExecPill> : <ExecPill color="#b91c1c" bg="#fee2e2">ยังไม่ลงเวลา</ExecPill>}
+                  {onLeave.has(String(item.emp.id)) ? <ExecPill color="#8E1426" bg="#F6EBCF">ลา</ExecPill> : <ExecPill color="#b91c1c" bg="#fee2e2">ยังไม่ลงเวลา</ExecPill>}
                 </div>
               ))}
             </div>
           )}
         </ExecSection>
 
-        <ExecSection title="การลา" icon={Umbrella} right={<button type="button" onClick={onOpenLeave} style={{ border: "none", background: pending.length ? "linear-gradient(90deg, #FF7106, #FF9A3C)" : "#EAF5FF", color: pending.length ? "#fff" : "#0072D9", fontWeight: 800, borderRadius: 999, padding: "0.3rem 0.8rem", cursor: "pointer", fontFamily: "inherit", fontSize: "0.8rem" }}>รออนุมัติ {pending.length} · ไปหน้าอนุมัติ</button>}>
+        <ExecSection title="การลา" icon={Umbrella} right={<button type="button" onClick={onOpenLeave} style={{ border: "none", background: pending.length ? "linear-gradient(135deg, #7A5A14, #9C7A2E)" : "#FBF5E6", color: pending.length ? "#fff" : "#8E1426", fontWeight: 800, borderRadius: 999, padding: "0.3rem 0.8rem", cursor: "pointer", fontFamily: "inherit", fontSize: "0.8rem" }}>รออนุมัติ {pending.length} · ไปหน้าอนุมัติ</button>}>
           <div style={{ display: "grid", gap: "0.6rem" }}>
             {[["ลาวันนี้", todayLeaves], ["ลาที่กำลังจะถึง (30 วัน)", upcoming], ["รออนุมัติ", pending]].map(([title, list]) => (
               <div key={title}>
-                <div style={{ fontWeight: 800, fontSize: "0.83rem", color: "#233862", marginBottom: "0.2rem" }}>{title} ({list.length})</div>
+                <div style={{ fontWeight: 800, fontSize: "0.83rem", color: "#2B0A10", marginBottom: "0.2rem" }}>{title} ({list.length})</div>
                 {list.length === 0 ? <div style={{ fontSize: "0.8rem", color: "#94a3b8" }}>ไม่มี</div> : (
                   <div style={{ display: "grid" }}>{list.slice(0, 8).map(row => <div key={row.id} style={{ ...line, display: "block" }}>{leaveLine(row)}{row.reason ? <span style={{ color: "#64748b" }}> — {row.reason}</span> : null}</div>)}</div>
                 )}
@@ -8171,7 +8171,7 @@ const CLEANING_PHOTO_LIMIT = 4;
 
 function cleaningLevel(percent) {
   if (percent >= 90) return { label: "ดีเยี่ยม", color: "#166534", bg: "#dcfce7" };
-  if (percent >= 75) return { label: "ดี", color: "#0072D9", bg: "#DCEFFF" };
+  if (percent >= 75) return { label: "ดี", color: "#8E1426", bg: "#F6EBCF" };
   if (percent >= 60) return { label: "พอใช้", color: "#b45309", bg: "#fef3c7" };
   return { label: "ต้องปรับปรุง", color: "#b91c1c", bg: "#fee2e2" };
 }
@@ -8631,21 +8631,22 @@ function CleaningCheckoutBlockNotice({ status, onOpenCleaning, onRetry, compact 
   const missing = status.missingDates || [];
   const rooms = status.pendingRooms || [];
   return (
-    <div role="alert" style={{ background: "#fee2e2", border: "4px solid #dc2626", borderRadius: "18px", padding: compact ? "1rem" : "1.25rem 1.3rem", marginBottom: "1.25rem", color: "#7f1d1d", boxShadow: "0 12px 32px rgba(220,38,38,0.25)", textAlign: "center" }}>
-      <div style={{ fontSize: compact ? "1.45rem" : "1.75rem", fontWeight: 900, lineHeight: 1.3, marginBottom: "0.5rem" }}>⚠️ ท่านยังไม่ได้ให้คะแนนเวรพื้นที่</div>
+    <div role="alert" style={{ position: "relative", overflow: "hidden", background: "#FFF3C4", border: "3px solid #F59E0B", borderRadius: "20px", padding: compact ? "1.15rem 1rem 1rem" : "1.4rem 1.3rem 1.25rem", marginBottom: "1.25rem", color: "#422006", boxShadow: "0 0 0 5px rgba(245,158,11,0.25), 0 10px 22px rgba(180,83,9,0.18)", animation: "cleaningPulse 2s ease-in-out infinite", textAlign: "center" }}>
+      <div aria-hidden="true" style={{ position: "absolute", left: 0, right: 0, top: 0, height: 8, background: "repeating-linear-gradient(45deg, #111827 0 10px, #FACC15 10px 20px)" }} />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.6rem", fontSize: compact ? "1.35rem" : "1.6rem", fontWeight: 900, lineHeight: 1.3, marginBottom: "0.5rem", marginTop: "0.2rem" }}><span aria-hidden="true" style={{ width: 38, height: 38, borderRadius: "50%", background: "#DC2626", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "1.3rem", flexShrink: 0, boxShadow: "0 0 0 4px #fecaca" }}>!</span>ท่านยังไม่ได้ให้คะแนนเวรพื้นที่</div>
       <div style={{ display: "grid", gap: "0.45rem", margin: "0.6rem 0" }}>
         {missing.map(date => (
-          <div key={date} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.6rem", flexWrap: "wrap", background: "#fff", border: "2px solid #fca5a5", borderRadius: "12px", padding: "0.5rem 0.7rem" }}>
-            <span style={{ fontSize: compact ? "1.15rem" : "1.3rem", fontWeight: 900, color: "#b91c1c" }}>{date === today ? `วันนี้ (${thaiDayLabel(date)})` : thaiDayLabel(date)}</span>
+          <div key={date} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.6rem", flexWrap: "wrap", background: "#fff", border: "2px solid #F59E0B", borderRadius: "12px", padding: "0.5rem 0.7rem" }}>
+            <span style={{ fontSize: compact ? "1.15rem" : "1.3rem", fontWeight: 900, color: "#422006" }}>{date === today ? `วันนี้ (${thaiDayLabel(date)})` : thaiDayLabel(date)}</span>
             {onOpenCleaning && (cleaningDateLocked(date, clockNow)
               ? <button type="button" disabled aria-disabled="true" title={`ให้คะแนนได้ตั้งแต่ 12:00 น. ${CLEANING_NOON_REASON}`} style={{ background: "#cbd5e1", color: "#334155", border: "none", borderRadius: "10px", padding: "0.5rem 0.95rem", fontWeight: 800, fontSize: "0.9rem", cursor: "not-allowed", fontFamily: "inherit" }}>🔒 เปิดให้คะแนน 12:00 น. ({cleaningOpensInText(clockNow)})</button>
-              : <button type="button" onClick={() => onOpenCleaning(date)} style={{ background: "#dc2626", color: "#fff", border: "none", borderRadius: "10px", padding: "0.5rem 0.95rem", fontWeight: 800, fontSize: "0.95rem", cursor: "pointer", fontFamily: "inherit" }}>ไปให้คะแนน →</button>)}
+              : <button type="button" onClick={() => onOpenCleaning(date)} style={{ background: "#111827", color: "#FACC15", border: "none", borderRadius: "10px", padding: "0.5rem 0.95rem", fontWeight: 800, fontSize: "0.95rem", cursor: "pointer", fontFamily: "inherit" }}>ไปให้คะแนน →</button>)}
           </div>
         ))}
       </div>
-      <div style={{ fontSize: compact ? "1.05rem" : "1.2rem", fontWeight: 900, color: "#991b1b" }}>กรุณาลงเวรให้เรียบร้อยก่อนจึงจะลงเวลากลับบ้านได้</div>
+      <div style={{ fontSize: compact ? "1.05rem" : "1.2rem", fontWeight: 900, color: "#7c2d12" }}>กรุณาลงเวรให้เรียบร้อยก่อนจึงจะลงเวลากลับบ้านได้</div>
       {missing.includes(today) && !cleaningScoringOpen(clockNow) && <div style={{ fontSize: "0.88rem", fontWeight: 800, marginTop: "0.35rem", color: "#1e3a8a" }}>🔒 ให้คะแนนเวรพื้นที่ของวันนี้ได้ตั้งแต่ 12:00 น. เป็นต้นไป — {CLEANING_NOON_REASON}</div>}
-      <div style={{ fontSize: "0.85rem", fontWeight: 700, marginTop: "0.35rem", color: "#7f1d1d" }}>ให้คะแนนพื้นที่ใดก็ได้ ยกเว้นพื้นที่ของห้องตัวเอง (อย่างน้อยวันละ 1 พื้นที่)</div>
+      <div style={{ fontSize: "0.85rem", fontWeight: 700, marginTop: "0.35rem", color: "#5b3a0a" }}>ให้คะแนนพื้นที่ใดก็ได้ ยกเว้นพื้นที่ของห้องตัวเอง (อย่างน้อยวันละ 1 พื้นที่)</div>
       {missing.includes(today) && rooms.length > 0 && (
         <div style={{ fontSize: "0.82rem", marginTop: "0.35rem", color: "#7c2d12" }}>
           พื้นที่ที่ยังไม่มีใครตรวจวันนี้: {rooms.slice(0, 12).join(", ")}{rooms.length > 12 ? ` และอีก ${rooms.length - 12} พื้นที่` : ""}
@@ -9147,15 +9148,15 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false,
   const formCriteria = form.criteria || criteria;
   const formTotal = cleaningTotal(form.scores, formCriteria);
   const formMax = cleaningMaxOf(formCriteria);
-  const chip = active => ({ border: `1px solid ${active ? "#008CFF" : "#E4EEF8"}`, background: active ? "linear-gradient(90deg, #008CFF, #3EBFFB)" : "#fff", color: active ? "#fff" : "#233862", borderRadius: 999, padding: "0.3rem 0.75rem", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", fontFamily: "inherit" });
-  const th = { padding: "0.4rem 0.5rem", fontSize: "0.75rem", color: "#596068", textAlign: "left", fontWeight: 800, whiteSpace: "nowrap", borderBottom: "1px solid #E4EEF8" };
+  const chip = active => ({ border: `1px solid ${active ? "#A6192E" : "#F0E6DC"}`, background: active ? "linear-gradient(90deg, #A6192E, #C8323F)" : "#fff", color: active ? "#fff" : "#2B0A10", borderRadius: 999, padding: "0.3rem 0.75rem", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", fontFamily: "inherit" });
+  const th = { padding: "0.4rem 0.5rem", fontSize: "0.75rem", color: "#596068", textAlign: "left", fontWeight: 800, whiteSpace: "nowrap", borderBottom: "1px solid #F0E6DC" };
   const td = { padding: "0.45rem 0.5rem", fontSize: "0.85rem", borderTop: "1px solid #f1f5f9" };
 
   const photoStrip = (photos, onRemove) => (
     <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
       {photos.map((photo, index) => (
         <div key={index} style={{ position: "relative" }}>
-          <img src={photoSrc(photo)} alt={`รูปประกอบ ${index + 1}`} onClick={() => setZoom(photoSrc(photo))} style={{ width: 92, height: 92, objectFit: "cover", borderRadius: 10, border: "1px solid #E4EEF8", cursor: "zoom-in" }} />
+          <img src={photoSrc(photo)} alt={`รูปประกอบ ${index + 1}`} onClick={() => setZoom(photoSrc(photo))} style={{ width: 92, height: 92, objectFit: "cover", borderRadius: 10, border: "1px solid #F0E6DC", cursor: "zoom-in" }} />
           {onRemove && <button type="button" aria-label="ลบรูป" onClick={() => onRemove(index)} style={{ position: "absolute", top: 3, right: 3, width: 22, height: 22, borderRadius: "50%", border: "none", background: "#fee2e2", color: "#b91c1c", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}><X size={12} /></button>}
         </div>
       ))}
@@ -9165,19 +9166,19 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false,
   const inspectionCard = item => {
     const percent = item.max ? (item.total / item.max) * 100 : 0;
     return (
-      <div key={item.id} style={{ border: "1px solid #E4EEF8", borderRadius: 14, padding: "0.7rem 0.8rem", display: "grid", gap: "0.45rem", background: "#fff" }}>
+      <div key={item.id} style={{ border: "1px solid #F0E6DC", borderRadius: 14, padding: "0.7rem 0.8rem", display: "grid", gap: "0.45rem", background: "#fff" }}>
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-          <strong style={{ color: "#233862" }}>{formatThaiDateKey(item.date)} · {roomNameOf(item)} · {item.area}</strong>
+          <strong style={{ color: "#2B0A10" }}>{formatThaiDateKey(item.date)} · {roomNameOf(item)} · {item.area}</strong>
           <span style={{ fontWeight: 900, color: cleaningLevel(percent).color }}>{item.total}/{item.max}</span>
           <CleaningLevelBadge percent={percent} />
           {item.pending && <span style={{ fontSize: "0.7rem", color: "#b45309" }}>รอซิงก์</span>}
-          {editingId === item.id && <span style={{ fontSize: "0.7rem", color: "#FF7106", fontWeight: 800 }}>กำลังแก้ไข</span>}
+          {editingId === item.id && <span style={{ fontSize: "0.7rem", color: "#C2410C", fontWeight: 800 }}>กำลังแก้ไข</span>}
           <span style={{ marginLeft: "auto", fontSize: "0.72rem", color: "#94a3b8" }}>ผู้ตรวจ {item.by || "-"}{item.at ? ` · ${fmtDate(item.at)} ${fmtTime(item.at)}` : ""}{item.edited_by && item.updated_at !== item.at ? ` · แก้ไขโดย ${item.edited_by} ${fmtDate(item.updated_at)} ${fmtTime(item.updated_at)}` : ""}</span>
-          {canMutateInspection(item) && <button type="button" aria-label="แก้ไขผลการตรวจ" title="แก้ไข" onClick={() => startEdit(item)} style={{ border: "none", background: "#EAF5FF", color: "#0072D9", borderRadius: 8, padding: "0.2rem 0.4rem", cursor: "pointer" }}><Pencil size={13} /></button>}
+          {canMutateInspection(item) && <button type="button" aria-label="แก้ไขผลการตรวจ" title="แก้ไข" onClick={() => startEdit(item)} style={{ border: "none", background: "#FBF5E6", color: "#8E1426", borderRadius: 8, padding: "0.2rem 0.4rem", cursor: "pointer" }}><Pencil size={13} /></button>}
           {canMutateInspection(item) && <button type="button" aria-label="ลบผลการตรวจ" title="ลบ" onClick={() => deleteInspection(item)} style={{ border: "none", background: "#fee2e2", color: "#b91c1c", borderRadius: 8, padding: "0.2rem 0.4rem", cursor: "pointer" }}><Trash2 size={13} /></button>}
         </div>
         <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
-          {item.criteria.map(c => <span key={c.key} style={{ fontSize: "0.75rem", background: item.scores[c.key] >= 4 ? "#EAF5FF" : item.scores[c.key] >= 3 ? "#fef9c3" : "#fee2e2", color: "#233862", borderRadius: 8, padding: "0.15rem 0.45rem" }}>{c.label} {item.scores[c.key]}/5</span>)}
+          {item.criteria.map(c => <span key={c.key} style={{ fontSize: "0.75rem", background: item.scores[c.key] >= 4 ? "#FBF5E6" : item.scores[c.key] >= 3 ? "#fef9c3" : "#fee2e2", color: "#2B0A10", borderRadius: 8, padding: "0.15rem 0.45rem" }}>{c.label} {item.scores[c.key]}/5</span>)}
         </div>
         {item.note && <div style={{ fontSize: "0.83rem", color: "#334155", whiteSpace: "pre-wrap" }}><strong>จุดที่ต้องแก้ไข: </strong>{item.note}</div>}
         {item.photos.length > 0 && photoStrip(item.photos)}
@@ -9186,7 +9187,7 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false,
   };
 
   const header = (
-    <div style={{ background: "linear-gradient(90deg, #008CFF, #3EBFFB)", borderRadius: 18, padding: "1rem 1.2rem", color: "#fff", boxShadow: "0 4px 24px rgba(0,140,255,0.2)" }}>
+    <div style={{ background: "linear-gradient(90deg, #A6192E, #C8323F)", borderRadius: 18, padding: "1rem 1.2rem", color: "#fff", boxShadow: "0 4px 24px rgba(166,25,46,0.2)" }}>
       <div style={{ fontSize: "1.2rem", fontWeight: 800 }}>เวรความสะอาด / เวรพื้นที่</div>
       <div style={{ fontSize: "0.85rem", opacity: 0.9 }}>{canManage ? "บันทึกผลการตรวจความสะอาดบริเวณรอบโรงเรียนตามพื้นที่รับผิดชอบของแต่ละห้อง (ผู้บริหารประเมินได้ทุกพื้นที่)" : "ครูประเมินได้ทุกพื้นที่ ยกเว้นพื้นที่ที่ตนเองหรือห้องของตนรับผิดชอบ"}</div>
     </div>
@@ -9213,7 +9214,7 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false,
         <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 460px), 1fr))", alignItems: "start" }}>
           <Card>
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.7rem", flexWrap: "wrap" }}>
-              <div style={{ fontWeight: 800, color: editingId ? "#FF7106" : "#233862" }}>{editingId ? "แก้ไขผลการตรวจ" : "แบบบันทึกผลการตรวจ"}</div>
+              <div style={{ fontWeight: 800, color: editingId ? "#C2410C" : "#2B0A10" }}>{editingId ? "แก้ไขผลการตรวจ" : "แบบบันทึกผลการตรวจ"}</div>
               {formNoonLocked && <div style={{ flexBasis: "100%" }}><CleaningNoonLockNotice now={clockNow} /></div>}
               {editingId && <span style={{ fontSize: "0.75rem", color: "#9a4a00", background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 999, padding: "0.1rem 0.55rem" }}>แก้ไขวันที่ ห้อง พื้นที่ คะแนน บันทึก และรูปได้</span>}
             </div>
@@ -9247,15 +9248,15 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false,
             {formBlocked && <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10, padding: "0.55rem 0.8rem", color: "#b91c1c", fontWeight: 800, fontSize: "0.9rem", marginTop: "0.7rem" }}>ไม่สามารถประเมินพื้นที่ของตนเองได้</div>}
             <div style={{ display: "grid", gap: "0.55rem", marginTop: "0.8rem" }}>
               {formCriteria.map((c, index) => (
-                <div key={c.key} style={{ background: "#F3F8FD", border: "1px solid #E4EEF8", borderRadius: 12, padding: "0.55rem 0.7rem" }}>
+                <div key={c.key} style={{ background: "#FAF7F3", border: "1px solid #F0E6DC", borderRadius: 12, padding: "0.55rem 0.7rem" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", alignItems: "baseline" }}>
-                    <span style={{ fontWeight: 800, color: "#233862", fontSize: "0.88rem" }}>{index + 1}. {c.label}</span>
+                    <span style={{ fontWeight: 800, color: "#2B0A10", fontSize: "0.88rem" }}>{index + 1}. {c.label}</span>
                     <span style={{ fontSize: "0.75rem", color: "#596068" }}>{CLEANING_SCALE.find(s => s.value === form.scores[c.key])?.label}</span>
                   </div>
                   <div style={{ fontSize: "0.75rem", color: "#596068", margin: "0.15rem 0 0.35rem" }}>{c.hint}</div>
                   <div role="radiogroup" aria-label={c.label} style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap" }}>
                     {[0, 1, 2, 3, 4, 5].map(value => (
-                      <button key={value} type="button" role="radio" aria-checked={form.scores[c.key] === value} disabled={formBlocked} onClick={() => { if (!formBlocked) setForm(current => ({ ...current, scores: { ...current.scores, [c.key]: value } })); }} style={{ minWidth: 38, height: 34, borderRadius: 10, border: `1px solid ${form.scores[c.key] === value ? "#008CFF" : "#d6e4f2"}`, background: form.scores[c.key] === value ? "linear-gradient(135deg, #008CFF, #3EBFFB)" : "#fff", color: form.scores[c.key] === value ? "#fff" : "#233862", fontWeight: 800, cursor: formBlocked ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: formBlocked ? 0.55 : 1 }}>{value}</button>
+                      <button key={value} type="button" role="radio" aria-checked={form.scores[c.key] === value} disabled={formBlocked} onClick={() => { if (!formBlocked) setForm(current => ({ ...current, scores: { ...current.scores, [c.key]: value } })); }} style={{ minWidth: 38, height: 34, borderRadius: 10, border: `1px solid ${form.scores[c.key] === value ? "#A6192E" : "#E8DCD0"}`, background: form.scores[c.key] === value ? "linear-gradient(135deg, #A6192E, #C8323F)" : "#fff", color: form.scores[c.key] === value ? "#fff" : "#2B0A10", fontWeight: 800, cursor: formBlocked ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: formBlocked ? 0.55 : 1 }}>{value}</button>
                     ))}
                   </div>
                 </div>
@@ -9278,11 +9279,11 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false,
               <CleaningLevelBadge percent={formMax ? (formTotal / formMax) * 100 : 0} />
               <span style={{ fontSize: "0.75rem", color: "#596068" }}>{formCriteria.length} เกณฑ์ × 5</span>
               {editingId && <button type="button" disabled={busy} onClick={cancelEdit} style={{ ...btnSecondary, flex: "none", marginLeft: "auto", padding: "0.6rem 1rem" }}><X size={16} /> ยกเลิกการแก้ไข</button>}
-              <button type="button" disabled={busy || formBlocked || formNoonLocked} aria-disabled={busy || formBlocked || formNoonLocked} onClick={() => { if (!formNoonLocked) submitInspection(); }} style={{ ...btnPrimary, flex: "none", marginLeft: editingId ? 0 : "auto", padding: "0.6rem 1.2rem", background: formNoonLocked ? "#cbd5e1" : "linear-gradient(90deg, #FF7106, #FF9A3C)", color: formNoonLocked ? "#334155" : "#fff", cursor: (busy || formBlocked || formNoonLocked) ? "not-allowed" : "pointer", boxShadow: formNoonLocked ? "none" : "0 4px 14px rgba(255,113,6,0.3)", opacity: formBlocked ? 0.55 : 1 }}>{formNoonLocked ? "🔒" : <Save size={16} />} {formNoonLocked ? "เปิดให้คะแนน 12:00 น." : editingId ? "บันทึกการแก้ไข" : "บันทึกผลการตรวจ"}</button>
+              <button type="button" disabled={busy || formBlocked || formNoonLocked} aria-disabled={busy || formBlocked || formNoonLocked} onClick={() => { if (!formNoonLocked) submitInspection(); }} style={{ ...btnPrimary, flex: "none", marginLeft: editingId ? 0 : "auto", padding: "0.6rem 1.2rem", background: formNoonLocked ? "#cbd5e1" : "linear-gradient(135deg, #7A5A14, #9C7A2E)", color: formNoonLocked ? "#334155" : "#fff", cursor: (busy || formBlocked || formNoonLocked) ? "not-allowed" : "pointer", boxShadow: formNoonLocked ? "none" : "0 4px 14px rgba(122,90,20,0.3)", opacity: formBlocked ? 0.55 : 1 }}>{formNoonLocked ? "🔒" : <Save size={16} />} {formNoonLocked ? "เปิดให้คะแนน 12:00 น." : editingId ? "บันทึกการแก้ไข" : "บันทึกผลการตรวจ"}</button>
             </div>
           </Card>
           <Card>
-            <div style={{ fontWeight: 800, color: "#233862", marginBottom: "0.6rem" }}>ผลการตรวจล่าสุด</div>
+            <div style={{ fontWeight: 800, color: "#2B0A10", marginBottom: "0.6rem" }}>ผลการตรวจล่าสุด</div>
             {inspections.length === 0 ? <div style={{ color: "#94a3b8" }}>ยังไม่มีผลการตรวจ</div> : <div style={{ display: "grid", gap: "0.5rem", maxHeight: 900, overflowY: "auto" }}>{inspections.slice(0, 12).map(inspectionCard)}</div>}
           </Card>
         </div>
@@ -9300,7 +9301,7 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false,
             <div style={{ display: "grid", gap: "0.6rem" }}>
               <button type="button" onClick={() => setDetailRoom("")} style={{ ...btnSecondary, flex: "none", width: "fit-content", padding: "0.35rem 0.7rem", fontSize: "0.82rem" }}><ChevronLeft size={14} /> กลับไปตารางสรุป</button>
               <div style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
-                <div style={{ fontSize: "1.15rem", fontWeight: 800, color: "#233862" }}>{detail.name}{detail.rank ? ` · อันดับ ${detail.rank}` : ""}</div>
+                <div style={{ fontSize: "1.15rem", fontWeight: 800, color: "#2B0A10" }}>{detail.name}{detail.rank ? ` · อันดับ ${detail.rank}` : ""}</div>
                 <div style={{ fontWeight: 900, color: cleaningLevel(detail.percent).color }}>เฉลี่ย {detail.average.toFixed(1)}/{Number.isInteger(detail.avgMax) ? detail.avgMax : detail.avgMax.toFixed(1)} ({detail.percent.toFixed(0)}%)</div>
                 {detail.count > 0 && <CleaningLevelBadge percent={detail.percent} />}
               </div>
@@ -9308,8 +9309,8 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false,
                 <div style={{ display: "grid", gap: "0.25rem" }}>
                   {detail.byCriterion.map(c => (
                     <div key={c.key} style={{ display: "grid", gridTemplateColumns: "minmax(12rem, 24rem) 1fr 3rem", gap: "0.5rem", alignItems: "center", fontSize: "0.8rem" }}>
-                      <span style={{ color: c.active ? "#233862" : "#94a3b8", fontWeight: 700 }}>{c.label}{!c.active ? " (เลิกใช้)" : ""}{c.n < detail.count ? ` · ${c.n} ครั้ง` : ""}</span>
-                      <div style={{ background: "#F3F8FD", borderRadius: 8, height: 12 }}><div style={{ width: `${(c.avg / 5) * 100}%`, height: "100%", borderRadius: 8, background: c.active ? "linear-gradient(90deg, #008CFF, #3EBFFB)" : "#cbd5e1" }} /></div>
+                      <span style={{ color: c.active ? "#2B0A10" : "#94a3b8", fontWeight: 700 }}>{c.label}{!c.active ? " (เลิกใช้)" : ""}{c.n < detail.count ? ` · ${c.n} ครั้ง` : ""}</span>
+                      <div style={{ background: "#FAF7F3", borderRadius: 8, height: 12 }}><div style={{ width: `${(c.avg / 5) * 100}%`, height: "100%", borderRadius: 8, background: c.active ? "linear-gradient(90deg, #A6192E, #C8323F)" : "#cbd5e1" }} /></div>
                       <span style={{ textAlign: "right", fontWeight: 800 }}>{c.n ? c.avg.toFixed(1) : "-"}</span>
                     </div>
                   ))}
@@ -9324,8 +9325,8 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false,
                 <tbody>
                   {summary.map(row => (
                     <tr key={row.id} onClick={() => setDetailRoom(row.id)} style={{ cursor: "pointer" }} title="ดูรายละเอียดและรูปถ่าย">
-                      <td style={{ ...td, fontWeight: 900, color: row.rank === 1 ? "#FF7106" : "#233862" }}>{row.rank ? (row.rank <= 3 ? ["🥇", "🥈", "🥉"][row.rank - 1] + " " : "") + row.rank : "-"}</td>
-                      <td style={{ ...td, fontWeight: 700, color: "#233862" }}>{row.name}</td>
+                      <td style={{ ...td, fontWeight: 900, color: row.rank === 1 ? "#C2410C" : "#2B0A10" }}>{row.rank ? (row.rank <= 3 ? ["🥇", "🥈", "🥉"][row.rank - 1] + " " : "") + row.rank : "-"}</td>
+                      <td style={{ ...td, fontWeight: 700, color: "#2B0A10" }}>{row.name}</td>
                       <td style={td}>{row.count}</td>
                       <td style={td}>{row.count ? `${row.total}/${row.maxSum}` : "-"}</td>
                       <td style={td}>{row.count ? `${row.average.toFixed(1)}/${Number.isInteger(row.avgMax) ? row.avgMax : row.avgMax.toFixed(1)}` : "-"}</td>
@@ -9344,20 +9345,20 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false,
       {tab === "rooms" && canManage && (
         <Card>
           <div style={{ display: "flex", alignItems: "baseline", gap: "0.6rem", flexWrap: "wrap", marginBottom: "0.3rem" }}>
-            <div style={{ fontWeight: 800, color: "#233862" }}>เกณฑ์การให้คะแนน</div>
-            <span style={{ fontSize: "0.8rem", color: "#0072D9", fontWeight: 800 }}>{criteria.length} เกณฑ์ × 5 = คะแนนเต็ม {cleaningMaxOf(criteria)}</span>
+            <div style={{ fontWeight: 800, color: "#2B0A10" }}>เกณฑ์การให้คะแนน</div>
+            <span style={{ fontSize: "0.8rem", color: "#8E1426", fontWeight: 800 }}>{criteria.length} เกณฑ์ × 5 = คะแนนเต็ม {cleaningMaxOf(criteria)}</span>
           </div>
           <div style={{ fontSize: "0.78rem", color: "#596068", marginBottom: "0.6rem" }}>ใช้กับการตรวจครั้งต่อไป · ผลการตรวจเดิมยังคงเกณฑ์ คะแนน และคะแนนเต็มตามที่บันทึกไว้</div>
           <div style={{ display: "grid", gap: "0.45rem" }}>
             {criteria.map((c, index) => (
-              <div key={c.key} style={{ border: "1px solid #E4EEF8", borderRadius: 12, padding: "0.5rem 0.7rem", background: criterionEdit?.key === c.key ? "#F3F8FD" : "#fff" }}>
+              <div key={c.key} style={{ border: "1px solid #F0E6DC", borderRadius: 12, padding: "0.5rem 0.7rem", background: criterionEdit?.key === c.key ? "#FAF7F3" : "#fff" }}>
                 {criterionEdit?.key === c.key ? (
                   <div style={{ display: "grid", gap: "0.4rem" }}>
                     <input autoFocus value={criterionEdit.label} onChange={event => setCriterionEdit({ ...criterionEdit, label: event.target.value })} onKeyDown={event => { if (event.key === "Escape") setCriterionEdit(null); }} aria-label={`ชื่อใหม่ของเกณฑ์ ${c.label}`} placeholder="ชื่อเกณฑ์" style={small} />
                     <input value={criterionEdit.hint} onChange={event => setCriterionEdit({ ...criterionEdit, hint: event.target.value })} onKeyDown={event => { if (event.key === "Enter") saveCriterionEdit(); if (event.key === "Escape") setCriterionEdit(null); }} aria-label={`คำอธิบายเกณฑ์ ${c.label}`} placeholder="คำอธิบาย / สิ่งที่ตรวจ" style={small} />
                     <div style={{ display: "flex", gap: "0.4rem", justifyContent: "flex-end" }}>
                       <button type="button" onClick={() => setCriterionEdit(null)} style={{ ...btnSecondary, flex: "none", padding: "0.3rem 0.7rem", fontSize: "0.8rem" }}>ยกเลิก</button>
-                      <button type="button" onClick={saveCriterionEdit} style={{ ...btnPrimary, flex: "none", padding: "0.3rem 0.8rem", fontSize: "0.8rem", background: "linear-gradient(90deg, #008CFF, #3EBFFB)", color: "#fff", cursor: "pointer" }}><Save size={13} /> บันทึกเกณฑ์</button>
+                      <button type="button" onClick={saveCriterionEdit} style={{ ...btnPrimary, flex: "none", padding: "0.3rem 0.8rem", fontSize: "0.8rem", background: "linear-gradient(90deg, #A6192E, #C8323F)", color: "#fff", cursor: "pointer" }}><Save size={13} /> บันทึกเกณฑ์</button>
                     </div>
                   </div>
                 ) : (
@@ -9367,10 +9368,10 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false,
                       <button type="button" aria-label={`เลื่อนเกณฑ์ ${c.label} ลง`} disabled={index === criteria.length - 1} onClick={() => moveCriterion(index, 1)} style={{ border: "none", background: "transparent", color: index === criteria.length - 1 ? "#cbd5e1" : "#596068", cursor: index === criteria.length - 1 ? "default" : "pointer", padding: 0, display: "inline-flex", transform: "rotate(180deg)" }}><ChevronUp size={14} /></button>
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 800, color: "#233862", fontSize: "0.9rem" }}>{index + 1}. {c.label}</div>
+                      <div style={{ fontWeight: 800, color: "#2B0A10", fontSize: "0.9rem" }}>{index + 1}. {c.label}</div>
                       <div style={{ fontSize: "0.76rem", color: c.hint ? "#596068" : "#94a3b8" }}>{c.hint || "ไม่มีคำอธิบาย"}</div>
                     </div>
-                    <button type="button" aria-label={`แก้ไขเกณฑ์ ${c.label}`} onClick={() => setCriterionEdit({ key: c.key, label: c.label, hint: c.hint || "" })} style={{ border: "none", background: "#EAF5FF", color: "#0072D9", borderRadius: 8, padding: "0.25rem 0.55rem", cursor: "pointer", fontFamily: "inherit", fontSize: "0.78rem", fontWeight: 700, whiteSpace: "nowrap" }}><Pencil size={12} /> แก้ไข</button>
+                    <button type="button" aria-label={`แก้ไขเกณฑ์ ${c.label}`} onClick={() => setCriterionEdit({ key: c.key, label: c.label, hint: c.hint || "" })} style={{ border: "none", background: "#FBF5E6", color: "#8E1426", borderRadius: 8, padding: "0.25rem 0.55rem", cursor: "pointer", fontFamily: "inherit", fontSize: "0.78rem", fontWeight: 700, whiteSpace: "nowrap" }}><Pencil size={12} /> แก้ไข</button>
                     <button type="button" aria-label={`ลบเกณฑ์ ${c.label}`} disabled={criteria.length <= 1} title={criteria.length <= 1 ? "ต้องมีเกณฑ์อย่างน้อย 1 ข้อ" : "ลบเกณฑ์"} onClick={() => removeCriterion(c)} style={{ border: "none", background: "#fee2e2", color: "#b91c1c", borderRadius: 8, padding: "0.25rem 0.55rem", cursor: criteria.length <= 1 ? "not-allowed" : "pointer", fontFamily: "inherit", fontSize: "0.78rem", fontWeight: 700, whiteSpace: "nowrap", opacity: criteria.length <= 1 ? 0.5 : 1 }}><Trash2 size={12} /> ลบ</button>
                   </div>
                 )}
@@ -9380,35 +9381,35 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false,
           <div style={{ display: "flex", gap: "0.45rem", marginTop: "0.7rem", flexWrap: "wrap" }}>
             <input value={criterionDraft.label} onChange={event => setCriterionDraft(current => ({ ...current, label: event.target.value }))} placeholder="ชื่อเกณฑ์ใหม่ เช่น ความเป็นระเบียบของทางเดิน" aria-label="ชื่อเกณฑ์ใหม่" style={{ ...small, flex: "1 1 180px" }} />
             <input value={criterionDraft.hint} onChange={event => setCriterionDraft(current => ({ ...current, hint: event.target.value }))} onKeyDown={event => { if (event.key === "Enter") addCriterion(); }} placeholder="คำอธิบาย (ไม่บังคับ)" aria-label="คำอธิบายเกณฑ์ใหม่" style={{ ...small, flex: "2 1 240px" }} />
-            <button type="button" onClick={addCriterion} disabled={criteria.length >= CLEANING_CRITERIA_LIMIT} style={{ ...btnPrimary, flex: "none", padding: "0.45rem 1rem", background: "linear-gradient(90deg, #008CFF, #3EBFFB)", color: "#fff", cursor: "pointer" }}><Plus size={15} /> เพิ่มเกณฑ์</button>
+            <button type="button" onClick={addCriterion} disabled={criteria.length >= CLEANING_CRITERIA_LIMIT} style={{ ...btnPrimary, flex: "none", padding: "0.45rem 1rem", background: "linear-gradient(90deg, #A6192E, #C8323F)", color: "#fff", cursor: "pointer" }}><Plus size={15} /> เพิ่มเกณฑ์</button>
           </div>
         </Card>
       )}
 
       {tab === "rooms" && canManage && (
         <Card>
-          <div style={{ fontWeight: 800, color: "#233862", marginBottom: "0.6rem" }}>ทะเบียนห้องและพื้นที่รับผิดชอบ</div>
+          <div style={{ fontWeight: 800, color: "#2B0A10", marginBottom: "0.6rem" }}>ทะเบียนห้องและพื้นที่รับผิดชอบ</div>
           <div style={{ display: "flex", gap: "0.45rem", marginBottom: "0.8rem", flexWrap: "wrap" }}>
             <input value={newRoom} onChange={event => setNewRoom(event.target.value)} onKeyDown={event => { if (event.key === "Enter") addRoom(); }} placeholder="ชื่อห้อง เช่น ป.1/1" aria-label="ชื่อห้องใหม่" style={{ ...small, flex: "1 1 200px" }} />
-            <button type="button" onClick={addRoom} style={{ ...btnPrimary, flex: "none", padding: "0.45rem 1rem", background: "linear-gradient(90deg, #008CFF, #3EBFFB)", color: "#fff", cursor: "pointer" }}><Plus size={15} /> เพิ่มห้อง</button>
+            <button type="button" onClick={addRoom} style={{ ...btnPrimary, flex: "none", padding: "0.45rem 1rem", background: "linear-gradient(90deg, #A6192E, #C8323F)", color: "#fff", cursor: "pointer" }}><Plus size={15} /> เพิ่มห้อง</button>
           </div>
           {rooms.length === 0 ? <div style={{ color: "#94a3b8" }}>ยังไม่มีห้องในทะเบียน</div> : (
             <div style={{ display: "grid", gap: "0.55rem" }}>
               {rooms.map(room => (
-                <div key={room.id} style={{ border: "1px solid #E4EEF8", borderRadius: 14, padding: "0.65rem 0.8rem", display: "grid", gap: "0.45rem" }}>
+                <div key={room.id} style={{ border: "1px solid #F0E6DC", borderRadius: 14, padding: "0.65rem 0.8rem", display: "grid", gap: "0.45rem" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                     {roomEdit?.id === room.id ? (
                       <>
                         <input autoFocus value={roomEdit.name} onChange={event => setRoomEdit({ id: room.id, name: event.target.value })} onKeyDown={event => { if (event.key === "Enter") renameRoom(); if (event.key === "Escape") setRoomEdit(null); }} aria-label={`ชื่อใหม่ของห้อง ${room.name}`} style={{ ...small, flex: 1, padding: "0.3rem 0.5rem" }} />
-                        <button type="button" onClick={renameRoom} style={{ ...btnPrimary, flex: "none", padding: "0.25rem 0.6rem", fontSize: "0.78rem", background: "linear-gradient(90deg, #008CFF, #3EBFFB)", color: "#fff", cursor: "pointer" }}><Save size={12} /> บันทึก</button>
+                        <button type="button" onClick={renameRoom} style={{ ...btnPrimary, flex: "none", padding: "0.25rem 0.6rem", fontSize: "0.78rem", background: "linear-gradient(90deg, #A6192E, #C8323F)", color: "#fff", cursor: "pointer" }}><Save size={12} /> บันทึก</button>
                         <button type="button" onClick={() => setRoomEdit(null)} style={{ ...btnSecondary, flex: "none", padding: "0.25rem 0.6rem", fontSize: "0.78rem" }}>ยกเลิก</button>
                       </>
                     ) : (
                       <>
-                        <strong style={{ color: "#233862", flex: 1 }}>{room.name}</strong>
+                        <strong style={{ color: "#2B0A10", flex: 1 }}>{room.name}</strong>
                         {isBuiltinCleaningRoom(room)
-                          ? <span style={{ fontSize: "0.75rem", color: "#0072D9", background: "#EAF5FF", borderRadius: 999, padding: "0.15rem 0.55rem", fontWeight: 700 }}>พื้นที่ตั้งต้นของอนุบาล</span>
-                          : <button type="button" onClick={() => setRoomEdit({ id: room.id, name: room.name })} style={{ border: "none", background: "#EAF5FF", color: "#0072D9", borderRadius: 8, padding: "0.25rem 0.55rem", cursor: "pointer", fontFamily: "inherit", fontSize: "0.78rem", fontWeight: 700 }}><Pencil size={12} /> เปลี่ยนชื่อ</button>}
+                          ? <span style={{ fontSize: "0.75rem", color: "#8E1426", background: "#FBF5E6", borderRadius: 999, padding: "0.15rem 0.55rem", fontWeight: 700 }}>พื้นที่ตั้งต้นของอนุบาล</span>
+                          : <button type="button" onClick={() => setRoomEdit({ id: room.id, name: room.name })} style={{ border: "none", background: "#FBF5E6", color: "#8E1426", borderRadius: 8, padding: "0.25rem 0.55rem", cursor: "pointer", fontFamily: "inherit", fontSize: "0.78rem", fontWeight: 700 }}><Pencil size={12} /> เปลี่ยนชื่อ</button>}
                       </>
                     )}
                     {!isBuiltinCleaningRoom(room) && <button type="button" onClick={() => removeRoom(room)} style={{ border: "none", background: "#fee2e2", color: "#b91c1c", borderRadius: 8, padding: "0.25rem 0.55rem", cursor: "pointer", fontFamily: "inherit", fontSize: "0.78rem", fontWeight: 700 }}><Trash2 size={12} /> ลบห้อง</button>}
@@ -9419,21 +9420,21 @@ function CleaningDutyInner({ currentUser, teachingGrade = "", canManage = false,
                     {room.areas.map(area => (areaEdit?.roomId === room.id && areaEdit.from === area ? (
                       <span key={area} style={{ display: "inline-flex", gap: "0.25rem", alignItems: "center" }}>
                         <input autoFocus value={areaEdit.to} onChange={event => setAreaEdit({ ...areaEdit, to: event.target.value })} onKeyDown={event => { if (event.key === "Enter") renameArea(); if (event.key === "Escape") setAreaEdit(null); }} aria-label={`ชื่อใหม่ของพื้นที่ ${area}`} style={{ ...small, width: 140, padding: "0.2rem 0.45rem", fontSize: "0.8rem" }} />
-                        <button type="button" aria-label="บันทึกชื่อพื้นที่" onClick={renameArea} disabled={busy} style={{ border: "none", background: "#008CFF", color: "#fff", borderRadius: 8, padding: "0.2rem 0.4rem", cursor: "pointer", display: "inline-flex" }}><Save size={12} /></button>
+                        <button type="button" aria-label="บันทึกชื่อพื้นที่" onClick={renameArea} disabled={busy} style={{ border: "none", background: "#A6192E", color: "#fff", borderRadius: 8, padding: "0.2rem 0.4rem", cursor: "pointer", display: "inline-flex" }}><Save size={12} /></button>
                         <button type="button" aria-label="ยกเลิก" onClick={() => setAreaEdit(null)} style={{ border: "none", background: "#f1f5f9", color: "#596068", borderRadius: 8, padding: "0.2rem 0.4rem", cursor: "pointer", display: "inline-flex" }}><X size={12} /></button>
                       </span>
                     ) : (
-                      <span key={area} style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem", background: "#EAF5FF", color: "#0072D9", borderRadius: 999, padding: "0.15rem 0.3rem 0.15rem 0.6rem", fontSize: "0.8rem", fontWeight: 700 }}>
+                      <span key={area} style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem", background: "#FBF5E6", color: "#8E1426", borderRadius: 999, padding: "0.15rem 0.3rem 0.15rem 0.6rem", fontSize: "0.8rem", fontWeight: 700 }}>
                         {area}
                         {!isBuiltinCleaningRoom(room) && <>
-                        <button type="button" aria-label={`เปลี่ยนชื่อพื้นที่ ${area}`} title="เปลี่ยนชื่อ" onClick={() => setAreaEdit({ roomId: room.id, from: area, to: area })} style={{ border: "none", background: "transparent", color: "#0072D9", cursor: "pointer", padding: 0, display: "inline-flex" }}><Pencil size={11} /></button>
-                        <button type="button" aria-label={`ลบพื้นที่ ${area}`} onClick={() => removeArea(room, area)} style={{ border: "none", background: "transparent", color: "#0072D9", cursor: "pointer", padding: 0, display: "inline-flex" }}><X size={12} /></button>
+                        <button type="button" aria-label={`เปลี่ยนชื่อพื้นที่ ${area}`} title="เปลี่ยนชื่อ" onClick={() => setAreaEdit({ roomId: room.id, from: area, to: area })} style={{ border: "none", background: "transparent", color: "#8E1426", cursor: "pointer", padding: 0, display: "inline-flex" }}><Pencil size={11} /></button>
+                        <button type="button" aria-label={`ลบพื้นที่ ${area}`} onClick={() => removeArea(room, area)} style={{ border: "none", background: "transparent", color: "#8E1426", cursor: "pointer", padding: 0, display: "inline-flex" }}><X size={12} /></button>
                         </>}
                       </span>
                     )))}
                   </div>
                   {!isBuiltinCleaningRoom(room) && <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap", alignItems: "center" }}>
-                    {CLEANING_AREA_PRESETS.filter(area => !room.areas.includes(area)).map(area => <button key={area} type="button" onClick={() => addArea(room, area)} style={{ border: "1px dashed #8FD0FF", background: "#fff", color: "#0072D9", borderRadius: 999, padding: "0.12rem 0.55rem", fontSize: "0.75rem", cursor: "pointer", fontFamily: "inherit" }}>+ {area}</button>)}
+                    {CLEANING_AREA_PRESETS.filter(area => !room.areas.includes(area)).map(area => <button key={area} type="button" onClick={() => addArea(room, area)} style={{ border: "1px dashed #D9BC74", background: "#fff", color: "#8E1426", borderRadius: 999, padding: "0.12rem 0.55rem", fontSize: "0.75rem", cursor: "pointer", fontFamily: "inherit" }}>+ {area}</button>)}
                     <input value={areaDrafts[room.id] || ""} onChange={event => setAreaDrafts(current => ({ ...current, [room.id]: event.target.value }))} onKeyDown={event => { if (event.key === "Enter") addArea(room, areaDrafts[room.id]); }} placeholder="พื้นที่อื่น ๆ" aria-label={`เพิ่มพื้นที่ให้ ${room.name}`} style={{ ...small, width: 150, padding: "0.25rem 0.5rem", fontSize: "0.8rem" }} />
                     <button type="button" onClick={() => addArea(room, areaDrafts[room.id])} style={{ ...btnSecondary, flex: "none", padding: "0.25rem 0.6rem", fontSize: "0.78rem" }}>เพิ่ม</button>
                   </div>}
@@ -9540,7 +9541,7 @@ function SubstitutePlanView({ employees, currentUser }) {
   const daySlots = timetable.filter(row => Number(row.day_of_week) === day).sort((a, b) => a.period - b.period);
   const slotOf = no => daySlots.find(row => Number(row.period) === Number(no));
   const periodChoices = [...new Set([...daySlots.map(row => Number(row.period)), ...dayPlanPeriods.map(period => Number(period.period_no))])].filter(Boolean).sort((a, b) => a - b);
-  const chip = active => ({ border: `1px solid ${active ? "#008CFF" : "#d6e4f2"}`, background: active ? "linear-gradient(135deg, #008CFF, #0072D9)" : "#fff", color: active ? "#fff" : "#233862", borderRadius: 10, padding: "0.35rem 0.65rem", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", fontFamily: "inherit", textAlign: "left", minHeight: 40 });
+  const chip = active => ({ border: `1px solid ${active ? "#A6192E" : "#E8DCD0"}`, background: active ? "linear-gradient(135deg, #A6192E, #8E1426)" : "#fff", color: active ? "#fff" : "#2B0A10", borderRadius: 10, padding: "0.35rem 0.65rem", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", fontFamily: "inherit", textAlign: "left", minHeight: 40 });
   const teacher = teachers.find(emp => String(emp.id) === String(teacherId));
 
   const saveAdminComment = async (periodId) => {
@@ -9563,7 +9564,7 @@ function SubstitutePlanView({ employees, currentUser }) {
   return (
     <div style={{ display: "grid", gap: "1rem" }}>
       <Card>
-        <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#233862", marginBottom: "0.75rem" }}>ดูแผนสอนแทน</div>
+        <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#2B0A10", marginBottom: "0.75rem" }}>ดูแผนสอนแทน</div>
         <div style={periodGrid}>
           <Field label="ครูเจ้าของแผน">
             <select aria-label="ครูเจ้าของแผน" value={teacherId} onChange={event => { setTeacherId(event.target.value); setPeriodNo(""); }} style={periodSelect}>
@@ -9588,7 +9589,7 @@ function SubstitutePlanView({ employees, currentUser }) {
         </div>
         {teacherId && (
           <div style={{ marginTop: "0.75rem", display: "grid", gap: "0.4rem" }}>
-            <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "#233862" }}>ตารางสอน {formatThaiDateKey(date)}</div>
+            <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "#2B0A10" }}>ตารางสอน {formatThaiDateKey(date)}</div>
             {timetableError ? <div style={{ fontSize: "0.8rem", color: "#b45309" }}>⚠️ {timetableError}</div> : daySlots.length === 0 ? (
               <div style={{ fontSize: "0.8rem", color: "#94a3b8" }}>ครูคนนี้ยังไม่ได้กรอกตารางสอนของวัน{DAY_NAMES[day]}</div>
             ) : (
@@ -9614,7 +9615,7 @@ function SubstitutePlanView({ employees, currentUser }) {
         <Card><div style={{ textAlign: "center", color: "#64748b", padding: "1.5rem" }}>{teacher?.name || "ครู"} ยังไม่มีแผน{periodNo ? `คาบที่ ${periodNo} ` : ""}ของ{formatThaiDateKey(date)}</div></Card>
       ) : (
         <Card>
-          <div style={{ fontWeight: 800, color: "#233862", marginBottom: "0.6rem" }}>แผนของ {teacher?.name} · {formatThaiDateKey(date)}</div>
+          <div style={{ fontWeight: 800, color: "#2B0A10", marginBottom: "0.6rem" }}>แผนของ {teacher?.name} · {formatThaiDateKey(date)}</div>
           <div style={{ display: "grid", gap: "0.5rem" }}>
             {periods.map(period => (
               <SupervisionPeriodRead
@@ -9664,7 +9665,7 @@ function AcademicPage({ employees, currentUser, planFocus = null }) {
                 role="tab"
                 aria-selected={active}
                 onClick={() => setTab(item.key)}
-                style={{ flex: "0 0 auto", minWidth: "max-content", minHeight: 44, border: "none", borderRadius: 10, padding: "0.55rem 0.9rem", background: active ? "linear-gradient(135deg, #008CFF, #0072D9)" : "transparent", color: active ? "#fff" : "#475569", fontWeight: 800, fontFamily: "inherit", fontSize: "0.92rem", cursor: "pointer", whiteSpace: "nowrap" }}
+                style={{ flex: "0 0 auto", minWidth: "max-content", minHeight: 44, border: "none", borderRadius: 10, padding: "0.55rem 0.9rem", background: active ? "linear-gradient(135deg, #A6192E, #8E1426)" : "transparent", color: active ? "#fff" : "#475569", fontWeight: 800, fontFamily: "inherit", fontSize: "0.92rem", cursor: "pointer", whiteSpace: "nowrap" }}
               >
                 {index + 1}. {item.label}
               </button>
@@ -9684,7 +9685,7 @@ function StudentRollPage({ employees, currentUser }) {
   const [view, setView] = useState("overview");
   if (!isExecutiveUser(currentUser)) return <StudentRollTeacher currentUser={currentUser} />;
   const tabBtn = (key, label) => (
-    <button type="button" onClick={() => setView(key)} aria-pressed={view === key} style={{ ...btnSecondary, flex: "none", minHeight: 40, fontWeight: 800, background: view === key ? "linear-gradient(135deg, #008CFF, #0072D9)" : "#fff", color: view === key ? "#fff" : "#233862", border: view === key ? "none" : "1px solid #cbd5e1" }}>{label}</button>
+    <button type="button" onClick={() => setView(key)} aria-pressed={view === key} style={{ ...btnSecondary, flex: "none", minHeight: 40, fontWeight: 800, background: view === key ? "linear-gradient(135deg, #A6192E, #8E1426)" : "#fff", color: view === key ? "#fff" : "#2B0A10", border: view === key ? "none" : "1px solid #cbd5e1" }}>{label}</button>
   );
   return (
     <div style={{ display: "grid", gap: "0.9rem", minWidth: 0 }}>
@@ -9728,7 +9729,7 @@ function StudentRollProxy({ employees, currentUser }) {
   return (
     <div style={{ display: "grid", gap: "0.9rem", minWidth: 0 }}>
       <Card padding="0.85rem">
-        <div style={{ fontWeight: 800, color: "#233862", fontSize: "1.05rem" }}>เช็คชื่อ / เช็คนม แทนครูประจำชั้น</div>
+        <div style={{ fontWeight: 800, color: "#2B0A10", fontSize: "1.05rem" }}>เช็คชื่อ / เช็คนม แทนครูประจำชั้น</div>
         <div style={{ color: "#64748b", fontSize: "0.82rem", marginTop: "0.25rem", lineHeight: 1.55 }}>ใช้เมื่อครูประจำชั้นไม่มาปฏิบัติงาน เลือกห้องแล้วเช็คชื่อได้ตามปกติ ข้อมูลจะบันทึกเข้าห้องของครูคนนั้นทันที (สถิติ บันทึกดื่มนม และไฟล์ส่งออกจะนับรวม) พร้อมหมายเหตุว่าบันทึกแทนโดย {currentUser?.name}</div>
         {error && <div style={{ marginTop: "0.5rem" }}><ErrorBox>{error}</ErrorBox></div>}
         <select aria-label="เลือกห้องที่จะเช็คชื่อแทน" value={teacherId} disabled={loading} onChange={event => setTeacherId(event.target.value)} style={{ ...inputStyle, marginTop: "0.65rem", width: "100%", maxWidth: 420, fontSize: "16px" }}>
@@ -9877,11 +9878,11 @@ function StudentRollTeacher({ currentUser, recordedBy = null }) {
 
   const rosterEditor = (
     <Card padding="0.85rem">
-      <div style={{ fontWeight: 800, color: "#233862", fontSize: "1.05rem" }}>รายชื่อนักเรียน{className ? ` ${className}` : ""} ({namedStudents.length} คน)</div>
+      <div style={{ fontWeight: 800, color: "#2B0A10", fontSize: "1.05rem" }}>รายชื่อนักเรียน{className ? ` ${className}` : ""} ({namedStudents.length} คน)</div>
       <div style={{ color: "#64748b", fontSize: "0.8rem", marginTop: "0.25rem" }}>พิมพ์ชื่อ-นามสกุล แล้วกด + หรือ Enter เพื่อเพิ่มทีละคน</div>
       <form onSubmit={event => { event.preventDefault(); addStudent(); }} style={{ display: "flex", gap: "0.4rem", marginTop: "0.6rem" }}>
         <input value={newName} onChange={event => setNewName(event.target.value)} placeholder="ชื่อ นามสกุล" disabled={saving} style={{ ...inputStyle, flex: 1, minWidth: 0, fontSize: "16px" }} />
-        <button type="submit" aria-label="เพิ่มนักเรียน" disabled={saving || !newName.trim()} style={{ ...btnPrimary, flex: "none", minWidth: 48, minHeight: 44, justifyContent: "center", background: "linear-gradient(135deg, #008CFF, #0072D9)", color: "#fff", cursor: saving || !newName.trim() ? "not-allowed" : "pointer" }}><Plus size={18} /></button>
+        <button type="submit" aria-label="เพิ่มนักเรียน" disabled={saving || !newName.trim()} style={{ ...btnPrimary, flex: "none", minWidth: 48, minHeight: 44, justifyContent: "center", background: "linear-gradient(135deg, #A6192E, #8E1426)", color: "#fff", cursor: saving || !newName.trim() ? "not-allowed" : "pointer" }}><Plus size={18} /></button>
       </form>
     </Card>
   );
@@ -9964,7 +9965,7 @@ function StudentRollTeacher({ currentUser, recordedBy = null }) {
               <div style={{ display: "grid", gap: "0.8rem", minWidth: 0 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 800, color: "#233862", fontSize: "1.05rem" }}>เช็คชื่อ{className ? ` ${className}` : ""}</div>
+                    <div style={{ fontWeight: 800, color: "#2B0A10", fontSize: "1.05rem" }}>เช็คชื่อ{className ? ` ${className}` : ""}</div>
                     <div style={{ color: "#64748b", fontSize: "0.8rem" }}>{formatThaiDateKey(date)} · นักเรียน {namedStudents.length} คน</div>
                   </div>
                   {baseline.days[date]?.saved_at && <span style={{ background: "#dcfce7", color: "#166534", fontWeight: 800, fontSize: "0.75rem", borderRadius: 20, padding: "0.25rem 0.6rem" }}>บันทึกแล้ว {fmtTime(baseline.days[date].saved_at)}{baseline.days[date]?.recorded_by?.name ? ` · บันทึกแทนโดย ${baseline.days[date].recorded_by.name}` : ""}</span>}
@@ -9995,10 +9996,10 @@ function StudentRollTeacher({ currentUser, recordedBy = null }) {
                         const tick = status => event => setMarks(current => ({ ...current, [student.id]: event.target.checked ? status : "" }));
                         return (
                           <Fragment key={student.id}>
-                            <tr style={{ borderTop: "1px solid #f1f5f9", background: value === "sick" ? "#EAF5FF" : undefined }}>
+                            <tr style={{ borderTop: "1px solid #f1f5f9", background: value === "sick" ? "#FBF5E6" : undefined }}>
                               <td style={{ ...rollTd, color: "#94a3b8", fontWeight: 700 }}>{student.number}</td>
-                              <td style={{ ...rollTd, textAlign: "left", fontWeight: 700, color: "#233862", whiteSpace: "nowrap", maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis" }} title={studentLabel(student)}>
-                                <button type="button" onClick={() => toggleSex(student)} disabled={saving} aria-label={`เพศของ ${studentLabel(student)}`} title="กดเพื่อสลับ ชาย/หญิง" style={{ marginRight: 4, minWidth: 24, height: 20, borderRadius: 6, border: "1px solid #cbd5e1", background: studentSex(student) === "M" ? "#DCEFFF" : studentSex(student) === "F" ? "#fce7f3" : "#fff7ed", color: studentSex(student) === "M" ? "#0072D9" : studentSex(student) === "F" ? "#be185d" : "#c2410c", fontWeight: 800, fontSize: "0.7rem", cursor: "pointer", padding: "0 4px", fontFamily: "inherit" }}>{studentSex(student) === "M" ? "ช" : studentSex(student) === "F" ? "ญ" : "?"}</button>
+                              <td style={{ ...rollTd, textAlign: "left", fontWeight: 700, color: "#2B0A10", whiteSpace: "nowrap", maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis" }} title={studentLabel(student)}>
+                                <button type="button" onClick={() => toggleSex(student)} disabled={saving} aria-label={`เพศของ ${studentLabel(student)}`} title="กดเพื่อสลับ ชาย/หญิง" style={{ marginRight: 4, minWidth: 24, height: 20, borderRadius: 6, border: "1px solid #cbd5e1", background: studentSex(student) === "M" ? "#F6EBCF" : studentSex(student) === "F" ? "#fce7f3" : "#fff7ed", color: studentSex(student) === "M" ? "#8E1426" : studentSex(student) === "F" ? "#be185d" : "#c2410c", fontWeight: 800, fontSize: "0.7rem", cursor: "pointer", padding: "0 4px", fontFamily: "inherit" }}>{studentSex(student) === "M" ? "ช" : studentSex(student) === "F" ? "ญ" : "?"}</button>
                                 {studentLabel(student)}
                               </td>
                               {["present", "personal", "sick", "absent"].map(status => (
@@ -10042,7 +10043,7 @@ function StudentRollTeacher({ currentUser, recordedBy = null }) {
                     </tbody>
                   </table>
                 </div>
-                <button type="button" onClick={saveMarks} disabled={saving} style={{ ...btnPrimary, flex: "none", width: "100%", minHeight: 48, background: "linear-gradient(135deg, #008CFF, #0072D9)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}>
+                <button type="button" onClick={saveMarks} disabled={saving} style={{ ...btnPrimary, flex: "none", width: "100%", minHeight: 48, background: "linear-gradient(135deg, #A6192E, #8E1426)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}>
                   {saving ? <RefreshCw size={16} style={{ animation: "spin 1s linear infinite" }} /> : <Save size={16} />}
                   {saving ? "กำลังบันทึก..." : "บันทึกการเช็คชื่อ"}
                 </button>
@@ -10111,7 +10112,7 @@ function MilkRecordFormCard({ entries }) {
   return (
     <Card>
       <div style={{ display: "grid", gap: "0.7rem", minWidth: 0 }}>
-        <div style={{ fontWeight: 800, color: "#233862", fontSize: "1.05rem" }}>🥛 แบบบันทึกการแจกนมให้นักเรียนดื่ม (รายเดือน)</div>
+        <div style={{ fontWeight: 800, color: "#2B0A10", fontSize: "1.05rem" }}>🥛 แบบบันทึกการแจกนมให้นักเรียนดื่ม (รายเดือน)</div>
         <div style={{ color: "#64748b", fontSize: "0.82rem" }}>ดึงจากการเช็คชื่อทุกวันของเดือน · มาเรียน = ขีดแดง <b style={{ color: "#dc2626" }}>/</b> · ถูกเลือกให้ดื่มนมแทนเพื่อน = <b style={{ color: "#dc2626" }}>//</b> · ขาด/ลา = ไม่ขีด · เสาร์–อาทิตย์ที่ไม่ได้เช็คชื่อ = เส้นทแยงแดงทั้งช่อง (แบบเดียวกับฟอร์มเดิม)</div>
         {error && <ErrorBox>{error}</ErrorBox>}
         {usable.length === 0 ? <div style={{ color: "#94a3b8", fontSize: "0.85rem" }}>ยังไม่มีห้องที่มีรายชื่อนักเรียน</div> : (
@@ -10131,7 +10132,7 @@ function MilkRecordFormCard({ entries }) {
               <button type="button" onClick={openPrint} style={{ ...btnSecondary, flex: "none", minHeight: 44 }}><Printer size={16} /> พิมพ์ / บันทึก PDF</button>
             </div>
             {record && (
-              <div style={{ fontSize: "0.85rem", color: "#233862" }}>
+              <div style={{ fontSize: "0.85rem", color: "#2B0A10" }}>
                 {milkClassLine(record.className).replace(/\s+/g, " ")} · นักเรียน {record.students.length} คน{record.sheets > 1 ? ` (${record.sheets} แผ่น)` : ""} · เช็คชื่อแล้ว {record.checkedDays} วัน · นมที่ดื่มรวม {record.totalCartons} กล่อง (ดื่มแทน {record.totalSubstitutes})
               </div>
             )}
@@ -10282,7 +10283,7 @@ function StudentStatsFormCard({ rows, employees }) {
   return (
     <Card>
       <div style={{ display: "grid", gap: "0.7rem", minWidth: 0 }}>
-        <div style={{ fontWeight: 800, color: "#233862", fontSize: "1.05rem" }}>แบบฟอร์มสถิตินักเรียนมาเรียนประจำวัน</div>
+        <div style={{ fontWeight: 800, color: "#2B0A10", fontSize: "1.05rem" }}>แบบฟอร์มสถิตินักเรียนมาเรียนประจำวัน</div>
         <div style={{ color: "#64748b", fontSize: "0.82rem" }}>ดึงจากการเช็คชื่อของทุกห้องตามวันที่เลือก · ไฟล์ Excel เติมลงสำเนาแบบฟอร์มต้นฉบับของโรงเรียน (เลย์เอาต์/สูตร/ฟอนต์เดิม)</div>
         {error && <ErrorBox>{error}</ErrorBox>}
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "end" }}>
@@ -10292,7 +10293,7 @@ function StudentStatsFormCard({ rows, employees }) {
           <button type="button" onClick={downloadExcel} disabled={busy} style={{ ...btnPrimary, flex: "none", minHeight: 44, background: "linear-gradient(135deg, #16a34a, #15803d)", color: "#fff", cursor: busy ? "wait" : "pointer" }}><Download size={16} /> {busy ? "กำลังสร้างไฟล์..." : "ดาวน์โหลด Excel (แบบฟอร์ม)"}</button>
           <button type="button" onClick={openPrint} style={{ ...btnSecondary, flex: "none", minHeight: 44 }}><Printer size={16} /> พิมพ์ / บันทึก PDF</button>
         </div>
-        <div style={{ fontSize: "0.85rem", color: "#233862" }}>รวมทั้งสิ้น: เต็ม {all.boys + all.girls} คน (ช {all.boys} ญ {all.girls}) · มา {all.boysPresent + all.girlsPresent} · ไม่มา {all.boys + all.girls - all.boysPresent - all.girlsPresent}</div>
+        <div style={{ fontSize: "0.85rem", color: "#2B0A10" }}>รวมทั้งสิ้น: เต็ม {all.boys + all.girls} คน (ช {all.boys} ญ {all.girls}) · มา {all.boysPresent + all.girlsPresent} · ไม่มา {all.boys + all.girls - all.boysPresent - all.girlsPresent}</div>
         {stats.unmapped.length > 0 && <div style={{ color: "#b45309", fontSize: "0.8rem" }}>⚠️ ห้องที่จับคู่ชั้นในแบบฟอร์มไม่ได้ (ตั้งชื่อห้องเป็น เช่น ป.2/1, อ.1, ม.3, เตรียมอนุบาล): {stats.unmapped.join(", ")}</div>}
         {unknownSex.length > 0 && <div role="alert" style={{ color: "#b45309", background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 8, padding: "0.5rem 0.7rem", fontSize: "0.8rem" }}><div style={{ fontWeight: 800 }}>⚠️ ยังไม่ระบุเพศ {unknownSex.length} คน (ไม่ถูกนับในช่อง ชาย/หญิง) — ระบบเดาจากคำนำหน้าชื่อไม่ได้</div><div style={{ marginTop: 2 }}>แก้ได้ที่หน้าเช็คชื่อนักเรียน: กดปุ่มหน้าชื่อ (? → ช → ญ) ให้ถูกต้อง</div><ul style={{ margin: "0.3rem 0 0", paddingLeft: "1.2rem", maxHeight: 160, overflowY: "auto" }}>{unknownSex.map((label, idx) => <li key={idx}>{label}</li>)}</ul></div>}
         {unchecked.length > 0 && <div style={{ color: "#b45309", fontSize: "0.8rem" }}>⚠️ ชั้นที่ยังไม่ได้เช็คชื่อวันนี้ (นับเป็นไม่มาเรียน): {unchecked.join(", ")}</div>}
@@ -10302,7 +10303,7 @@ function StudentStatsFormCard({ rows, employees }) {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem", marginTop: "0.4rem" }}>
               <thead><tr style={{ background: "#fffbeb" }}><th style={rollTh}>ชั้น</th><th style={{ ...rollTh, textAlign: "left" }}>นักเรียน</th><th style={rollTh}>สถานะ</th><th style={{ ...rollTh, textAlign: "left" }}>ผู้ดื่มนมแทน</th></tr></thead>
               <tbody>{milkRows.map(item => (
-                <tr key={`${item.level}-${item.student.id}`} style={{ borderTop: "1px solid #f1f5f9" }}><td style={rollTd}>{item.level}</td><td style={{ ...rollTd, textAlign: "left" }}>{studentLabel(item.student)}</td><td style={rollTd}>{statusLabel(item.status)}</td><td style={{ ...rollTd, textAlign: "left", color: item.choice ? "#233862" : "#b91c1c" }}>{milkLabel(item)}</td></tr>
+                <tr key={`${item.level}-${item.student.id}`} style={{ borderTop: "1px solid #f1f5f9" }}><td style={rollTd}>{item.level}</td><td style={{ ...rollTd, textAlign: "left" }}>{studentLabel(item.student)}</td><td style={rollTd}>{statusLabel(item.status)}</td><td style={{ ...rollTd, textAlign: "left", color: item.choice ? "#2B0A10" : "#b91c1c" }}>{milkLabel(item)}</td></tr>
               ))}</tbody>
             </table>
           )}
@@ -10457,7 +10458,7 @@ function StudentRollAdmin({ employees }) {
                       <span style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
                         <Avatar name={item.teacher?.name || item.book.class_name} index={index} />
                         <span style={{ flex: 1, minWidth: 0 }}>
-                          <span style={{ display: "block", fontWeight: 800, color: "#233862" }}>{item.book.class_name || "ไม่ระบุห้อง"}</span>
+                          <span style={{ display: "block", fontWeight: 800, color: "#2B0A10" }}>{item.book.class_name || "ไม่ระบุห้อง"}</span>
                           <span style={{ display: "block", fontSize: "0.75rem", color: "#64748b" }}>{item.teacher?.name || "ไม่พบชื่อครู"} · เช็คชื่อแล้ว {summary.totals.days} วัน</span>
                         </span>
                         <ChevronRight size={16} color="#94a3b8" />
@@ -10477,7 +10478,7 @@ function StudentRollAdmin({ employees }) {
       <Card>
         <div style={{ display: "grid", gap: "0.8rem", minWidth: 0 }}>
           <div>
-            <div style={{ fontWeight: 800, color: "#233862", fontSize: "1.05rem" }}>อัปรายชื่อจาก Excel</div>
+            <div style={{ fontWeight: 800, color: "#2B0A10", fontSize: "1.05rem" }}>อัปรายชื่อจาก Excel</div>
           </div>
           <Field label="ครูประจำชั้น">
             <select value={teacherId} onChange={event => setTeacherId(event.target.value)} style={{ ...selectStyle, boxSizing: "border-box", fontSize: "16px", maxWidth: "100%" }}>
@@ -10496,18 +10497,18 @@ function StudentRollAdmin({ employees }) {
           </label>
           {incoming.length > 0 && (
             <div style={{ display: "grid", gap: "0.45rem", minWidth: 0 }}>
-              <div style={{ fontWeight: 800, color: "#233862" }}>พบ {incoming.length} คน{classHint ? ` · ไฟล์ระบุ ${classHint}` : ""}</div>
+              <div style={{ fontWeight: 800, color: "#2B0A10" }}>พบ {incoming.length} คน{classHint ? ` · ไฟล์ระบุ ${classHint}` : ""}</div>
               <div style={{ maxHeight: 200, overflow: "auto", border: "1px solid #e2e8f0", borderRadius: 10, minWidth: 0 }}>
                 {incoming.map(student => (
                   <div key={student.id} style={{ display: "flex", gap: "0.45rem", padding: "0.35rem 0.65rem", borderTop: "1px solid #f1f5f9", minWidth: 0 }}>
                     <span style={{ fontWeight: 800, color: "#64748b", flex: "0 0 auto" }}>{student.number}</span>
-                    <span style={{ fontWeight: 700, color: "#233862", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{studentLabel(student)}</span>
+                    <span style={{ fontWeight: 700, color: "#2B0A10", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{studentLabel(student)}</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
-          <button type="button" onClick={saveRoster} disabled={saving} style={{ ...btnPrimary, flex: "none", width: "100%", maxWidth: 280, minHeight: 48, background: "linear-gradient(135deg, #008CFF, #0072D9)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}>
+          <button type="button" onClick={saveRoster} disabled={saving} style={{ ...btnPrimary, flex: "none", width: "100%", maxWidth: 280, minHeight: 48, background: "linear-gradient(135deg, #A6192E, #8E1426)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}>
             {saving ? <RefreshCw size={16} style={{ animation: "spin 1s linear infinite" }} /> : <Save size={16} />}
             {saving ? "กำลังบันทึก..." : "บันทึกรายชื่อ"}
           </button>
@@ -10524,7 +10525,7 @@ function StudentRollAdmin({ employees }) {
           <button type="button" onClick={() => setSelectedId("")} style={{ ...btnSecondary, flex: "none", minHeight: 44, marginBottom: "0.9rem" }}><ChevronLeft size={16} /> กลับ</button>
           <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 800, fontSize: "1.05rem", color: "#233862" }}>{selected.book.class_name || "ไม่ระบุห้อง"}</div>
+              <div style={{ fontWeight: 800, fontSize: "1.05rem", color: "#2B0A10" }}>{selected.book.class_name || "ไม่ระบุห้อง"}</div>
               <div style={{ color: "#64748b", fontSize: "0.82rem" }}>{selected.teacher?.name || "ไม่พบชื่อครู"} · {formatThaiDateKey(date)}</div>
             </div>
             {selected.savedAt ? <span style={{ background: "#dcfce7", color: "#166534", fontWeight: 800, fontSize: "0.75rem", borderRadius: 20, padding: "0.25rem 0.6rem", height: "fit-content" }}>บันทึกแล้ว {fmtTime(selected.savedAt)}</span> : <span style={{ background: "#fee2e2", color: "#b91c1c", fontWeight: 800, fontSize: "0.75rem", borderRadius: 20, padding: "0.25rem 0.6rem", height: "fit-content" }}>ยังไม่เช็คชื่อ</span>}
@@ -10552,7 +10553,7 @@ function StudentRollAdmin({ employees }) {
                   <span style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
                     <Avatar name={item.teacher?.name || item.book.class_name} index={index} />
                     <span style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ display: "block", fontWeight: 800, color: "#233862" }}>{item.book.class_name || "ไม่ระบุห้อง"}</span>
+                      <span style={{ display: "block", fontWeight: 800, color: "#2B0A10" }}>{item.book.class_name || "ไม่ระบุห้อง"}</span>
                       <span style={{ display: "block", fontSize: "0.75rem", color: "#64748b" }}>{item.teacher?.name || "ไม่พบชื่อครู"} · {item.book.students.length} คน</span>
                     </span>
                     <span style={{ background: item.savedAt ? "#dcfce7" : "#fee2e2", color: item.savedAt ? "#166534" : "#b91c1c", fontWeight: 800, fontSize: "0.72rem", borderRadius: 20, padding: "0.2rem 0.55rem", whiteSpace: "nowrap" }}>{item.savedAt ? "เช็คแล้ว" : "ยังไม่เช็ค"}</span>
@@ -11187,19 +11188,19 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
           table { border-collapse: collapse; font-family: Tahoma, sans-serif; width: 100%; font-size: 9pt; table-layout: fixed; }
           .daily-table { margin-top: 10px; }
           th, td { border: 1px solid #cbd5e1; padding: 3px 4px; vertical-align: middle; white-space: nowrap; overflow: hidden; }
-          th { background: #EAF5FF; font-weight: 700; }
-          .section-title { background: #f8fafc; color: #233862; font-size: 12px; text-align: left; }
+          th { background: #FBF5E6; font-weight: 700; }
+          .section-title { background: #f8fafc; color: #2B0A10; font-size: 12px; text-align: left; }
           .count { text-align: center; }
           .money { background: #ecfdf5; color: #166534; font-weight: 700; text-align: right; }
           .deduct { background: #fef2f2; color: #b91c1c; }
           .total { background: #fff7ed; color: #c2410c; font-weight: 800; }
-          .additional { background: #EAF5FF; color: #0072D9; font-weight: 800; }
+          .additional { background: #FBF5E6; color: #8E1426; font-weight: 800; }
         </style>
       </head>
       <body>
         <table>
           <tr>
-            <th colspan="19" style="font-size:15px;background:#DCEFFF;">สรุปเงินเดือน เดือน ${escapeHtml(month)}</th>
+            <th colspan="19" style="font-size:15px;background:#F6EBCF;">สรุปเงินเดือน เดือน ${escapeHtml(month)}</th>
           </tr>
           <tr>
             <th colspan="19" class="section-title">ตารางเงินเดือนประจำ / เทียบยอดเข้า บช</th>
@@ -11275,13 +11276,13 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
   const payrollInputStyle = {
     width: 88,
     minWidth: 72,
-    border: "1px solid #8FD0FF",
+    border: "1px solid #D9BC74",
     borderRadius: "6px",
     padding: "0.38rem 0.42rem",
     fontFamily: "inherit",
     fontSize: "0.75rem",
     fontWeight: 700,
-    color: "#233862",
+    color: "#2B0A10",
     background: "#fff",
     textAlign: "right",
   };
@@ -11296,9 +11297,9 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
   const payrollEditableCell = { ...payrollCellBase, background: "#fffbeb" };
   const payrollFormulaCell = { ...payrollCellBase, background: "#fef2f2", color: "#b91c1c", fontWeight: 800 };
   const payrollDeductCell = { ...payrollCellBase, background: "#fee2e2", color: "#b91c1c", fontWeight: 900 };
-  const payrollTotalCell = { ...payrollCellBase, background: "#DCEFFF", color: "#0072D9", fontWeight: 900 };
+  const payrollTotalCell = { ...payrollCellBase, background: "#F6EBCF", color: "#8E1426", fontWeight: 900 };
   const payrollRefundCell = { ...payrollCellBase, background: "#fff7ed", color: "#c2410c", fontWeight: 900 };
-  const payrollAdditionalCell = { ...payrollCellBase, background: "#EAF5FF", color: "#0072D9", fontWeight: 900 };
+  const payrollAdditionalCell = { ...payrollCellBase, background: "#FBF5E6", color: "#8E1426", fontWeight: 900 };
   const renderMoneyInput = (row, key, value, options = {}) => (
     <input
       type="number"
@@ -11313,10 +11314,10 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
     <Card padding="0" style={{ minWidth: 0, borderRadius: "4px", boxShadow: "none", borderColor: "#cbd5e1" }}>
       <div style={{ padding: "0.9rem 1rem", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#233862" }}>{title}</div>
+          <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#2B0A10" }}>{title}</div>
           <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: "0.15rem" }}>ช่องสีขาวกรอกแก้ได้ ช่องสีอื่นเป็นสูตรคำนวณอัตโนมัติ</div>
         </div>
-        <div style={{ fontSize: "0.75rem", color: "#0072D9", fontWeight: 800 }}>{rows.length} คน</div>
+        <div style={{ fontSize: "0.75rem", color: "#8E1426", fontWeight: 800 }}>{rows.length} คน</div>
       </div>
       <div style={{ overflowX: "auto", maxHeight: 430, width: "100%", minWidth: 0 }}>
         <table style={{ width: "max-content", minWidth: "100%", borderCollapse: "separate", borderSpacing: 0, fontSize: "0.75rem" }}>
@@ -11332,7 +11333,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
                   padding: "0.55rem 0.5rem",
                   borderRight: "1px solid #cbd5e1",
                   borderBottom: "1px solid #94a3b8",
-                  background: index <= 8 ? "#fef3c7" : index <= 15 ? "#fed7aa" : index === 16 ? "#B8E0FF" : "#f8fafc",
+                  background: index <= 8 ? "#fef3c7" : index <= 15 ? "#fed7aa" : index === 16 ? "#E8D6A6" : "#f8fafc",
                   color: "#334155",
                   fontWeight: 800,
                   whiteSpace: "nowrap",
@@ -11349,7 +11350,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
               return (
                 <tr key={row.emp.id}>
                   <td style={{ padding: "0.45rem 0.55rem", borderRight: "1px solid #e2e8f0", borderBottom: "1px solid #e2e8f0", background: "#dcfce7", minWidth: 180 }}>
-                    <div style={{ fontWeight: 800, color: "#233862" }}>{row.emp.name}</div>
+                    <div style={{ fontWeight: 800, color: "#2B0A10" }}>{row.emp.name}</div>
                     <div style={{ color: "#64748b", fontSize: "0.68rem" }}>{row.emp.department || "-"}</div>
                   </td>
                   <td style={payrollEditableCell}>
@@ -11363,7 +11364,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
                   <td style={payrollEditableCell}>{renderMoneyInput(row, "override_substitute_pay", adjustment.override_substitute_pay !== "" && adjustment.override_substitute_pay != null ? adjustment.override_substitute_pay : row.substitutePay)}</td>
                   {isDailyTable && (
                     <>
-                      <td style={{ ...payrollCellBase, background: "#EAF5FF", color: "#0072D9", fontWeight: 900, textAlign: "center" }}>{row.attendanceDays} วัน</td>
+                      <td style={{ ...payrollCellBase, background: "#FBF5E6", color: "#8E1426", fontWeight: 900, textAlign: "center" }}>{row.attendanceDays} วัน</td>
                       <td style={{ ...payrollCellBase, background: "#ecfdf5", color: "#166534", fontWeight: 900 }}>{formatMoney(row.dailyRate)} x {row.attendanceDays} = {formatMoney(row.baseSalary)}</td>
                     </>
                   )}
@@ -11404,7 +11405,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
       `}</style>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap", marginBottom: "0.65rem" }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: "1.35rem", color: "#233862", letterSpacing: 0 }}>สรุปเงินเดือน</h1>
+          <h1 style={{ margin: 0, fontSize: "1.35rem", color: "#2B0A10", letterSpacing: 0 }}>สรุปเงินเดือน</h1>
           <div style={{ color: "#64748b", fontSize: "0.74rem" }}>ข้อมูลจาก Supabase เดือน {month}</div>
         </div>
         <div style={{ display: "flex", alignItems: "end", gap: "0.5rem", flexWrap: "wrap" }}>
@@ -11436,18 +11437,18 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
             ["ยอดคืนรวม", formatMoney(totalRefund)],
             ["ต้องรับเพิ่มรวม", formatMoney(totalAdditionalPayment)],
           ].map(([label, value], index) => (
-            <div key={label} style={{ padding: "0.55rem 0.7rem", borderRight: index < 4 ? "1px solid #cbd5e1" : "none", background: index === 3 ? "#fff7ed" : index === 4 ? "#EAF5FF" : "#f8fafc", minWidth: 135 }}>
+            <div key={label} style={{ padding: "0.55rem 0.7rem", borderRight: index < 4 ? "1px solid #cbd5e1" : "none", background: index === 3 ? "#fff7ed" : index === 4 ? "#FBF5E6" : "#f8fafc", minWidth: 135 }}>
               <div style={{ color: "#64748b", fontSize: "0.68rem" }}>{label}</div>
-              <div style={{ color: index === 3 ? "#c2410c" : index === 4 ? "#0072D9" : "#233862", fontSize: "0.95rem", fontWeight: 900 }}>{value}</div>
+              <div style={{ color: index === 3 ? "#c2410c" : index === 4 ? "#8E1426" : "#2B0A10", fontSize: "0.95rem", fontWeight: 900 }}>{value}</div>
             </div>
           ))}
         </div>
-        {(loadingMonthData || monthDataError) && <div style={{ borderTop: "1px solid #cbd5e1", padding: "0.4rem 0.7rem", color: monthDataError ? "#b91c1c" : "#0072D9", fontSize: "0.72rem" }}>{monthDataError || "กำลังซิงก์ข้อมูลเดือนนี้..."}</div>}
+        {(loadingMonthData || monthDataError) && <div style={{ borderTop: "1px solid #cbd5e1", padding: "0.4rem 0.7rem", color: monthDataError ? "#b91c1c" : "#8E1426", fontSize: "0.72rem" }}>{monthDataError || "กำลังซิงก์ข้อมูลเดือนนี้..."}</div>}
       </div>
 
       <div className="payroll-insight-grid" style={{ marginBottom: "0.65rem" }}>
         <section style={{ border: "1px solid #cbd5e1", background: "#fff", minWidth: 300 }}>
-          <div style={{ padding: "0.42rem 0.65rem", background: "#DCEFFF", borderBottom: "1px solid #94a3b8", fontSize: "0.78rem", fontWeight: 900 }}>รายละเอียด {selectedEmployee?.name || "-"}</div>
+          <div style={{ padding: "0.42rem 0.65rem", background: "#F6EBCF", borderBottom: "1px solid #94a3b8", fontSize: "0.78rem", fontWeight: 900 }}>รายละเอียด {selectedEmployee?.name || "-"}</div>
           {selectedSummaryRow ? (
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.72rem" }}><tbody>
               {[
@@ -11457,7 +11458,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
                 ["สอนแทน / ขับรถ-เวร", `${formatMoney(selectedSummaryRow.substitutePay)} / ${formatMoney(selectedSummaryRow.dutyOrDriverPay)}`],
                 ["หักลา / หักรวม", `${formatMoney(selectedSummaryRow.leaveDeductions)} / ${formatMoney(selectedSummaryRow.deductions)}`],
                 [selectedSummaryRow.additionalPayment > 0 ? "ต้องรับเพิ่ม" : "ยอดคืน", formatMoney(selectedSummaryRow.additionalPayment || selectedSummaryRow.refundAmount)],
-              ].map(([label, value], index) => <tr key={label}><td style={{ padding: "0.29rem 0.55rem", color: "#475569", borderBottom: index < 5 ? "1px solid #e2e8f0" : "none" }}>{label}</td><td style={{ padding: "0.29rem 0.55rem", textAlign: "right", fontWeight: 800, color: index === 5 ? "#c2410c" : "#233862", borderBottom: index < 5 ? "1px solid #e2e8f0" : "none", whiteSpace: "nowrap" }}>{value}</td></tr>)}
+              ].map(([label, value], index) => <tr key={label}><td style={{ padding: "0.29rem 0.55rem", color: "#475569", borderBottom: index < 5 ? "1px solid #e2e8f0" : "none" }}>{label}</td><td style={{ padding: "0.29rem 0.55rem", textAlign: "right", fontWeight: 800, color: index === 5 ? "#c2410c" : "#2B0A10", borderBottom: index < 5 ? "1px solid #e2e8f0" : "none", whiteSpace: "nowrap" }}>{value}</td></tr>)}
             </tbody></table>
           ) : <div style={{ padding: "1rem", color: "#94a3b8", fontSize: "0.75rem" }}>ไม่มีข้อมูล</div>}
         </section>
@@ -11501,16 +11502,16 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
       <PageHeader title="เงินเดือน" count={selectedEmployee ? 1 : 0} />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "1rem", marginBottom: "1rem" }}>
-        <StatCard stat={{ label: "คนที่มีข้อมูลเดือนนี้", value: summaryRows.length, icon: Users, color: "#008CFF", bg: "#EAF5FF", trend: month }} />
+        <StatCard stat={{ label: "คนที่มีข้อมูลเดือนนี้", value: summaryRows.length, icon: Users, color: "#A6192E", bg: "#FBF5E6", trend: month }} />
         <StatCard stat={{ label: "เงินเข้า บช รวม", value: formatMoney(totalBankDeposit), icon: Building2, color: "#7c3aed", bg: "#f5f3ff", trend: "ยอดที่โอนเข้าก่อน" }} />
         <StatCard stat={{ label: "ยอดสุทธิหลังคำนวณ", value: formatMoney(totalPayout), icon: Calendar, color: "#059669", bg: "#ecfdf5", trend: `${totalAttendanceDays} วันทำงานรวม` }} />
         <StatCard stat={{ label: "ยอดคืนรวม", value: formatMoney(totalRefund), icon: DollarSign, color: "#d97706", bg: "#fff7ed", trend: "ยอดสุดท้าย" }} />
-        <StatCard stat={{ label: "ต้องรับเพิ่มรวม", value: formatMoney(totalAdditionalPayment), icon: Plus, color: "#008CFF", bg: "#EAF5FF", trend: "ยอดที่ต้องจ่ายเพิ่ม" }} />
+        <StatCard stat={{ label: "ต้องรับเพิ่มรวม", value: formatMoney(totalAdditionalPayment), icon: Plus, color: "#A6192E", bg: "#FBF5E6", trend: "ยอดที่ต้องจ่ายเพิ่ม" }} />
       </div>
 
       <Card>
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-          <div style={{ background: "#EAF5FF", border: "1px solid #B8E0FF", borderRadius: "12px", padding: "0.85rem", color: "#0072D9", fontSize: "0.85rem" }}>
+          <div style={{ background: "#FBF5E6", border: "1px solid #E8D6A6", borderRadius: "12px", padding: "0.85rem", color: "#8E1426", fontSize: "0.85rem" }}>
             {loadingMonthData
               ? `กำลังซิงก์ข้อมูลลงเวลา เวรรถ และสอนแทนของเดือน ${month} จาก Supabase...`
               : monthDataError || `ซิงก์ข้อมูลเดือน ${month} แล้ว: ลงเวลา ${monthAttendance.length} รายการ, ใบลาที่อนุมัติ ${monthLeaves.length} รายการ`}
@@ -11537,7 +11538,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
               <button onClick={exportExcel} style={{ ...btnSecondary, flex: "none", padding: "0.8rem 1rem" }}>
                 <FileText size={16} /> สรุปออก Excel
               </button>
-              <button onClick={handleSave} disabled={loadingConfig || loadingMonthData || Boolean(monthDataError) || saving} style={{ ...btnPrimary, flex: "none", padding: "0.8rem 1rem", background: saved ? "#16a34a" : "linear-gradient(135deg, #008CFF, #0072D9)", color: "#fff", cursor: loadingConfig || loadingMonthData || monthDataError || saving ? "not-allowed" : "pointer" }}>
+              <button onClick={handleSave} disabled={loadingConfig || loadingMonthData || Boolean(monthDataError) || saving} style={{ ...btnPrimary, flex: "none", padding: "0.8rem 1rem", background: saved ? "#16a34a" : "linear-gradient(135deg, #A6192E, #8E1426)", color: "#fff", cursor: loadingConfig || loadingMonthData || monthDataError || saving ? "not-allowed" : "pointer" }}>
                 {saving ? <RefreshCw size={16} style={{ animation: "spin 1s linear infinite" }} /> : saved ? <CheckCircle size={16} /> : <Save size={16} />}
                 {saving ? "กำลังคำนวณ..." : saved ? "คำนวณแล้ว" : "คำนวณเงินเดือนเดือนนี้"}
               </button>
@@ -11554,12 +11555,12 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem", marginTop: "1rem" }}>
         <Card>
-          <div style={{ fontSize: "1rem", fontWeight: 800, color: "#233862", marginBottom: "0.3rem" }}>ข้อมูลเงินเดือนรายคน</div>
+          <div style={{ fontSize: "1rem", fontWeight: 800, color: "#2B0A10", marginBottom: "0.3rem" }}>ข้อมูลเงินเดือนรายคน</div>
           <div style={{ fontSize: "0.8rem", color: "#64748b", marginBottom: "0.9rem" }}>ค่าหลักดึงจากเมนูพนักงาน และแก้เฉพาะเดือนนี้ได้ด้านล่าง</div>
           {selectedEmployee && (
             <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.9rem", display: "flex", flexDirection: "column", gap: "0.9rem" }}>
               <div>
-                <div style={{ fontWeight: 800, color: "#233862", fontSize: "1rem" }}>{selectedEmployee.name}</div>
+                <div style={{ fontWeight: 800, color: "#2B0A10", fontSize: "1rem" }}>{selectedEmployee.name}</div>
                 <div style={{ fontSize: "0.78rem", color: "#64748b" }}>{selectedEmployee.department || "ไม่ระบุแผนก"}</div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
@@ -11589,7 +11590,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
                   </Field>
                 </div>
               )}
-              <div style={{ background: "#EAF5FF", border: "1px solid #B8E0FF", borderRadius: "10px", padding: "0.75rem", color: "#0072D9", fontSize: "0.82rem", fontWeight: 700 }}>
+              <div style={{ background: "#FBF5E6", border: "1px solid #E8D6A6", borderRadius: "10px", padding: "0.75rem", color: "#8E1426", fontSize: "0.82rem", fontWeight: 700 }}>
                 ค่าสอนแทนคิดอัตโนมัติ: จินตคณิต {formatMoney(25)}, คาบปกติ {formatMoney(50)}, อนุบาลทั้งวัน {formatMoney(KINDERGARTEN_SUBSTITUTE_DAY_RATE)}
               </div>
               <div>
@@ -11602,9 +11603,9 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
                         key={type}
                         onClick={() => toggleLeaveDeductType(selectedEmployee.id, type)}
                         style={{
-                          border: `1px solid ${checked ? "#008CFF" : "#cbd5e1"}`,
-                          background: checked ? "#EAF5FF" : "#fff",
-                          color: checked ? "#0072D9" : "#475569",
+                          border: `1px solid ${checked ? "#A6192E" : "#cbd5e1"}`,
+                          background: checked ? "#FBF5E6" : "#fff",
+                          color: checked ? "#8E1426" : "#475569",
                           borderRadius: "999px",
                           padding: "0.35rem 0.65rem",
                           fontSize: "0.75rem",
@@ -11668,7 +11669,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
           )}
         </Card>
         <Card>
-          <div style={{ fontSize: "1rem", fontWeight: 800, color: "#233862", marginBottom: "0.3rem" }}>ตั้งค่าอัตราเวรที่คิดเงิน</div>
+          <div style={{ fontSize: "1rem", fontWeight: 800, color: "#2B0A10", marginBottom: "0.3rem" }}>ตั้งค่าอัตราเวรที่คิดเงิน</div>
           <div style={{ fontSize: "0.8rem", color: "#64748b", marginBottom: "0.9rem" }}>แสดงเฉพาะเวรที่มีผลกับเงินเดือน</div>
           {loadingConfig && <div style={{ color: "#64748b", fontSize: "0.8rem", marginBottom: "0.75rem" }}>กำลังโหลดค่าจาก Supabase...</div>}
           <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
@@ -11687,24 +11688,24 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
           </div>
         </Card>
         <Card>
-          <div style={{ fontSize: "1rem", fontWeight: 800, color: "#233862", marginBottom: "0.3rem" }}>สรุปของคนที่เลือก</div>
+          <div style={{ fontSize: "1rem", fontWeight: 800, color: "#2B0A10", marginBottom: "0.3rem" }}>สรุปของคนที่เลือก</div>
           <div style={{ fontSize: "0.8rem", color: "#64748b", marginBottom: "0.9rem" }}>ดึงจากข้อมูลลงเวลา ลา และเวรของเดือนนี้อัตโนมัติ</div>
           {!selectedSummaryRow ? (
             <div style={{ color: "#94a3b8", fontSize: "0.84rem" }}>ยังไม่มีข้อมูลของพนักงานคนนี้</div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.75rem" }}>
-                <div style={{ background: "#EAF5FF", borderRadius: "12px", padding: "0.85rem" }}>
-                  <div style={{ fontSize: "0.72rem", color: "#0072D9", fontWeight: 700 }}>มาทำงาน</div>
-                  <div style={{ fontSize: "1.25rem", color: "#233862", fontWeight: 800 }}>{selectedSummaryRow.attendanceDays} วัน</div>
+                <div style={{ background: "#FBF5E6", borderRadius: "12px", padding: "0.85rem" }}>
+                  <div style={{ fontSize: "0.72rem", color: "#8E1426", fontWeight: 700 }}>มาทำงาน</div>
+                  <div style={{ fontSize: "1.25rem", color: "#2B0A10", fontWeight: 800 }}>{selectedSummaryRow.attendanceDays} วัน</div>
                 </div>
                 <div style={{ background: "#f5f3ff", borderRadius: "12px", padding: "0.85rem" }}>
                   <div style={{ fontSize: "0.72rem", color: "#7c3aed", fontWeight: 700 }}>ยอดคืน</div>
-                  <div style={{ fontSize: "1.25rem", color: "#233862", fontWeight: 800 }}>{formatMoney(selectedSummaryRow.refundAmount)}</div>
+                  <div style={{ fontSize: "1.25rem", color: "#2B0A10", fontWeight: 800 }}>{formatMoney(selectedSummaryRow.refundAmount)}</div>
                 </div>
-                <div style={{ background: "#EAF5FF", borderRadius: "12px", padding: "0.85rem" }}>
-                  <div style={{ fontSize: "0.72rem", color: "#0072D9", fontWeight: 700 }}>ต้องรับเพิ่ม</div>
-                  <div style={{ fontSize: "1.25rem", color: "#233862", fontWeight: 800 }}>{formatMoney(selectedSummaryRow.additionalPayment)}</div>
+                <div style={{ background: "#FBF5E6", borderRadius: "12px", padding: "0.85rem" }}>
+                  <div style={{ fontSize: "0.72rem", color: "#8E1426", fontWeight: 700 }}>ต้องรับเพิ่ม</div>
+                  <div style={{ fontSize: "1.25rem", color: "#2B0A10", fontWeight: 800 }}>{formatMoney(selectedSummaryRow.additionalPayment)}</div>
                 </div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.75rem" }}>
@@ -11718,12 +11719,12 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
                 </div>
                 <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.8rem" }}>
                   <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "0.2rem" }}>สอนแทน</div>
-                  <div style={{ fontWeight: 800, color: "#008CFF" }}>{selectedSummaryRow.substituteCount} คาบ / {formatMoney(selectedSummaryRow.substitutePay)}</div>
+                  <div style={{ fontWeight: 800, color: "#A6192E" }}>{selectedSummaryRow.substituteCount} คาบ / {formatMoney(selectedSummaryRow.substitutePay)}</div>
                 </div>
                 {selectedSummaryRow.payType === "monthly" && (
                   <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.8rem" }}>
                     <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "0.2rem" }}>เงินเดือนตาม PDF</div>
-                    <div style={{ fontWeight: 800, color: "#233862" }}>{formatMoney(selectedSummaryRow.bankGrossSalary)}</div>
+                    <div style={{ fontWeight: 800, color: "#2B0A10" }}>{formatMoney(selectedSummaryRow.bankGrossSalary)}</div>
                   </div>
                 )}
                 <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "12px", padding: "0.8rem" }}>
@@ -11738,7 +11739,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
               <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.85rem", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "0.75rem" }}>
                 <div>
                   <div style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: 700 }}>ยอดก่อนหัก</div>
-                  <div style={{ color: "#233862", fontWeight: 800 }}>{formatMoney(selectedSummaryRow.grossPay)}</div>
+                  <div style={{ color: "#2B0A10", fontWeight: 800 }}>{formatMoney(selectedSummaryRow.grossPay)}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: 700 }}>ปรับเพิ่ม</div>
@@ -11783,10 +11784,10 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
         <Card padding="0">
           <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
             <div>
-              <div style={{ fontSize: "1rem", fontWeight: 800, color: "#233862" }}>ข้อมูลเงินเดือนที่บันทึกไว้แล้ว</div>
+              <div style={{ fontSize: "1rem", fontWeight: 800, color: "#2B0A10" }}>ข้อมูลเงินเดือนที่บันทึกไว้แล้ว</div>
               <div style={{ fontSize: "0.8rem", color: "#64748b" }}>แสดงตามสูตรปัจจุบัน เทียบกับ snapshot เดือน {month}</div>
             </div>
-            <div style={{ background: "#EAF5FF", borderRadius: "999px", padding: "0.35rem 0.8rem", color: "#0072D9", fontWeight: 700, fontSize: "0.8rem" }}>
+            <div style={{ background: "#FBF5E6", borderRadius: "999px", padding: "0.35rem 0.8rem", color: "#8E1426", fontWeight: 700, fontSize: "0.8rem" }}>
               {selectedEmployee?.name || "ยังไม่ได้เลือกพนักงาน"}
             </div>
           </div>
@@ -11809,7 +11810,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
                 ].map(([label, value]) => (
                   <div key={label} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.8rem" }}>
                     <div style={{ fontSize: "0.74rem", color: "#64748b", marginBottom: "0.2rem" }}>{label}</div>
-                    <div style={{ fontWeight: 800, color: "#233862" }}>{value}</div>
+                    <div style={{ fontWeight: 800, color: "#2B0A10" }}>{value}</div>
                   </div>
                 ))}
               </div>
@@ -11821,7 +11822,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
         <Card padding="0">
           <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
             <div>
-              <div style={{ fontSize: "1rem", fontWeight: 800, color: "#233862" }}>รายการที่ใช้คิดเงินเดือน</div>
+              <div style={{ fontSize: "1rem", fontWeight: 800, color: "#2B0A10" }}>รายการที่ใช้คิดเงินเดือน</div>
               <div style={{ fontSize: "0.8rem", color: "#64748b" }}>ดูรายการบวกและรายการหักของพนักงานคนนี้ในบล็อกเดียว</div>
             </div>
             <div style={{ background: "#fff7ed", borderRadius: "999px", padding: "0.35rem 0.8rem", color: "#d97706", fontWeight: 700, fontSize: "0.8rem" }}>
@@ -11847,7 +11848,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
                     value: formatMoney(selectedSummaryRow.dutyOrDriverPay),
                     color: "#7c3aed",
                   },
-                  { label: "สอนแทน", detail: `${selectedSummaryRow.substituteCount} คาบ`, value: formatMoney(selectedSummaryRow.substitutePay), color: "#008CFF" },
+                  { label: "สอนแทน", detail: `${selectedSummaryRow.substituteCount} คาบ`, value: formatMoney(selectedSummaryRow.substitutePay), color: "#A6192E" },
                   { label: "ปรับเพิ่ม", detail: selectedSummaryRow.adjustmentNote || "รายการพิเศษ", value: formatMoney(selectedSummaryRow.adjustmentAdd), color: "#16a34a" },
                   { label: "หักลา", detail: selectedSummaryRow.payType === "daily" ? `ลา ${selectedSummaryRow.recordedLeaveDays.toFixed(1)} วัน ไม่ได้ค่าจ้างวันนั้นและไม่หักซ้ำ` : `${selectedSummaryRow.leaveDeductDays.toFixed(1)} วัน x ${formatMoney(MONTHLY_LEAVE_DEDUCT_RATE)}${selectedSummaryRow.medicalLeaveDays > 0 ? `, ใบนัดหมอ ${selectedSummaryRow.medicalLeaveDays.toFixed(1)} วันไม่หัก` : ""}`, value: `- ${formatMoney(selectedSummaryRow.leaveDeductions)}`, color: "#dc2626" },
                   { label: "หัก 3% ตาม PDF", detail: selectedSummaryRow.payType === "monthly" ? `${formatMoney(selectedSummaryRow.bankGrossSalary)} - ${formatMoney(selectedSummaryRow.bankDeposit)}` : "เฉพาะรายเดือน", value: `- ${formatMoney(selectedSummaryRow.monthlyRecurringDeduction)}`, color: "#dc2626" },
@@ -11857,7 +11858,7 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
                 ].filter(Boolean).map(item => (
                   <div key={item.label} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "0.75rem", alignItems: "center", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.85rem 1rem" }}>
                     <div>
-                      <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "#233862" }}>{item.label}</div>
+                      <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "#2B0A10" }}>{item.label}</div>
                       <div style={{ fontSize: "0.76rem", color: "#64748b", marginTop: "0.18rem" }}>{item.detail}</div>
                     </div>
                     <div style={{ fontSize: "0.95rem", fontWeight: 800, color: item.color, whiteSpace: "nowrap" }}>{item.value}</div>
@@ -11870,12 +11871,12 @@ function PayrollPage({ employees, attendance, leaves, settings, financeInfo = {}
                   </div>
                   <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#d97706", whiteSpace: "nowrap" }}>{formatMoney(selectedSummaryRow.refundAmount)}</div>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "0.75rem", alignItems: "center", background: "#EAF5FF", border: "1px solid #B8E0FF", borderRadius: "12px", padding: "0.95rem 1rem" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "0.75rem", alignItems: "center", background: "#FBF5E6", border: "1px solid #E8D6A6", borderRadius: "12px", padding: "0.95rem 1rem" }}>
                   <div>
-                    <div style={{ fontSize: "0.84rem", fontWeight: 800, color: "#0072D9" }}>ต้องรับเพิ่ม</div>
-                    <div style={{ fontSize: "0.76rem", color: "#008CFF", marginTop: "0.18rem" }}>MAX(0, รวมเข้า บช หลังคำนวณ - เงินเข้า บช ตาม PDF)</div>
+                    <div style={{ fontSize: "0.84rem", fontWeight: 800, color: "#8E1426" }}>ต้องรับเพิ่ม</div>
+                    <div style={{ fontSize: "0.76rem", color: "#A6192E", marginTop: "0.18rem" }}>MAX(0, รวมเข้า บช หลังคำนวณ - เงินเข้า บช ตาม PDF)</div>
                   </div>
-                  <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#008CFF", whiteSpace: "nowrap" }}>{formatMoney(selectedSummaryRow.additionalPayment)}</div>
+                  <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#A6192E", whiteSpace: "nowrap" }}>{formatMoney(selectedSummaryRow.additionalPayment)}</div>
                 </div>
               </div>
             )}
@@ -11912,7 +11913,7 @@ function SettingsPage({ settings, onRefresh }) {
       <PageHeader title="ตั้งค่าเวลาทำงาน" />
       <Card>
         <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem", maxWidth: 500 }}>
-          <div style={{ background: "#EAF5FF", border: "1px solid #B8E0FF", borderRadius: "10px", padding: "0.75rem", fontSize: "0.85rem", color: "#0072D9" }}>
+          <div style={{ background: "#FBF5E6", border: "1px solid #E8D6A6", borderRadius: "10px", padding: "0.75rem", fontSize: "0.85rem", color: "#8E1426" }}>
             ⏰ ระบบจะคำนวณ "มาสาย" และ "กลับก่อน" ตามเวลาที่ตั้งนี้
           </div>
 
@@ -11929,7 +11930,7 @@ function SettingsPage({ settings, onRefresh }) {
             <div style={{ fontSize: "0.72rem", color: "#94a3b8", marginTop: "0.25rem" }}>เช่น 5 นาที = มาสายไม่เกิน 5 นาทียังถือว่าตรงเวลา</div>
           </Field>
 
-          <button onClick={handleSave} disabled={saving} style={{ padding: "0.85rem", borderRadius: "10px", border: "none", background: saved ? "#16a34a" : "linear-gradient(135deg, #008CFF, #0072D9)", color: "#fff", fontWeight: 700, fontSize: "0.95rem", cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}>
+          <button onClick={handleSave} disabled={saving} style={{ padding: "0.85rem", borderRadius: "10px", border: "none", background: saved ? "#16a34a" : "linear-gradient(135deg, #A6192E, #8E1426)", color: "#fff", fontWeight: 700, fontSize: "0.95rem", cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}>
             {saving ? <RefreshCw size={18} style={{ animation: "spin 1s linear infinite" }} /> : saved ? <CheckCircle size={18} /> : <Save size={18} />}
             {saving ? "กำลังบันทึก..." : saved ? "บันทึกแล้ว!" : "บันทึกการตั้งค่า"}
           </button>
@@ -12005,7 +12006,7 @@ function WorkHourOverridesCard({ onRefresh }) {
           <Field label="เวลาเลิก"><input type="time" value={form.end} onChange={e => setForm(f => ({ ...f, end: e.target.value }))} style={inputStyle} /></Field>
         </div>
         {msg && <div style={{ fontSize: "0.85rem", color: msg.startsWith("บันทึกแล้ว") || msg.startsWith("ลบแล้ว") ? "#15803d" : "#b91c1c" }}>{msg}</div>}
-        <button disabled={busy} onClick={save} style={{ padding: "0.75rem", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #008CFF, #0072D9)", color: "#fff", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>{busy ? "กำลังบันทึก..." : "บันทึกเวลาเฉพาะครู"}</button>
+        <button disabled={busy} onClick={save} style={{ padding: "0.75rem", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #A6192E, #8E1426)", color: "#fff", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>{busy ? "กำลังบันทึก..." : "บันทึกเวลาเฉพาะครู"}</button>
       </div>
     </Card>
     </div>
@@ -12122,7 +12123,7 @@ function FinancePortal({ employees, attendance, leaves, settings }) {
       <Card>
         <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
           <div>
-            <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#233862" }}>ศูนย์รวมเงินเดือนและค่าใช้จ่าย</div>
+            <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#2B0A10" }}>ศูนย์รวมเงินเดือนและค่าใช้จ่าย</div>
             <div style={{ fontSize: "0.82rem", color: "#64748b", marginTop: "0.2rem" }}>ใช้ฐานข้อมูล Supabase ชุดเดียวกับ HR ไม่ต้องเข้าสู่ระบบใหม่</div>
           </div>
           <div style={{ width: 180 }}>
@@ -12139,9 +12140,9 @@ function FinancePortal({ employees, attendance, leaves, settings }) {
             key={item.key}
             onClick={() => setTab(item.key)}
             style={{
-              border: `1.5px solid ${tab === item.key ? "#008CFF" : "#e2e8f0"}`,
-              background: tab === item.key ? "#EAF5FF" : "#fff",
-              color: tab === item.key ? "#0072D9" : "#475569",
+              border: `1.5px solid ${tab === item.key ? "#A6192E" : "#e2e8f0"}`,
+              background: tab === item.key ? "#FBF5E6" : "#fff",
+              color: tab === item.key ? "#8E1426" : "#475569",
               borderRadius: "10px",
               padding: "0.65rem 0.9rem",
               fontWeight: 800,
@@ -12157,7 +12158,7 @@ function FinancePortal({ employees, attendance, leaves, settings }) {
       {tab === "overview" && (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "1rem", marginBottom: "1rem" }}>
-            <StatCard stat={{ label: "ยอดสุทธิหลังคำนวณ", value: loadingPayroll ? "..." : formatMoney(payrollRealSalaryTotal), icon: DollarSign, color: "#008CFF", bg: "#EAF5FF", trend: month }} />
+            <StatCard stat={{ label: "ยอดสุทธิหลังคำนวณ", value: loadingPayroll ? "..." : formatMoney(payrollRealSalaryTotal), icon: DollarSign, color: "#A6192E", bg: "#FBF5E6", trend: month }} />
             <StatCard stat={{ label: "ค่าใช้จ่ายอื่น", value: formatMoney(manualExpenseTotal), icon: FileText, color: "#dc2626", bg: "#fef2f2", trend: "ค่าไฟ ค่าน้ำ และอื่นๆ" }} />
             <StatCard stat={{ label: "รายรับรวม", value: formatMoney(incomeTotal), icon: TrendingUp, color: "#16a34a", bg: "#ecfdf5", trend: "กรอกในเครื่องคิด" }} />
             <StatCard stat={{ label: "ยอดคืนรวม", value: formatMoney(payrollRefundTotal), icon: Building2, color: "#d97706", bg: "#fff7ed", trend: "จาก payroll" }} />
@@ -12165,7 +12166,7 @@ function FinancePortal({ employees, attendance, leaves, settings }) {
 
           <Card padding="0">
             <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid #f1f5f9" }}>
-              <div style={{ fontSize: "1rem", fontWeight: 800, color: "#233862" }}>เงินเดือนที่บันทึกแล้วในเดือนนี้</div>
+              <div style={{ fontSize: "1rem", fontWeight: 800, color: "#2B0A10" }}>เงินเดือนที่บันทึกแล้วในเดือนนี้</div>
               <div style={{ fontSize: "0.8rem", color: "#64748b" }}>ดึงจากตาราง payroll โดยตรง</div>
             </div>
             <div style={{ overflowX: "auto" }}>
@@ -12185,7 +12186,7 @@ function FinancePortal({ employees, attendance, leaves, settings }) {
                     const realSalary = note.real_salary || parseMoney(row.total);
                     return (
                       <tr key={row.id} style={{ borderBottom: "1px solid #f8fafc" }}>
-                        <td style={{ padding: "0.75rem 0.9rem", fontWeight: 800, color: "#233862" }}>{row.employees?.name || "-"}</td>
+                        <td style={{ padding: "0.75rem 0.9rem", fontWeight: 800, color: "#2B0A10" }}>{row.employees?.name || "-"}</td>
                         <td style={{ padding: "0.75rem 0.9rem", color: "#64748b" }}>{row.employees?.department || "-"}</td>
                         <td style={{ padding: "0.75rem 0.9rem" }}>{row.work_days || 0} วัน</td>
                         <td style={{ padding: "0.75rem 0.9rem" }}>{row.duty_count || 0} วัน</td>
@@ -12209,7 +12210,7 @@ function FinancePortal({ employees, attendance, leaves, settings }) {
         <Card>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap", marginBottom: "1rem" }}>
             <div>
-              <div style={{ fontSize: "1rem", fontWeight: 800, color: "#233862" }}>เครื่องคิดรายรับรายจ่ายโรงเรียน</div>
+              <div style={{ fontSize: "1rem", fontWeight: 800, color: "#2B0A10" }}>เครื่องคิดรายรับรายจ่ายโรงเรียน</div>
               <div style={{ fontSize: "0.8rem", color: "#64748b" }}>ใช้รวมกับเงินเดือนที่บันทึกใน Supabase เดือน {month}</div>
             </div>
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
@@ -12242,15 +12243,15 @@ function FinancePortal({ employees, attendance, leaves, settings }) {
 
 function PayrollStandaloneApp({ employees, attendance, leaves, settings, currentUser, onBack, onLogout }) {
   return (
-    <div style={{ fontFamily: "'Anuphan', 'Sarabun', 'Noto Sans Thai', sans-serif", background: "#F3F8FD", minHeight: "100vh" }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600;700&family=Sarabun:wght@400;600;700&display=swap'); * { box-sizing: border-box; margin: 0; padding: 0; } @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-      <header style={{ position: "sticky", top: 0, zIndex: 100, background: "#fff", borderBottom: "1px solid #e2e8f0", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", padding: "0 1rem", boxShadow: "0 4px 24px rgba(0,140,255,0.08)" }}>
+    <div style={{ fontFamily: "'Sarabun', 'Noto Sans Thai', sans-serif", background: "#FAF7F3", minHeight: "100vh" }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700;800&display=swap'); * { box-sizing: border-box; margin: 0; padding: 0; } @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } h1, h2, h3, [style*="font-weight: 800"], [style*="font-weight: 900"] { font-family: 'Kanit', 'Sarabun', 'Noto Sans Thai', sans-serif; letter-spacing: 0.1px; } [style*="font-weight: 900"] { font-weight: 700 !important; } [style*="font-weight: 800"] { font-weight: 600 !important; } @keyframes cleaningPulse { 0%, 100% { box-shadow: 0 0 0 5px rgba(245,158,11,0.25), 0 10px 22px rgba(180,83,9,0.18); } 50% { box-shadow: 0 0 0 9px rgba(245,158,11,0.12), 0 10px 22px rgba(180,83,9,0.18); } } @media (prefers-reduced-motion: reduce) { [style*="cleaningPulse"] { animation: none !important; } }`}</style>
+      <header style={{ position: "sticky", top: 0, zIndex: 100, background: "#fff", borderBottom: "1px solid #e2e8f0", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", padding: "0 1rem", boxShadow: "0 4px 24px rgba(166,25,46,0.08)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", minWidth: 0 }}>
           <div style={{ width: 38, height: 38, borderRadius: "12px", background: "linear-gradient(135deg, #16a34a, #0f766e)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <DollarSign size={20} color="#fff" />
           </div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ color: "#233862", fontWeight: 900, fontSize: "1rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>เว็บคิดเงินเดือน</div>
+            <div style={{ color: "#2B0A10", fontWeight: 900, fontSize: "1rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>เว็บคิดเงินเดือน</div>
             <div style={{ color: "#64748b", fontSize: "0.72rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>ดึงข้อมูลจาก Supabase ชุดเดียวกับ HR</div>
           </div>
         </div>
@@ -12276,7 +12277,7 @@ function StatCard({ stat }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div>
           <div style={{ color: "#64748b", fontSize: "0.8rem", fontWeight: 500, marginBottom: "0.4rem" }}>{stat.label}</div>
-          <div style={{ fontSize: "2rem", fontWeight: 800, color: "#233862", lineHeight: 1 }}>{stat.value}</div>
+          <div style={{ fontSize: "2rem", fontWeight: 800, color: "#2B0A10", lineHeight: 1 }}>{stat.value}</div>
           <div style={{ fontSize: "0.72rem", color: stat.color, marginTop: "0.35rem", fontWeight: 600 }}>{stat.trend}</div>
         </div>
         <div style={{ background: stat.bg, borderRadius: "12px", padding: "0.6rem", display: "flex" }}><Icon size={22} color={stat.color} /></div>
@@ -12497,7 +12498,7 @@ export default function HRApp() {
   const myAttToday = activityLog.find(a => a.employee_id === actingUser.id && isToday(a.check_in));
 
   const stats = hasAdminRights(actingUser) ? [
-    { label: "พนักงานทั้งหมด", value: employees.length, icon: Users, color: "#008CFF", bg: "#EAF5FF", trend: "ข้อมูลจริง" },
+    { label: "พนักงานทั้งหมด", value: employees.length, icon: Users, color: "#A6192E", bg: "#FBF5E6", trend: "ข้อมูลจริง" },
     { label: "ลงเวลาวันนี้", value: todayAttendance.length, icon: CheckCircle, color: "#059669", bg: "#ecfdf5", trend: `${employees.length > 0 ? Math.round(todayAttendance.length / employees.length * 100) : 0}%` },
     { label: "มาสายวันนี้", value: todayAttendance.filter(a => checkLate(a.check_in, wsOf(a.employee_id, settings?.work_start), settings?.late_grace_minutes)?.late).length, icon: AlertCircle, color: "#dc2626", bg: "#fef2f2", trend: "นับเฉพาะวันนี้" },
     { label: "รออนุมัติลา", value: pendingLeaves, icon: Umbrella, color: "#d97706", bg: "#fef3c7", trend: pendingLeaves > 0 ? "ต้องดำเนินการ" : "ไม่มี" },
@@ -12568,8 +12569,8 @@ export default function HRApp() {
 
   if (activePage === "payrollStandalone" && isSalaryOwner(currentUser)) {
     return loading ? (
-      <div style={{ fontFamily: "'Anuphan', 'Sarabun', 'Noto Sans Thai', sans-serif", background: "#F3F8FD", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b" }}>
-        <style>{`@import url('https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600;700&family=Sarabun:wght@400;600;700&display=swap'); @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <div style={{ fontFamily: "'Sarabun', 'Noto Sans Thai', sans-serif", background: "#FAF7F3", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b" }}>
+        <style>{`@import url('https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700;800&display=swap'); @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
         <div style={{ textAlign: "center" }}>
           <RefreshCw size={32} style={{ animation: "spin 1s linear infinite", margin: "0 auto 1rem" }} />
           <div>กำลังโหลดเว็บเงินเดือน...</div>
@@ -12593,11 +12594,11 @@ export default function HRApp() {
 
   const rail = !isMobile && desktopSidebarCollapsed;
   return (
-    <div style={{ fontFamily: "'Anuphan', 'Sarabun', 'Noto Sans Thai', sans-serif", background: "#F3F8FD", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600;700&family=Sarabun:wght@400;600;700&display=swap'); * { box-sizing: border-box; margin: 0; padding: 0; } @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+    <div style={{ fontFamily: "'Sarabun', 'Noto Sans Thai', sans-serif", background: "#FAF7F3", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700;800&display=swap'); * { box-sizing: border-box; margin: 0; padding: 0; } @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } h1, h2, h3, [style*="font-weight: 800"], [style*="font-weight: 900"] { font-family: 'Kanit', 'Sarabun', 'Noto Sans Thai', sans-serif; letter-spacing: 0.1px; } [style*="font-weight: 900"] { font-weight: 700 !important; } [style*="font-weight: 800"] { font-weight: 600 !important; } @keyframes cleaningPulse { 0%, 100% { box-shadow: 0 0 0 5px rgba(245,158,11,0.25), 0 10px 22px rgba(180,83,9,0.18); } 50% { box-shadow: 0 0 0 9px rgba(245,158,11,0.12), 0 10px 22px rgba(180,83,9,0.18); } } @media (prefers-reduced-motion: reduce) { [style*="cleaningPulse"] { animation: none !important; } }`}</style>
       <PreviewBanner />
 
-      <header style={{ background: "#fff", borderBottom: "1px solid #E4EEF8", borderTop: "3px solid #008CFF", height: 60, display: "flex", alignItems: "center", padding: "0 1rem", gap: "0.75rem", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 4px 24px rgba(0,140,255,0.08)" }}>
+      <header style={{ background: "#fff", backgroundImage: "linear-gradient(#A6192E 0 4px, #fff 4px 7px, #A6192E 7px 9px, transparent 9px)", borderBottom: "1px solid #F0E6DC", height: 60, display: "flex", alignItems: "center", padding: "0 1rem", gap: "0.75rem", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 4px 24px rgba(166,25,46,0.08)" }}>
         <button
           onClick={() => isMobile ? setSidebarOpen(open => !open) : setDesktopSidebarCollapsed(collapsed => !collapsed)}
           title={isMobile ? "เปิดเมนู" : (desktopSidebarCollapsed ? "เปิดแถบเมนู" : "พับแถบเมนู")}
@@ -12607,9 +12608,9 @@ export default function HRApp() {
           <Menu size={20} />
         </button>
         <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", minWidth: 0, flex: isMobile ? 1 : "0 0 auto" }}>
-          <div style={{ width: 34, height: 34, borderRadius: "10px", background: "linear-gradient(135deg, #008CFF, #0072D9)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Shield size={18} color="#fff" /></div>
+          <div style={{ width: 34, height: 34, borderRadius: "10px", background: "linear-gradient(135deg, #A6192E, #8E1426)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Shield size={18} color="#fff" /></div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#233862", lineHeight: 1.1 }}>HR System</div>
+            <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#2B0A10", lineHeight: 1.1 }}>HR System</div>
             <div style={{ fontSize: "0.65rem", color: "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>โรงเรียนนิมิตศึกษา</div>
           </div>
         </div>
@@ -12617,7 +12618,7 @@ export default function HRApp() {
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginLeft: "auto" }}>
           {!isMobile && (
             <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#233862" }}>{actingUser.name}</div>
+              <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#2B0A10" }}>{actingUser.name}</div>
               <div style={{ fontSize: "0.7rem", color: "#64748b" }}>
                 {actingUser.role === "admin" ? "👑 Admin" : "พนักงาน"} • {actingUser.department}
               </div>
@@ -12634,12 +12635,12 @@ export default function HRApp() {
                 if (["employee", "finance", "report", "settings"].includes(activePage)) setActivePage("dashboard");
                 setTeacherPreview(true);
               }}
-              style={{ background: teacherPreview ? "#DCEFFF" : "#EAF5FF", border: "1.5px solid #8FD0FF", borderRadius: "10px", padding: "0.4rem 0.7rem", cursor: "pointer", color: "#0072D9", fontFamily: "inherit", fontSize: "0.78rem", fontWeight: 800, whiteSpace: "nowrap" }}
+              style={{ background: teacherPreview ? "#F6EBCF" : "#FBF5E6", border: "1.5px solid #D9BC74", borderRadius: "10px", padding: "0.4rem 0.7rem", cursor: "pointer", color: "#8E1426", fontFamily: "inherit", fontSize: "0.78rem", fontWeight: 800, whiteSpace: "nowrap" }}
             >
               {teacherPreview ? "กลับหน้าแอดมิน" : "ดูหน้าครู"}
             </button>
           )}
-          <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #008CFF, #FF9A3C)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "0.9rem", flexShrink: 0 }}>{actingUser.name?.[0]}</div>
+          <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #A6192E, #B8913A)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "0.9rem", flexShrink: 0 }}>{actingUser.name?.[0]}</div>
           <button onClick={handleLogout} title="ออกจากระบบ" style={{ background: "#fef2f2", border: "1.5px solid #fca5a5", borderRadius: "10px", padding: "0.45rem 0.65rem", cursor: "pointer", color: "#dc2626", display: "flex", alignItems: "center", gap: "0.3rem", fontFamily: "inherit", fontSize: "0.78rem", fontWeight: 600 }}>
             <LogOut size={14} />
           </button>
@@ -12672,26 +12673,26 @@ export default function HRApp() {
           transition: "left 0.3s ease, width 0.25s ease, padding 0.25s ease",
           boxShadow: isMobile && sidebarOpen ? "4px 0 20px rgba(0,0,0,0.15)" : "none"
         }}>
-          {!rail && <div style={{ background: "linear-gradient(135deg, #008CFF, #3EBFFB)", borderRadius: "18px", padding: "0.95rem", marginBottom: "0.75rem", textAlign: "center", boxShadow: "0 8px 22px rgba(0,140,255,0.25)" }}>
+          {!rail && <div style={{ background: "linear-gradient(135deg, #A6192E, #C8323F)", borderRadius: "18px", padding: "0.95rem", marginBottom: "0.75rem", textAlign: "center", boxShadow: "0 8px 22px rgba(166,25,46,0.25)" }}>
             <div style={{ fontSize: "1.6rem", fontWeight: 700, color: "#fff" }}>{currentTime.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Bangkok" })}</div>
             <div style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.88)" }}>{currentTime.toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Bangkok" })}</div>
           </div>}
 
           {isMobile && (
             <div style={{ background: "#f8fafc", borderRadius: "10px", padding: "0.65rem", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg, #008CFF, #FF9A3C)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "0.85rem" }}>{currentUser.name?.[0]}</div>
+              <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg, #A6192E, #B8913A)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "0.85rem" }}>{currentUser.name?.[0]}</div>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#233862", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{actingUser.name}</div>
+                <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#2B0A10", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{actingUser.name}</div>
                 <div style={{ fontSize: "0.7rem", color: "#64748b" }}>{actingUser.role === "admin" ? "👑 Admin" : "พนักงาน"}</div>
               </div>
             </div>
           )}
 
           <div style={{ display: "grid", gridTemplateColumns: rail ? "1fr" : "1fr 1fr", gap: "0.5rem", marginBottom: "1rem" }}>
-            <button title="เข้างาน" aria-label="เข้างาน" onClick={() => { openCheckIn(); setSidebarOpen(false); }} style={{ background: "linear-gradient(135deg, #008CFF, #0072D9)", border: "none", borderRadius: "12px", padding: "0.85rem 0.5rem", color: "#fff", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.35rem", boxShadow: "0 4px 14px rgba(0,140,255,0.3)", fontFamily: "inherit" }}>
+            <button title="เข้างาน" aria-label="เข้างาน" onClick={() => { openCheckIn(); setSidebarOpen(false); }} style={{ background: "linear-gradient(135deg, #A6192E, #8E1426)", border: "none", borderRadius: "12px", padding: "0.85rem 0.5rem", color: "#fff", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.35rem", boxShadow: "0 4px 14px rgba(166,25,46,0.3)", fontFamily: "inherit" }}>
               <LogIn size={20} /> {!rail && "เข้างาน"}
             </button>
-            <button title={checkoutLocked ? (cleaningLock === "loading" ? "กำลังตรวจสอบเวรพื้นที่..." : "ล็อก: ยังไม่ลงเวรพื้นที่") : "กลับบ้าน"} aria-label="กลับบ้าน" disabled={checkoutLocked} aria-disabled={checkoutLocked} onClick={() => { if (checkoutLocked) return; openCheckOut(); setSidebarOpen(false); }} style={{ background: checkoutLocked ? "#cbd5e1" : "linear-gradient(90deg, #FF7106, #FF9A3C)", border: "none", borderRadius: "14px", padding: "0.85rem 0.5rem", color: checkoutLocked ? "#475569" : "#fff", fontWeight: 700, fontSize: "0.85rem", cursor: checkoutLocked ? "not-allowed" : "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.35rem", boxShadow: checkoutLocked ? "none" : "0 4px 14px rgba(255,113,6,0.3)", fontFamily: "inherit" }}>
+            <button title={checkoutLocked ? (cleaningLock === "loading" ? "กำลังตรวจสอบเวรพื้นที่..." : "ล็อก: ยังไม่ลงเวรพื้นที่") : "กลับบ้าน"} aria-label="กลับบ้าน" disabled={checkoutLocked} aria-disabled={checkoutLocked} onClick={() => { if (checkoutLocked) return; openCheckOut(); setSidebarOpen(false); }} style={{ background: checkoutLocked ? "#cbd5e1" : "linear-gradient(135deg, #7A5A14, #9C7A2E)", border: "none", borderRadius: "14px", padding: "0.85rem 0.5rem", color: checkoutLocked ? "#475569" : "#fff", fontWeight: 700, fontSize: "0.85rem", cursor: checkoutLocked ? "not-allowed" : "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.35rem", boxShadow: checkoutLocked ? "none" : "0 4px 14px rgba(122,90,20,0.3)", fontFamily: "inherit" }}>
               {checkoutLocked ? <span style={{ fontSize: "1.15rem", lineHeight: 1 }}>🔒</span> : <LogOut size={20} />} {!rail && (checkoutLocked ? (cleaningLock === "loading" ? "กำลังตรวจสอบ..." : "ล็อก: ยังไม่ลงเวร") : "กลับบ้าน")}
             </button>
           </div>
@@ -12709,9 +12710,9 @@ export default function HRApp() {
                 padding: rail ? "0.85rem 0" : "0.85rem 0.85rem",
                 borderRadius: "12px",
                 border: "none",
-                background: isActive ? "linear-gradient(90deg, #008CFF, #3EBFFB)" : "transparent",
+                background: isActive ? "linear-gradient(90deg, #A6192E, #C8323F)" : "transparent",
                 color: isActive ? "#fff" : "#464646",
-                boxShadow: isActive ? "0 6px 16px rgba(0,140,255,0.25)" : "none",
+                boxShadow: isActive ? "0 6px 16px rgba(166,25,46,0.25)" : "none",
                 cursor: "pointer",
                 fontSize: "0.95rem",
                 fontWeight: isActive ? 700 : 600,
@@ -12720,7 +12721,7 @@ export default function HRApp() {
                 transition: "all 0.15s",
                 minHeight: 48
               }}
-                onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = "#EAF5FF"; }}
+                onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = "#FBF5E6"; }}
                 onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = "transparent"; }}
               >
                 <Icon size={20} />
@@ -12756,7 +12757,7 @@ export default function HRApp() {
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                               <Umbrella size={18} color="#7c3aed" />
-                              <div style={{ fontWeight: 700, color: "#233862", fontSize: "0.95rem" }}>การลารออนุมัติ</div>
+                              <div style={{ fontWeight: 700, color: "#2B0A10", fontSize: "0.95rem" }}>การลารออนุมัติ</div>
                             </div>
                             <span style={{ background: "#fef3c7", color: "#d97706", fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.6rem", borderRadius: "20px" }}>{leaves.filter(l => l.status === "pending").length} รายการ</span>
                           </div>
@@ -12768,7 +12769,7 @@ export default function HRApp() {
                                 <div key={l.id} style={{ background: "#f8fafc", borderRadius: "10px", padding: "0.75rem", display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
                                   <Avatar name={l.employees?.name} index={i} />
                                   <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ fontWeight: 600, fontSize: "0.85rem", color: "#233862" }}>{l.employees?.name}</div>
+                                    <div style={{ fontWeight: 600, fontSize: "0.85rem", color: "#2B0A10" }}>{l.employees?.name}</div>
                                     <div style={{ fontSize: "0.75rem", color: "#64748b" }}>{l.leave_type} • {l.duration_type} • {l.hours} ชม.</div>
                                     <div style={{ fontSize: "0.72rem", color: "#94a3b8" }}>{fmtDate(l.start_date)} → {fmtDate(l.end_date)}</div>
                                     {l.reason && <div style={{ fontSize: "0.72rem", color: "#475569", marginTop: "0.25rem", fontStyle: "italic" }}>"{l.reason.slice(0, 50)}{l.reason.length > 50 ? "..." : ""}"</div>}
@@ -12792,7 +12793,7 @@ export default function HRApp() {
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                               <ArrowRightLeft size={18} color="#d97706" />
-                              <div style={{ fontWeight: 700, color: "#233862", fontSize: "0.95rem" }}>ออกนอกสถานที่ — ขณะนี้</div>
+                              <div style={{ fontWeight: 700, color: "#2B0A10", fontSize: "0.95rem" }}>ออกนอกสถานที่ — ขณะนี้</div>
                             </div>
                             <span style={{ background: "#fef2f2", color: "#dc2626", fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.6rem", borderRadius: "20px" }}>{outings.filter(o => o.status === "out").length} คน</span>
                           </div>
@@ -12804,7 +12805,7 @@ export default function HRApp() {
                                 <div key={o.id} style={{ background: "#fef9e7", border: "1px solid #fde68a", borderRadius: "10px", padding: "0.75rem", display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
                                   <Avatar name={o.employees?.name} index={i} />
                                   <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ fontWeight: 600, fontSize: "0.85rem", color: "#233862" }}>{o.employees?.name}</div>
+                                    <div style={{ fontWeight: 600, fontSize: "0.85rem", color: "#2B0A10" }}>{o.employees?.name}</div>
                                     <div style={{ fontSize: "0.75rem", color: "#64748b" }}>📍 {o.destination || "ไม่ระบุ"}</div>
                                     <div style={{ fontSize: "0.72rem", color: "#d97706", fontWeight: 600 }}>ออกเมื่อ {fmtTime(o.out_time)} น.</div>
                                     {o.reason && <div style={{ fontSize: "0.72rem", color: "#475569", marginTop: "0.25rem", fontStyle: "italic" }}>"{o.reason.slice(0, 40)}{o.reason.length > 40 ? "..." : ""}"</div>}
@@ -12824,7 +12825,7 @@ export default function HRApp() {
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                             <AlertCircle size={18} color="#dc2626" />
-                            <div style={{ fontWeight: 700, color: "#233862", fontSize: "0.95rem" }}>มาสายวันนี้</div>
+                            <div style={{ fontWeight: 700, color: "#2B0A10", fontSize: "0.95rem" }}>มาสายวันนี้</div>
                           </div>
                           <span style={{ background: "#fef2f2", color: "#dc2626", fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.6rem", borderRadius: "20px" }}>{todayAttendance.filter(a => checkLate(a.check_in, wsOf(a.employee_id, settings?.work_start))?.late).length} คน</span>
                         </div>
@@ -12867,7 +12868,7 @@ export default function HRApp() {
 
                   <Card>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}><Activity size={18} color="#008CFF" /><div style={{ fontWeight: 700, color: "#233862", fontSize: "0.95rem" }}>กิจกรรมล่าสุด</div></div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}><Activity size={18} color="#A6192E" /><div style={{ fontWeight: 700, color: "#2B0A10", fontSize: "0.95rem" }}>กิจกรรมล่าสุด</div></div>
                       <button onClick={fetchData} style={{ background: "none", border: "1.5px solid #e2e8f0", borderRadius: "8px", padding: "0.35rem 0.75rem", fontSize: "0.78rem", color: "#475569", cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: "0.4rem" }}>
                         <RefreshCw size={13} /> รีเฟรช
                       </button>
@@ -12890,7 +12891,7 @@ export default function HRApp() {
                                 <td style={{ padding: "0.65rem 0.75rem" }}>
                                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                                     <Avatar name={row.employees?.name} index={i} />
-                                    <span style={{ fontWeight: 600, color: "#233862" }}>{row.employees?.name || "-"}</span>
+                                    <span style={{ fontWeight: 600, color: "#2B0A10" }}>{row.employees?.name || "-"}</span>
                                   </div>
                                 </td>
                                 <td style={{ padding: "0.65rem 0.75rem", color: "#64748b" }}>{row.employees?.department || "-"}</td>

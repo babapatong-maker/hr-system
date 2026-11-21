@@ -139,19 +139,19 @@ export function AcademicCalendarPage({ extraEvents = [] }) {
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
   const byDate = new Map();
   month.events.forEach(ev => byDate.set(ev.date, [...(byDate.get(ev.date) || []), ev]));
-  const btn = (active) => ({ padding: "0.45rem 0.9rem", borderRadius: 10, border: "1.5px solid #cbd5e1", background: active ? "#0072D9" : "#fff", color: active ? "#fff" : "#334155", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" });
+  const btn = (active) => ({ padding: "0.45rem 0.9rem", borderRadius: 10, border: "1.5px solid #cbd5e1", background: active ? "#8E1426" : "#fff", color: active ? "#fff" : "#334155", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" });
   const allEvents = ACADEMIC_CALENDAR_2_2569.map(withExtra).flatMap(item => item.events.map(ev => ({ ...ev, month: item.month })));
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1rem" }}>
-        <h2 style={{ margin: 0, color: "#233862" }}>ปฏิทินการศึกษา ภาคเรียนที่ 2/2569</h2>
+        <h2 style={{ margin: 0, color: "#2B0A10" }}>ปฏิทินการศึกษา ภาคเรียนที่ 2/2569</h2>
         <div style={{ display: "flex", gap: "0.5rem" }}>
           <button style={btn(view === "grid")} onClick={() => setView("grid")}>ปฏิทินรายเดือน</button>
           <button style={btn(view === "list")} onClick={() => setView("list")}>รายการกิจกรรม</button>
         </div>
       </div>
       {view === "grid" ? (
-        <div style={{ background: "#fff", borderRadius: 18, padding: "1rem", border: "1px solid #E4EEF8" }}>
+        <div style={{ background: "#fff", borderRadius: 18, padding: "1rem", border: "1px solid #F0E6DC" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
             <button style={btn(false)} disabled={index === 0} onClick={() => setIndex(i => Math.max(0, i - 1))}>‹ เดือนก่อน</button>
             <div style={{ flex: 1, textAlign: "center", background: HEAD_BG[index], borderRadius: 8, padding: "0.5rem", fontWeight: 800, color: "#1e293b" }}>
@@ -167,7 +167,7 @@ export function AcademicCalendarPage({ extraEvents = [] }) {
                 const events = date ? byDate.get(date) || [] : [];
                 const dayColor = events.find(ev => ev.color)?.color;
                 return (
-                  <div key={i} style={{ minHeight: 78, padding: "0.35rem", textAlign: "center", borderRight: "1px solid #94a3b8", borderBottom: "1px solid #94a3b8", background: date === today ? "#EAF5FF" : "#fff" }}>
+                  <div key={i} style={{ minHeight: 78, padding: "0.35rem", textAlign: "center", borderRight: "1px solid #94a3b8", borderBottom: "1px solid #94a3b8", background: date === today ? "#FBF5E6" : "#fff" }}>
                     {date && <div style={{ fontWeight: 700, color: COLORS[dayColor] || "#1e293b" }}>{Number(date.slice(8))}</div>}
                     {events.map((ev, k) => (
                       <div key={k} style={{ fontSize: "0.78rem", lineHeight: 1.3, color: COLORS[ev.color] || "#1e293b", marginTop: 2 }}>
@@ -186,7 +186,7 @@ export function AcademicCalendarPage({ extraEvents = [] }) {
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
           {ACADEMIC_CALENDAR_2_2569.map(item => (
-            <div key={item.month} style={{ background: "#fff", borderRadius: 14, padding: "0.9rem 1rem", border: "1px solid #E4EEF8" }}>
+            <div key={item.month} style={{ background: "#fff", borderRadius: 14, padding: "0.9rem 1rem", border: "1px solid #F0E6DC" }}>
               <div style={{ fontWeight: 800, marginBottom: "0.4rem" }}>{monthLabel(item.month)}{item.studyDays ? ` · เวลาเรียน ${item.studyDays} วัน` : ""}</div>
               {allEvents.filter(ev => ev.month === item.month).map((ev, k, arr) => {
                 const duty = dutyWeek(ev.date);
@@ -229,10 +229,10 @@ export function UpcomingCalendarCard({ onOpen, today = new Date().toLocaleDateSt
   const nav = (dis) => ({ padding: "0.2rem 0.55rem", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: dis ? "#cbd5e1" : "#334155", fontWeight: 700, cursor: dis ? "default" : "pointer", fontFamily: "inherit", fontSize: "0.85rem" });
   const line = "1px solid #cbd5e1";
   return (
-    <div style={{ background: "#fff", borderRadius: 16, padding: "0.75rem", border: "1px solid #E4EEF8", boxShadow: "0 2px 12px rgba(15,23,42,0.05)" }}>
+    <div style={{ background: "#fff", borderRadius: 16, padding: "0.75rem", border: "1px solid #F0E6DC", boxShadow: "0 2px 12px rgba(15,23,42,0.05)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
-        <div style={{ fontWeight: 800, fontSize: "0.95rem", color: "#233862" }}>📅 ปฏิทินการศึกษา 2/2569</div>
-        <button onClick={onOpen} style={{ background: "#0072D9", color: "#fff", border: 0, borderRadius: 8, padding: "0.25rem 0.65rem", fontWeight: 700, cursor: "pointer", fontSize: "0.8rem", fontFamily: "inherit" }}>เปิดปฏิทินเต็ม</button>
+        <div style={{ fontWeight: 800, fontSize: "0.95rem", color: "#2B0A10" }}>📅 ปฏิทินการศึกษา 2/2569</div>
+        <button onClick={onOpen} style={{ background: "#8E1426", color: "#fff", border: 0, borderRadius: 8, padding: "0.25rem 0.65rem", fontWeight: 700, cursor: "pointer", fontSize: "0.8rem", fontFamily: "inherit" }}>เปิดปฏิทินเต็ม</button>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 6 }}>
         <button style={nav(index === 0)} disabled={index === 0} onClick={() => setIndex(i => Math.max(0, i - 1))} aria-label="เดือนก่อน">‹</button>
@@ -250,7 +250,7 @@ export function UpcomingCalendarCard({ onOpen, today = new Date().toLocaleDateSt
           const isToday = date === today;
           return (
             <div key={i} title={events.map(ev => ev.title + (ev.teacher ? ` (${ev.teacher})` : "")).join("\n") || undefined}
-              style={{ minHeight: 40, padding: "1px 2px", overflow: "hidden", borderRight: line, borderBottom: line, background: isToday ? "#EAF5FF" : "#fff", boxShadow: isToday ? "inset 0 0 0 2px #0072D9" : "none" }}>
+              style={{ minHeight: 40, padding: "1px 2px", overflow: "hidden", borderRight: line, borderBottom: line, background: isToday ? "#FBF5E6" : "#fff", boxShadow: isToday ? "inset 0 0 0 2px #8E1426" : "none" }}>
               {date && <div style={{ fontWeight: 700, fontSize: "0.7rem", color: COLORS[dayColor] || "#1e293b" }}>{Number(date.slice(8))}</div>}
               {events.map((ev, k) => (
                 <div key={k} style={{ lineHeight: 1.15, color: COLORS[ev.color] || "#1e293b", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", wordBreak: "break-word" }}>

@@ -102,7 +102,7 @@ const DEV_ITEMS = DEV_GROUPS.flatMap(([, items]) => items);
 
 const fieldStyle = { width: "100%", boxSizing: "border-box", minWidth: 0, maxWidth: "100%", padding: "0.65rem 0.75rem", border: "1.5px solid #e2e8f0", borderRadius: "10px", fontSize: "16px", fontFamily: "inherit", color: "#0f172a", outline: "none", background: "#fff" };
 const cardStyle = { background: "#fff", borderRadius: "1rem", padding: "1rem", boxShadow: "0 2px 12px rgba(0,0,0,0.06)", border: "1px solid #f1f5f9", minWidth: 0 };
-const primaryButton = { boxSizing: "border-box", minHeight: 48, width: "100%", maxWidth: 320, border: "none", borderRadius: 10, background: "linear-gradient(135deg, #2563eb, #1d4ed8)", color: "#fff", fontWeight: 800, fontFamily: "inherit", fontSize: "0.95rem", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "0.4rem", cursor: "pointer" };
+const primaryButton = { boxSizing: "border-box", minHeight: 48, width: "100%", maxWidth: 320, border: "none", borderRadius: 10, background: "linear-gradient(135deg, #A6192E, #8E1426)", color: "#fff", fontWeight: 800, fontFamily: "inherit", fontSize: "0.95rem", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "0.4rem", cursor: "pointer" };
 const quietButton = { boxSizing: "border-box", minHeight: 44, border: "1.5px solid #e2e8f0", borderRadius: 10, background: "#f8fafc", color: "#475569", fontWeight: 800, fontFamily: "inherit", fontSize: "0.88rem", padding: "0.45rem 0.8rem", cursor: "pointer" };
 
 function todayISO() {
@@ -1223,7 +1223,7 @@ function MilkPage({ employees, currentUser }) {
                     {[["yes", "ได้รับ"], ["no", "ไม่ได้"]].map(([value, label]) => {
                       const active = marks[student.id] === value;
                       return (
-                        <button key={value} type="button" aria-pressed={active} aria-label={`${label} นมเลขที่ ${student.number}`} disabled={readOnly} onClick={() => setMarks(current => ({ ...current, [student.id]: value }))} style={{ boxSizing: "border-box", width: "100%", minWidth: 0, minHeight: 44, borderRadius: 10, border: `2px solid ${active ? "#1d4ed8" : "#e2e8f0"}`, background: active ? "#dbeafe" : "#fff", color: active ? "#1d4ed8" : "#64748b", fontWeight: 800, fontSize: "0.68rem", fontFamily: "inherit", padding: 0 }}>
+                        <button key={value} type="button" aria-pressed={active} aria-label={`${label} นมเลขที่ ${student.number}`} disabled={readOnly} onClick={() => setMarks(current => ({ ...current, [student.id]: value }))} style={{ boxSizing: "border-box", width: "100%", minWidth: 0, minHeight: 44, borderRadius: 10, border: `2px solid ${active ? "#8E1426" : "#e2e8f0"}`, background: active ? "#dbeafe" : "#fff", color: active ? "#8E1426" : "#64748b", fontWeight: 800, fontSize: "0.68rem", fontFamily: "inherit", padding: 0 }}>
                           {label}
                         </button>
                       );
@@ -1690,7 +1690,7 @@ function choiceStyle(on, option) {
   const tone = choiceTone(option);
   if (tone === "bad") return { ...quietButton, minHeight: 40, background: "#fef2f2", color: "#b91c1c", borderColor: "#fca5a5" };
   if (tone === "good") return { ...quietButton, minHeight: 40, background: "#ecfdf5", color: "#166534", borderColor: "#86efac" };
-  return { ...quietButton, minHeight: 40, background: "#eff6ff", color: "#1d4ed8", borderColor: "#93c5fd" };
+  return { ...quietButton, minHeight: 40, background: "#FBF5E6", color: "#8E1426", borderColor: "#D9BC74" };
 }
 
 function ChoiceRow({ label, value, options, onChange, disabled }) {

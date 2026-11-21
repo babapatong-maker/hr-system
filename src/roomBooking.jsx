@@ -61,11 +61,11 @@ export async function deleteBooking(id) {
   if (error) throw new Error(error.message);
 }
 
-const card = { background: "#fff", borderRadius: 16, padding: "1.1rem", boxShadow: "0 1px 3px rgba(15,23,42,0.06)", border: "1px solid #eef2f7", marginBottom: "1rem" };
-const input = { width: "100%", padding: "0.6rem 0.7rem", border: "1.5px solid #e2e8f0", borderRadius: 10, fontSize: "0.9rem", fontFamily: "inherit", color: "#233862", background: "#fff", boxSizing: "border-box" };
+const card = { background: "#fff", borderRadius: 16, padding: "1.1rem", boxShadow: "0 1px 3px rgba(15,23,42,0.06)", border: "1px solid #F3EEE8", marginBottom: "1rem" };
+const input = { width: "100%", padding: "0.6rem 0.7rem", border: "1.5px solid #e2e8f0", borderRadius: 10, fontSize: "0.9rem", fontFamily: "inherit", color: "#2B0A10", background: "#fff", boxSizing: "border-box" };
 const label = { fontSize: "0.78rem", fontWeight: 700, color: "#475569", marginBottom: 4, display: "block" };
 const btn = (bg, color = "#fff") => ({ background: bg, color, border: "none", borderRadius: 10, padding: "0.55rem 0.9rem", fontWeight: 700, fontFamily: "inherit", cursor: "pointer", fontSize: "0.85rem" });
-const tab = active => ({ ...btn(active ? "#008CFF" : "#f1f5f9", active ? "#fff" : "#475569") });
+const tab = active => ({ ...btn(active ? "#A6192E" : "#f1f5f9", active ? "#fff" : "#475569") });
 
 export function RoomBookingPage({ employees = [], currentUser, canManage = false, isTestTeacher = () => false, canSeeTestTeacher = false }) {
   const [rooms, setRooms] = useState(DEFAULT_MEDIA_ROOMS);
@@ -163,7 +163,7 @@ export function RoomBookingPage({ employees = [], currentUser, canManage = false
     <div style={{ maxWidth: 1100, margin: "0 auto" }}>
       <div style={card}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ fontWeight: 800, color: "#233862", fontSize: "1.05rem" }}>🏫 จองห้องสื่อการสอน</div>
+          <div style={{ fontWeight: 800, color: "#2B0A10", fontSize: "1.05rem" }}>🏫 จองห้องสื่อการสอน</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             <button style={tab(view === "month")} onClick={() => setView("month")}>ปฏิทิน</button>
             <button style={tab(view === "grid")} onClick={() => setView("grid")}>ตารางการใช้ห้อง</button>
@@ -177,7 +177,7 @@ export function RoomBookingPage({ employees = [], currentUser, canManage = false
 
       {form && (
         <div style={card}>
-          <div style={{ fontWeight: 800, color: "#233862", marginBottom: 10 }}>ขอใช้ห้อง — ผู้จอง: {currentUser?.name}</div>
+          <div style={{ fontWeight: 800, color: "#2B0A10", marginBottom: 10 }}>ขอใช้ห้อง — ผู้จอง: {currentUser?.name}</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
             <div><span style={label}>ห้อง</span><select style={input} value={form.room} onChange={e => setForm({ ...form, room: e.target.value })}>{rooms.map(r => <option key={r}>{r}</option>)}</select></div>
             <div><span style={label}>วันที่ (จ.–ศ.)</span><input type="date" style={input} value={form.date} min={todayKey()} onChange={e => setForm(prefill({ ...form, date: e.target.value, subject: "", class_level: "" }))} /></div>
@@ -191,7 +191,7 @@ export function RoomBookingPage({ employees = [], currentUser, canManage = false
           {(() => { const c = bookings.concat(mine).find(b => b.room === form.room && b.date === form.date && Number(b.period_no) === Number(form.period_no)); return c ? <div style={{ color: "#b91c1c", fontSize: "0.82rem", marginTop: 8 }}>⛔ ช่องนี้ถูกจองแล้วโดย {nameOf(c.employee_id)}</div> : null; })()}
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <button style={btn("#f1f5f9", "#475569")} onClick={() => setForm(null)}>ยกเลิก</button>
-            <button style={btn("#008CFF")} disabled={loading} onClick={submit}>{loading ? "กำลังบันทึก..." : "ยืนยันการจอง"}</button>
+            <button style={btn("#A6192E")} disabled={loading} onClick={submit}>{loading ? "กำลังบันทึก..." : "ยืนยันการจอง"}</button>
           </div>
         </div>
       )}
@@ -209,7 +209,7 @@ export function RoomBookingPage({ employees = [], currentUser, canManage = false
           <div style={{ ...card, maxWidth: 460 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
               <button style={{ ...btn("#f1f5f9", "#475569"), padding: "0.3rem 0.6rem" }} onClick={() => moveMonth(-1)}>‹</button>
-              <div style={{ flex: 1, textAlign: "center", fontWeight: 800, color: "#233862", fontSize: "0.92rem" }}>{new Date(`${first}T12:00:00Z`).toLocaleDateString("th-TH", { month: "long", year: "numeric", timeZone: "UTC" })}</div>
+              <div style={{ flex: 1, textAlign: "center", fontWeight: 800, color: "#2B0A10", fontSize: "0.92rem" }}>{new Date(`${first}T12:00:00Z`).toLocaleDateString("th-TH", { month: "long", year: "numeric", timeZone: "UTC" })}</div>
               <button style={{ ...btn("#f1f5f9", "#475569"), padding: "0.3rem 0.6rem" }} onClick={() => moveMonth(1)}>›</button>
             </div>
             <select style={{ ...input, padding: "0.4rem 0.6rem", fontSize: "0.82rem", marginBottom: 8 }} value={monthRoom} onChange={e => setMonthRoom(e.target.value)}>
@@ -220,24 +220,24 @@ export function RoomBookingPage({ employees = [], currentUser, canManage = false
               {cells.map((d, i) => { if (!d) return <div key={i} />;
                 const n = byDay(d).length; const hol = dayWarning(d); const wk = [0, 6].includes(weekday(d)); const isToday = d === todayKey(); const sel = d === pickDay;
                 return (
-                  <button key={d} title={hol || ""} onClick={() => setPickDay(d)} style={{ aspectRatio: "1 / 1", border: sel ? "2px solid #008CFF" : isToday ? "2px solid #16a34a" : "1px solid #eef2f7", borderRadius: 8, background: hol ? "#fee2e2" : wk ? "#f8fafc" : "#fff", color: wk ? "#cbd5e1" : "#233862", cursor: "pointer", fontFamily: "inherit", padding: 2, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontWeight: isToday ? 800 : 600, fontSize: "0.78rem" }}>
+                  <button key={d} title={hol || ""} onClick={() => setPickDay(d)} style={{ aspectRatio: "1 / 1", border: sel ? "2px solid #A6192E" : isToday ? "2px solid #16a34a" : "1px solid #F3EEE8", borderRadius: 8, background: hol ? "#fee2e2" : wk ? "#f8fafc" : "#fff", color: wk ? "#cbd5e1" : "#2B0A10", cursor: "pointer", fontFamily: "inherit", padding: 2, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontWeight: isToday ? 800 : 600, fontSize: "0.78rem" }}>
                     {Number(d.slice(8))}
-                    {n > 0 && <span style={{ marginTop: 1, background: "#008CFF", color: "#fff", borderRadius: 999, fontSize: "0.62rem", minWidth: 16, lineHeight: "14px", padding: "0 3px" }}>{n}</span>}
+                    {n > 0 && <span style={{ marginTop: 1, background: "#A6192E", color: "#fff", borderRadius: 999, fontSize: "0.62rem", minWidth: 16, lineHeight: "14px", padding: "0 3px" }}>{n}</span>}
                   </button>); })}
             </div>
             <div style={{ display: "flex", gap: 10, fontSize: "0.68rem", color: "#64748b", marginTop: 6, flexWrap: "wrap" }}>
               <span><span style={{ display: "inline-block", width: 9, height: 9, background: "#fee2e2", borderRadius: 2 }} /> วันหยุด/กิจกรรม</span>
               <span><span style={{ display: "inline-block", width: 9, height: 9, border: "2px solid #16a34a", borderRadius: 2 }} /> วันนี้</span>
-              <span><span style={{ display: "inline-block", width: 9, height: 9, background: "#008CFF", borderRadius: 9 }} /> จำนวนการจอง</span>
+              <span><span style={{ display: "inline-block", width: 9, height: 9, background: "#A6192E", borderRadius: 9 }} /> จำนวนการจอง</span>
             </div>
-            <div style={{ borderTop: "1px solid #eef2f7", marginTop: 10, paddingTop: 8 }}>
+            <div style={{ borderTop: "1px solid #F3EEE8", marginTop: 10, paddingTop: 8 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
-                <div style={{ fontWeight: 800, color: "#233862", fontSize: "0.85rem" }}>{thaiDate(pickDay)}{dayWarning(pickDay) && <span style={{ color: "#d97706", fontWeight: 600 }}> · {dayWarning(pickDay)}</span>}</div>
+                <div style={{ fontWeight: 800, color: "#2B0A10", fontSize: "0.85rem" }}>{thaiDate(pickDay)}{dayWarning(pickDay) && <span style={{ color: "#d97706", fontWeight: 600 }}> · {dayWarning(pickDay)}</span>}</div>
                 {pickWd >= 1 && pickWd <= 5 && pickDay >= todayKey() && <button style={{ ...btn("#16a34a"), padding: "0.35rem 0.7rem", fontSize: "0.78rem" }} onClick={() => { setForm(prefill({ room: monthRoom || room, date: pickDay, period_no: 1, subject: "", class_level: "", note: "" })); setMsg(null); }}>+ จองวันนี้</button>}
               </div>
               {dayList.length === 0 ? <div style={{ color: "#94a3b8", fontSize: "0.8rem", padding: "0.5rem 0" }}>ไม่มีการจอง</div> : dayList.map(b => (
                 <div key={b.id} style={{ display: "flex", justifyContent: "space-between", gap: 6, padding: "0.4rem 0", borderBottom: "1px solid #f8fafc", fontSize: "0.8rem" }}>
-                  <div><b style={{ color: "#233862" }}>คาบ {b.period_no}</b> <span style={{ color: "#94a3b8" }}>({PERIOD_TIMES[b.period_no - 1]?.join("–")})</span> · {b.room}
+                  <div><b style={{ color: "#2B0A10" }}>คาบ {b.period_no}</b> <span style={{ color: "#94a3b8" }}>({PERIOD_TIMES[b.period_no - 1]?.join("–")})</span> · {b.room}
                     <div style={{ color: "#475569" }}>{nameOf(b.employee_id)} · {b.subject} {b.class_level}{b.note ? ` · ${b.note}` : ""}</div></div>
                   {canCancel(b) && pickDay >= todayKey() && <button onClick={() => cancel(b)} style={{ ...btn("transparent", "#dc2626"), padding: 0, fontSize: "0.72rem" }}>ยกเลิก</button>}
                 </div>))}
@@ -250,7 +250,7 @@ export function RoomBookingPage({ employees = [], currentUser, canManage = false
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 10 }}>
             <select style={{ ...input, width: "auto", minWidth: 200 }} value={room} onChange={e => setRoom(e.target.value)}>{rooms.map(r => <option key={r}>{r}</option>)}</select>
             <button style={btn("#f1f5f9", "#475569")} onClick={() => setWeek(shift(week, -7))}>‹ สัปดาห์ก่อน</button>
-            <span style={{ fontWeight: 700, color: "#233862", fontSize: "0.88rem" }}>{thaiDate(days[0])} – {thaiDate(days[4])}</span>
+            <span style={{ fontWeight: 700, color: "#2B0A10", fontSize: "0.88rem" }}>{thaiDate(days[0])} – {thaiDate(days[4])}</span>
             <button style={btn("#f1f5f9", "#475569")} onClick={() => setWeek(shift(week, 7))}>สัปดาห์ถัดไป ›</button>
             <button style={btn("#f1f5f9", "#475569")} onClick={() => setWeek(monday(todayKey()))}>สัปดาห์นี้</button>
             {loading && <span style={{ color: "#94a3b8", fontSize: "0.8rem" }}>กำลังโหลด...</span>}
@@ -260,12 +260,12 @@ export function RoomBookingPage({ employees = [], currentUser, canManage = false
               <thead><tr><th style={{ padding: 6, background: "#f8fafc", color: "#64748b" }}>วัน / คาบ</th>{PERIOD_TIMES.map((t, i) => <th key={i} style={{ padding: 6, background: "#f8fafc", color: "#64748b" }}>คาบ {i + 1}<div style={{ fontWeight: 400, fontSize: "0.7rem" }}>{t[0]}–{t[1]}</div></th>)}</tr></thead>
               <tbody>{days.map((d, di) => { const warn = dayWarning(d); return (
                 <tr key={d}>
-                  <td style={{ padding: 6, fontWeight: 700, color: "#233862", whiteSpace: "nowrap", borderTop: "1px solid #eef2f7" }}>{DAY_LABELS[di]} {thaiDate(d).replace(/^\S+\s/, "")}{warn && <div style={{ color: "#d97706", fontSize: "0.68rem", fontWeight: 600 }}>{warn}</div>}</td>
+                  <td style={{ padding: 6, fontWeight: 700, color: "#2B0A10", whiteSpace: "nowrap", borderTop: "1px solid #F3EEE8" }}>{DAY_LABELS[di]} {thaiDate(d).replace(/^\S+\s/, "")}{warn && <div style={{ color: "#d97706", fontSize: "0.68rem", fontWeight: 600 }}>{warn}</div>}</td>
                   {PERIOD_TIMES.map((_, pi) => { const b = cell(d, pi + 1); const past = d < todayKey(); return (
-                    <td key={pi} style={{ padding: 4, borderTop: "1px solid #eef2f7", verticalAlign: "top" }}>
+                    <td key={pi} style={{ padding: 4, borderTop: "1px solid #F3EEE8", verticalAlign: "top" }}>
                       {b ? (
-                        <div style={{ background: String(b.employee_id) === String(currentUser?.id) ? "#dcfce7" : "#EAF5FF", borderRadius: 8, padding: "0.35rem 0.45rem", minHeight: 44 }}>
-                          <div style={{ fontWeight: 700, color: "#233862" }}>{nameOf(b.employee_id)}</div>
+                        <div style={{ background: String(b.employee_id) === String(currentUser?.id) ? "#dcfce7" : "#FBF5E6", borderRadius: 8, padding: "0.35rem 0.45rem", minHeight: 44 }}>
+                          <div style={{ fontWeight: 700, color: "#2B0A10" }}>{nameOf(b.employee_id)}</div>
                           <div style={{ color: "#475569" }}>{b.subject} · {b.class_level}</div>
                           {b.note && <div style={{ color: "#94a3b8", fontSize: "0.7rem" }}>{b.note}</div>}
                           {canCancel(b) && !past && <button onClick={() => cancel(b)} style={{ ...btn("transparent", "#dc2626"), padding: 0, fontSize: "0.72rem" }}>ยกเลิก</button>}
@@ -284,7 +284,7 @@ export function RoomBookingPage({ employees = [], currentUser, canManage = false
         <div style={card}>
           {mine.length === 0 ? <div style={{ color: "#94a3b8", textAlign: "center", padding: "1.5rem" }}>ยังไม่มีการจองที่กำลังจะถึง</div> : mine.map(b => (
             <div key={b.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "0.65rem 0", borderBottom: "1px solid #f1f5f9", flexWrap: "wrap" }}>
-              <div><div style={{ fontWeight: 700, color: "#233862" }}>{b.room}</div><div style={{ color: "#64748b", fontSize: "0.82rem" }}>{thaiDate(b.date)} · คาบ {b.period_no} ({PERIOD_TIMES[b.period_no - 1]?.join("–")}) · {b.subject} {b.class_level}{b.note ? ` · ${b.note}` : ""}</div></div>
+              <div><div style={{ fontWeight: 700, color: "#2B0A10" }}>{b.room}</div><div style={{ color: "#64748b", fontSize: "0.82rem" }}>{thaiDate(b.date)} · คาบ {b.period_no} ({PERIOD_TIMES[b.period_no - 1]?.join("–")}) · {b.subject} {b.class_level}{b.note ? ` · ${b.note}` : ""}</div></div>
               <button style={btn("#fef2f2", "#dc2626")} onClick={() => cancel(b)}>ยกเลิก</button>
             </div>))}
         </div>
@@ -294,12 +294,12 @@ export function RoomBookingPage({ employees = [], currentUser, canManage = false
         <div style={card}>
           {rooms.map(r => (
             <div key={r} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.45rem 0", borderBottom: "1px solid #f1f5f9" }}>
-              <span style={{ color: "#233862", fontWeight: 600 }}>{r}</span>
+              <span style={{ color: "#2B0A10", fontWeight: 600 }}>{r}</span>
               <button style={btn("#fef2f2", "#dc2626")} disabled={rooms.length <= 1} onClick={() => window.confirm(`ลบ "${r}" ออกจากรายการ? (การจองเดิมยังอยู่)`) && saveRooms(rooms.filter(x => x !== r))}>ลบ</button>
             </div>))}
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
             <input style={input} value={newRoom} placeholder="ชื่อห้องใหม่" onChange={e => setNewRoom(e.target.value)} />
-            <button style={btn("#008CFF")} onClick={() => { const n = newRoom.trim(); if (n && !rooms.includes(n)) { saveRooms([...rooms, n]); setNewRoom(""); } }}>เพิ่ม</button>
+            <button style={btn("#A6192E")} onClick={() => { const n = newRoom.trim(); if (n && !rooms.includes(n)) { saveRooms([...rooms, n]); setNewRoom(""); } }}>เพิ่ม</button>
           </div>
         </div>
       )}

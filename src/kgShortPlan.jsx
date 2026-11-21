@@ -371,7 +371,7 @@ export function KgShortPlanPage({ currentUser, employees = [], canReview = false
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto" }} data-testid="kg-plan">
       <div style={{ ...box, display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "center" }}>
-        <div style={{ fontWeight: 800, fontSize: "1.15rem", color: "#233862", flex: "1 1 260px" }}>แผนการจัดประสบการณ์ระยะสั้น (อนุบาล)</div>
+        <div style={{ fontWeight: 800, fontSize: "1.15rem", color: "#2B0A10", flex: "1 1 260px" }}>แผนการจัดประสบการณ์ระยะสั้น (อนุบาล)</div>
         <label style={{ fontSize: "0.85rem" }}>สัปดาห์ (วันจันทร์)
           <input type="date" value={monday} onChange={e => e.target.value && setMonday(kgMondayOf(e.target.value))} style={{ ...inp, width: "auto", marginLeft: 6 }} />
         </label>
@@ -389,14 +389,14 @@ export function KgShortPlanPage({ currentUser, employees = [], canReview = false
 
       {canReview && (
         <div style={box}>
-          <div style={{ fontWeight: 800, color: "#233862", marginBottom: 8 }}>สถานะส่งแผนสัปดาห์นี้</div>
+          <div style={{ fontWeight: 800, color: "#2B0A10", marginBottom: 8 }}>สถานะส่งแผนสัปดาห์นี้</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 8 }}>
             {overview.map(o => { const s = kgStatusLabel(o.main && o.main.status ? o.main : null); return (
-              <button key={o.emp.id} onClick={() => { setTeacherId(String(o.emp.id)); setTab(1); }} style={{ textAlign: "left", border: String(o.emp.id) === String(teacherId) ? "2px solid #2563eb" : "1px solid #e2e8f0", borderRadius: 10, padding: "0.6rem", background: "#fff", cursor: "pointer", fontFamily: "inherit" }}>
+              <button key={o.emp.id} onClick={() => { setTeacherId(String(o.emp.id)); setTab(1); }} style={{ textAlign: "left", border: String(o.emp.id) === String(teacherId) ? "2px solid #A6192E" : "1px solid #e2e8f0", borderRadius: 10, padding: "0.6rem", background: "#fff", cursor: "pointer", fontFamily: "inherit" }}>
                 <div style={{ fontWeight: 700 }}>{kgTeacherInfo(o.emp)?.level} · {o.emp.name}{kgTeacherInfo(o.emp)?.test && <span style={{ marginLeft: 6, background: "#e0e7ff", color: "#4338ca", borderRadius: 999, padding: "0 0.5rem", fontSize: "0.72rem" }}>ทดสอบ</span>}</div>
                 <div style={{ fontSize: "0.8rem", color: "#64748b" }}>{o.main?.unit_name ? `หน่วย ${o.main.unit_name}` : "—"}</div>
                 <span style={{ background: s.bg, color: s.color, borderRadius: 999, padding: "0.1rem 0.6rem", fontSize: "0.78rem", fontWeight: 700 }}>{s.text}</span>
-                {o.main?.exec?.at && <span style={{ marginLeft: 6, fontSize: "0.78rem", color: "#2563eb" }}>✓ ผู้บริหารให้ความเห็นแล้ว</span>}
+                {o.main?.exec?.at && <span style={{ marginLeft: 6, fontSize: "0.78rem", color: "#A6192E" }}>✓ ผู้บริหารให้ความเห็นแล้ว</span>}
               </button>); })}
             {overview.length === 0 && <div style={{ color: "#94a3b8" }}>ไม่พบรายชื่อครูอนุบาล</div>}
           </div>
@@ -415,7 +415,7 @@ export function KgShortPlanPage({ currentUser, employees = [], canReview = false
           </div>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: "0.75rem" }}>
-            {TABS.map(t => <button key={t.key} onClick={() => setTab(t.key)} style={{ ...btn(tab === t.key ? "#2563eb" : "#e2e8f0", tab === t.key ? "#fff" : "#1e293b"), padding: "0.45rem 0.8rem", fontSize: "0.85rem" }}>{t.label}</button>)}
+            {TABS.map(t => <button key={t.key} onClick={() => setTab(t.key)} style={{ ...btn(tab === t.key ? "#A6192E" : "#e2e8f0", tab === t.key ? "#fff" : "#1e293b"), padding: "0.45rem 0.8rem", fontSize: "0.85rem" }}>{t.label}</button>)}
           </div>
 
           {tab === 1 && (
@@ -509,7 +509,7 @@ export function KgShortPlanPage({ currentUser, employees = [], canReview = false
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: "2rem" }}>
             {editable && <button disabled={saving} onClick={() => save("draft")} style={btn("#64748b")}>{main.status === "submitted" ? "บันทึก (ส่วนที่ 5–6)" : "บันทึกร่าง"}</button>}
             {editable && main.status !== "submitted" && <button disabled={saving} onClick={() => save("submit")} style={btn("#16a34a")}>ส่งแผน</button>}
-            <button onClick={printPlan} style={btn("#2563eb")}>พิมพ์ / PDF (A4 แนวนอน)</button>
+            <button onClick={printPlan} style={btn("#A6192E")}>พิมพ์ / PDF (A4 แนวนอน)</button>
           </div>
         </>
       )}

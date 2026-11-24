@@ -3699,6 +3699,36 @@ function YoutubeLinksEditor({ links, disabled, onChange }) {
   );
 }
 
+// บันทึกหลังสอนรายคาบ: กรอกได้หลังจบคาบนั้นแล้วเท่านั้น (เวลาไทย)
+// เวลาจบคาบ: end_time ของคาบในแผน (เติมจากตารางสอน) → เวลาจากตารางสอน → ถ้าไม่รู้ ใช้เวลาเลิกเรียน 15:30
+const POST_NOTE_FALLBACK_END = "15:30";
+function postNoteUnlockInfo(period, slot = null) {
+  const date = String(period?.teach_date || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { unlockAt: 0, date: "", end: "", fallback: false };
+  const hhmm = value => { const text = String(value || "").slice(0, 5); return /^\d{2}:\d{2}$/.test(text) && text >= "06:00" ? text : ""; };
+  let end = hhmm(period?.end_time);
+  if (!end && slot) end = timetableSlotTimes(slot)?.end || hhmm(slot?.end_time);
+  const fallback = !end;
+  if (!end) end = POST_NOTE_FALLBACK_END;
+  return { unlockAt: Date.parse(`${date}T${end}:00+07:00`), date, end, fallback };
+}
+function postNoteLocked(period, slot = null, now = Date.now()) {
+  return now < postNoteUnlockInfo(period, slot).unlockAt;
+}
+function slotForPlanPeriod(timetable, weekStart, period) {
+  const day = weekDates(weekStart).indexOf(period?.teach_date) + 1;
+  if (day < 1) return null;
+  return (timetable || []).find(row => row.day_of_week === day && Number(row.period) === Number(period.period_no)) || null;
+}
+function useMinuteNow() {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(timer);
+  }, []);
+  return now;
+}
+
 function PostNoteEditor({ note, disabled, teacherName, onChange }) {
   const value = cleanPostNote(note);
   const set = patch => onChange({ ...value, ...patch });
@@ -3937,6 +3967,9 @@ function WeekPeriodEditor({ period, disabled, onChange, onPickFile, onPickWorksh
   const applySlot = row => lockedTimes ? onChange({ subject: row.subject || "", plan_class: row.class_room || "", start_time: lockedTimes.start, end_time: lockedTimes.end }) : onChange({ subject: row.subject || "", plan_class: row.class_room || "", start_time: row.start_time && row.start_time !== "00:00:00" ? String(row.start_time).slice(0, 5) : period.start_time, end_time: row.end_time ? String(row.end_time).slice(0, 5) : period.end_time });
   const { plan } = selectedPlanParts(period);
   const summary = periodFoldSummary(period, plan);
+  const now = useMinuteNow();
+  const postUnlock = postNoteUnlockInfo(period, slot);
+  const postLocked = now < postUnlock.unlockAt;
   return (
     <div id={`plan-${period.teach_date}-${period.period_no}`} style={{ border: `1px solid ${slot ? "#E8D6A6" : "#e2e8f0"}`, borderRadius: "12px", padding: open ? "0.75rem" : "0.35rem 0.5rem", display: "grid", gap: "0.75rem", minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", minWidth: 0 }}>
@@ -4083,9 +4116,15 @@ function WeekPeriodEditor({ period, disabled, onChange, onPickFile, onPickWorksh
           <textarea value={period.media_detail || ""} onChange={event => onChange({ media_detail: event.target.value })} style={periodArea} />
         </Field>
       </QuietFold>
-      <QuietFold title="บันทึกหลังสอน (บันทึกหลังแผน)">
+      <QuietFold title={postLocked ? "บันทึกหลังสอน (บันทึกหลังแผน) 🔒" : "บันทึกหลังสอน (บันทึกหลังแผน)"}>
         {isOffsitePeriod(period) && <div style={{ color: "#047857", fontWeight: 700, fontSize: "0.85rem" }}>🚌 {OFFSITE_NOTE}</div>}
-        <PostNoteEditor note={period.post_note} disabled={disabled} teacherName={teacherName} onChange={note => onChange({ post_note: note })} />
+        {postLocked && (
+          <div role="note" style={{ background: "#FBF5E6", border: "1px solid #E8D6A6", color: "#8E1426", borderRadius: "10px", padding: "0.5rem 0.75rem", fontWeight: 700, fontSize: "0.88rem", lineHeight: 1.5 }}>
+            🔒 กรอกได้หลังจบคาบ · เปิดให้กรอก {formatThaiDateKey(postUnlock.date)} เวลา {postUnlock.end} น.
+            {postUnlock.fallback && <div style={{ fontWeight: 500, fontSize: "0.8rem", color: "#7c5a1e" }}>(ไม่พบเวลาเลิกของคาบนี้ ใช้เวลาเลิกเรียน {POST_NOTE_FALLBACK_END} น.)</div>}
+          </div>
+        )}
+        <PostNoteEditor note={period.post_note} disabled={disabled || postLocked} teacherName={teacherName} onChange={note => { if (!postLocked) onChange({ post_note: note }); }} />
       </QuietFold>
       <Field label="มีงานหรือการบ้านหรือไม่">
         <select value={period.homework === "yes" ? "yes" : "no"} onChange={event => {
@@ -4771,12 +4810,20 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
       return;
     }
     const effective = alreadySent ? "submitted" : nextStatus;
-    const noReason = periods.filter(period => postNoteNeedsReason(period.post_note));
+    // คาบที่ยังไม่จบ: ไม่บันทึกบันทึกหลังสอน (คงค่าเดิมที่โหลดมา) แต่ส่วนแผนยังบันทึก/ส่งล่วงหน้าได้ตามปกติ
+    const nowStamp = Date.now();
+    let loadedPeriods = [];
+    try { loadedPeriods = JSON.parse(baseline) || []; } catch { loadedPeriods = []; }
+    const loadedById = new Map(loadedPeriods.map(period => [period.id, period]));
+    const guardedPeriods = periods.map(period => postNoteLocked(period, slotForPlanPeriod(timetable, weekStart, period), nowStamp)
+      ? { ...period, post_note: cleanPostNote(loadedById.get(period.id)?.post_note) }
+      : period);
+    const noReason = guardedPeriods.filter(period => postNoteNeedsReason(period.post_note));
     if (noReason.length > 0) {
       setError(`ติ๊ก "ไม่ได้ใช้แผนนี้ในคาบนี้" แล้วต้องกรอกเหตุผลด้วย: ${noReason.map(period => `${formatThaiDateKey(period.teach_date)} คาบ ${period.period_no}`).join(", ")}`);
       return;
     }
-    const workPeriods = alreadySent ? periods : autofillPeriodsFromTimetable(periods, weekStart, timetable);
+    const workPeriods = alreadySent ? guardedPeriods : autofillPeriodsFromTimetable(guardedPeriods, weekStart, timetable);
     const filled = workPeriods.filter(period => !periodIsBlank(period));
     const taught = filled.filter(period => !period.free);
     // ส่งแล้วแก้ไขได้ตลอด: ไม่บังคับตรวจความครบซ้ำ และคงเวลาส่งครั้งแรก/สถานะสายเดิม

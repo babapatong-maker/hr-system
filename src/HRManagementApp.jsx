@@ -5994,6 +5994,40 @@ function activityDaysHtml(plan, esc) {
   if (!activityIsMultiDay(plan)) return "";
   return `<h4>กำหนดการรายวัน</h4><table style="border-collapse:collapse;width:100%"><tr><th style="border:1px solid #999;padding:3px">วัน</th><th style="border:1px solid #999;padding:3px">เวลา</th><th style="border:1px solid #999;padding:3px">กิจกรรม</th></tr>${activityDayList(plan).map(d => `<tr><td style="border:1px solid #999;padding:3px;white-space:nowrap">${esc(activityDayLabel(d.date))}</td><td style="border:1px solid #999;padding:3px">${d.holiday ? "-" : esc(d.time) || "-"}</td><td style="border:1px solid #999;padding:3px">${d.holiday ? "<b>วันหยุด (ไม่มีกิจกรรม)</b>" : esc(d.detail) || "-"}</td></tr>`).join("")}</table>`;
 }
+
+// บันทึกหลังกิจกรรม: ผล/ผู้เข้าร่วม/ข้อเสนอแนะ กรอกล่วงหน้าได้ — ปัญหา/อุปสรรค เปิดเมื่อกิจกรรมจบ (เวลาไทย)
+function parseActivityEndTime(timeText) {
+  const matches = String(timeText || "").match(/(\d{1,2})[:.](\d{2})/g);
+  if (!matches || matches.length < 2) return "";
+  const last = matches[matches.length - 1];
+  const [hour, minute] = last.split(/[:.]/).map(Number);
+  if (hour > 23 || minute > 59) return "";
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+function activityProblemsUnlockAt(plan) {
+  const dates = activityActiveDates(plan);
+  const endDate = dates.length ? dates[dates.length - 1] : activityEnd(plan);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate || "")) return null;
+  const lastDay = activityDayList(plan).filter(day => !day.holiday).pop();
+  const endTime = parseActivityEndTime(lastDay?.time);
+  if (endTime) return new Date(`${endDate}T${endTime}:00+07:00`);
+  // ไม่มีเวลาสิ้นสุดในแผน → เปิดให้กรอกตั้งแต่วันจัดกิจกรรมวันสุดท้าย (เวลาไทย)
+  return new Date(`${endDate}T00:00:00+07:00`);
+}
+function activityHasEnded(plan, now = new Date()) {
+  const at = activityProblemsUnlockAt(plan);
+  return !at || now.getTime() >= at.getTime();
+}
+function activityProblemsUnlockLabel(plan) {
+  const dates = activityActiveDates(plan);
+  const endDate = dates.length ? dates[dates.length - 1] : activityEnd(plan);
+  const lastDay = activityDayList(plan).filter(day => !day.holiday).pop();
+  const endTime = parseActivityEndTime(lastDay?.time);
+  const dateLabel = formatThaiDateKey(endDate);
+  if (endTime) return `${dateLabel} เวลา ${endTime} น.`;
+  return `${dateLabel} เป็นต้นไป`;
+}
+
 // บันทึกหลังกิจกรรม — เก็บในแถว JSON เดียวกับแผน (ฟิลด์ post_record) แผนเก่าที่ไม่มีฟิลด์นี้ = ยังไม่บันทึก
 const ACTIVITY_POST_IMAGE_LIMIT = 8;
 function cleanActivityPost(raw) {
@@ -6078,9 +6112,17 @@ function ActivityWorksheetPicker({ images = [], onChange, setError, userId }) {
 function ActivityPostForm({ plan, currentUser, saving, onCancel, onSave, setError }) {
   const [post, setPost] = useState(() => plan.post_record || { result: "", participants: "", problems: "", suggestions: "", images: [] });
   const [busy, setBusy] = useState(false);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  const problemsOpen = activityHasEnded(plan, new Date(nowTick));
+  useEffect(() => {
+    if (activityHasEnded(plan)) return undefined;
+    const id = setInterval(() => setNowTick(Date.now()), 15000);
+    return () => clearInterval(id);
+  }, [plan]);
   const set = patch => setPost(current => ({ ...current, ...patch }));
   const small = { ...inputStyle, padding: "0.45rem 0.6rem", fontSize: "0.9rem" };
   const area = { ...small, minHeight: 90, resize: "vertical" };
+  const lockedArea = { ...area, background: "#f1f5f9", color: "#475569", cursor: "not-allowed" };
   const addImages = async files => {
     const picked = Array.from(files || []).filter(f => !f.type || f.type.startsWith("image/"));
     if (!picked.length) return;
@@ -6101,14 +6143,18 @@ function ActivityPostForm({ plan, currentUser, saving, onCancel, onSave, setErro
       <div style={{ display: "grid", gap: "0.6rem" }}>
         <div style={{ fontWeight: 800, fontSize: "1.05rem", color: "#2B0A10" }}>บันทึกหลังกิจกรรม</div>
         <div style={{ fontSize: "0.85rem", color: "#475569" }}>{plan.title} · {formatActivityRange(plan)}</div>
+        <div style={{ fontSize: "0.82rem", color: "#7A5A14", background: "#FBF5E6", border: "1px solid #E8D6A6", borderRadius: 10, padding: "0.45rem 0.7rem" }}>ผลการดำเนินกิจกรรม จำนวนผู้เข้าร่วม ข้อเสนอแนะ และรูปภาพ กรอกล่วงหน้าได้ · ปัญหา/อุปสรรค กรอกได้เมื่อกิจกรรมจบ</div>
         {label("1. ผลการดำเนินกิจกรรม")}
-        <textarea value={post.result} placeholder="กิจกรรมเป็นอย่างไร ได้ผลอย่างไร" onChange={e => set({ result: e.target.value })} style={area} />
+        <textarea aria-label="ผลการดำเนินกิจกรรม" value={post.result} placeholder="กิจกรรมเป็นอย่างไร ได้ผลอย่างไร (กรอกล่วงหน้าเป็นผลที่คาดหวังได้)" onChange={e => set({ result: e.target.value })} style={area} />
         {label("จำนวนผู้เข้าร่วม (ถ้ามี)")}
-        <input value={post.participants} placeholder="เช่น นักเรียน 120 คน ครู 10 คน" onChange={e => set({ participants: e.target.value })} style={small} />
+        <input aria-label="จำนวนผู้เข้าร่วม" value={post.participants} placeholder="เช่น นักเรียน 120 คน ครู 10 คน" onChange={e => set({ participants: e.target.value })} style={small} />
         {label("2. ปัญหา/อุปสรรค")}
-        <textarea value={post.problems} onChange={e => set({ problems: e.target.value })} style={area} />
+        <textarea aria-label="ปัญหา/อุปสรรค" value={post.problems} disabled={!problemsOpen} placeholder={problemsOpen ? "" : "จะเปิดให้กรอกเมื่อกิจกรรมจบ"} onChange={e => { if (problemsOpen) set({ problems: e.target.value }); }} style={problemsOpen ? area : lockedArea} />
+        {!problemsOpen && (
+          <div style={{ fontSize: "0.8rem", color: "#92400e", background: "#FBF5E6", border: "1px solid #E8D6A6", borderRadius: 8, padding: "0.4rem 0.6rem" }}>🔒 ช่องนี้กรอกได้เมื่อกิจกรรมจบแล้ว · จะเปิดให้กรอกวันที่ {activityProblemsUnlockLabel(plan)}</div>
+        )}
         {label("3. ข้อเสนอแนะ/แนวทางแก้ไข")}
-        <textarea value={post.suggestions} onChange={e => set({ suggestions: e.target.value })} style={area} />
+        <textarea aria-label="ข้อเสนอแนะ/แนวทางแก้ไข" value={post.suggestions} onChange={e => set({ suggestions: e.target.value })} style={area} />
         {label(`ภาพกิจกรรม (ไม่บังคับ สูงสุด ${ACTIVITY_POST_IMAGE_LIMIT} รูป)`)}
         <label style={{ ...btnSecondary, flex: "none", width: "fit-content", cursor: busy ? "not-allowed" : "pointer" }}>
           <Upload size={16} /> {busy ? "กำลังเพิ่มรูป..." : "เพิ่มรูป"}
@@ -6133,7 +6179,8 @@ function ActivityPostForm({ plan, currentUser, saving, onCancel, onSave, setErro
           <button type="button" onClick={onCancel} disabled={saving} style={{ ...btnSecondary, padding: "0.55rem" }}>ยกเลิก</button>
           <button type="button" disabled={saving || busy} onClick={() => {
             if (!String(post.result || "").trim()) { setError("กรอกผลการดำเนินกิจกรรมก่อน"); return; }
-            onSave({ ...post, recorded_by: String(currentUser?.id || ""), recorded_by_name: currentUser?.name || "", recorded_at: new Date().toISOString() });
+            const preservedProblems = problemsOpen ? post.problems : (plan.post_record?.problems || "");
+            onSave({ ...post, problems: preservedProblems, recorded_by: String(currentUser?.id || ""), recorded_by_name: currentUser?.name || "", recorded_at: new Date().toISOString() });
           }} style={{ ...btnPrimary, padding: "0.55rem", background: "linear-gradient(135deg, #A6192E, #8E1426)", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}><Save size={16} /> {saving ? "กำลังบันทึก..." : "บันทึก"}</button>
         </div>
       </div>
@@ -6395,7 +6442,8 @@ function ActivityPlanPage({ employees, currentUser }) {
   };
 
   const savePost = async post => {
-    const plan = cleanActivityPlan({ ...postFor, post_record: post, updated_at: new Date().toISOString() });
+    const safePost = activityHasEnded(postFor) ? post : { ...post, problems: postFor?.post_record?.problems || "" };
+    const plan = cleanActivityPlan({ ...postFor, post_record: safePost, updated_at: new Date().toISOString() });
     setSaving(true); setError(""); setMessage("");
     try {
       plan.row_id = await writeActivityRow(plan);

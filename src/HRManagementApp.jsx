@@ -2831,6 +2831,8 @@ function emptyWeekPeriod(teachDate, periodNo) {
     homework_file: null,
     worksheet_file: null,
     worksheet_images: [],
+    use_prev_worksheet: false,
+    prev_worksheet_source: null,
     youtube_links: [],
     post_note: emptyPostNote(),
   };
@@ -2869,6 +2871,8 @@ function normalizeSupervisionPeriod(period, weekStart) {
     homework_file: source.homework_file?.dataUrl || source.homework_file?.path ? source.homework_file : null,
     worksheet_file: source.worksheet_file?.url || source.worksheet_file?.dataUrl || source.worksheet_file?.path ? source.worksheet_file : null,
     worksheet_images: Array.isArray(source.worksheet_images) ? source.worksheet_images.filter(img => img && (img.url || img.dataUrl || img.path)).slice(0, 12) : [],
+    use_prev_worksheet: source.use_prev_worksheet === true,
+    prev_worksheet_source: source.use_prev_worksheet === true ? cleanPrevWorksheetSource(source.prev_worksheet_source) : null,
     youtube_links: cleanYoutubeLinks(source.youtube_links),
     post_note: cleanPostNote(source.post_note),
   };
@@ -3493,6 +3497,84 @@ function lessonFileHref(file) {
   return file?.url || file?.dataUrl || "";
 }
 
+// ─── ใช้ใบงานจากคาบที่แล้ว ────────────────────────────────────────────────
+// เก็บเฉพาะ "อ้างอิง" ไฟล์เดิม (path ใน Storage เดิม) ไม่อัปโหลดซ้ำ
+// และระบบไม่มีการลบไฟล์ออกจาก Storage เลย (เอาติ๊กออก/ลบรูป/ลบคาบ = แก้แค่ข้อมูลแผน) ไฟล์ของคาบต้นทางจึงไม่หาย
+const PREV_WORKSHEET_WEEKS_BACK = 4;
+const validLessonFile = file => !!(file && typeof file === "object" && (file.url || file.dataUrl || file.path));
+function cleanPrevWorksheetSource(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const worksheet_file = validLessonFile(raw.worksheet_file) ? raw.worksheet_file : null;
+  const worksheet_images = Array.isArray(raw.worksheet_images) ? raw.worksheet_images.filter(validLessonFile).slice(0, 12) : [];
+  if (!worksheet_file && !worksheet_images.length) return null;
+  return {
+    teach_date: /^\d{4}-\d{2}-\d{2}$/.test(raw.teach_date || "") ? raw.teach_date : "",
+    period_no: Number(raw.period_no) || null,
+    subject: String(raw.subject || "").slice(0, 120),
+    plan_class: String(raw.plan_class || "").slice(0, 60),
+    plan_title: String(raw.plan_title || "").slice(0, 200),
+    worksheet_file,
+    worksheet_images,
+  };
+}
+// ใบงานของคาบหนึ่ง (ไฟล์ของคาบเอง ถ้าไม่มีแต่คาบนั้นก็ใช้ของคาบก่อนหน้าต่อ ให้ส่งต่อแหล่งเดิม)
+function periodOwnWorksheet(period) {
+  const file = validLessonFile(period?.worksheet_file) ? period.worksheet_file : null;
+  const images = (period?.worksheet_images || []).filter(validLessonFile);
+  if (file || images.length) return { teach_date: period.teach_date, period_no: period.period_no, subject: period.subject, plan_class: period.plan_class, plan_title: period.plan_title, worksheet_file: file, worksheet_images: images };
+  if (period?.use_prev_worksheet && period.prev_worksheet_source) return period.prev_worksheet_source;
+  return null;
+}
+const subjectKey = value => String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
+function sameClassSubject(a, b) {
+  if (!subjectKey(a?.subject) || subjectKey(a?.subject) !== subjectKey(b?.subject)) return false;
+  const ca = subjectKey(a?.plan_class), cb = subjectKey(b?.plan_class);
+  return !ca || !cb || ca === cb;
+}
+const periodOrder = period => `${period?.teach_date || ""}#${String(period?.period_no || 0).padStart(2, "0")}`;
+// หา "คาบที่แล้ว" ของวิชา+ห้องเดียวกันที่มีใบงาน (ใกล้ที่สุดก่อน) จากรายการคาบที่ให้มา
+function findPrevWorksheetIn(list, target) {
+  const before = (list || [])
+    .filter(period => period && !period.free && period.id !== target.id && periodOrder(period) < periodOrder(target) && sameClassSubject(period, target))
+    .sort((a, b) => periodOrder(b).localeCompare(periodOrder(a)));
+  for (const period of before) {
+    const found = periodOwnWorksheet(period);
+    if (found) return cleanPrevWorksheetSource(found);
+  }
+  return null;
+}
+function prevSourceLabel(src) {
+  if (!src) return "";
+  const day = src.teach_date ? new Date(`${src.teach_date}T00:00:00`).toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "short", year: "2-digit" }) : "";
+  return [day, src.period_no ? `คาบ ${src.period_no}` : "", [src.subject, src.plan_class].filter(Boolean).join(" "), src.plan_title ? `(${src.plan_title})` : ""].filter(Boolean).join(" · ");
+}
+const PREV_NONE_NOTE = "ยังไม่พบไฟล์ใบงานของคาบที่แล้ว (วิชาและห้องเดียวกัน) ในระบบ เช่น ใช้ใบงานกระดาษ หรือคาบก่อนยังไม่ได้อัปโหลด — บันทึกได้ตามปกติ ระบบจะเก็บสถานะ \"ใช้ใบงานจากคาบที่แล้ว\" ไว้ให้";
+
+function PrevWorksheetBlock({ period, title = "", emptyNote = "", emptyAction = null }) {
+  if (!period?.use_prev_worksheet) return null;
+  const src = period.prev_worksheet_source;
+  return (
+    <div data-testid="prev-worksheet-block" style={{ background: "#FBF5E6", border: "1px solid #E8D6A6", borderRadius: 10, padding: "0.6rem 0.75rem", display: "grid", gap: "0.45rem", minWidth: 0 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", alignItems: "center" }}>
+        <span style={{ background: "#A6192E", color: "#fff", borderRadius: 999, padding: "0.1rem 0.6rem", fontSize: "0.78rem", fontWeight: 800 }}>♻️ ใช้ใบงานจากคาบที่แล้ว</span>
+        {src && <span style={{ fontSize: "0.82rem", color: "#2B0A10", fontWeight: 700 }}>จาก {prevSourceLabel(src)}</span>}
+      </div>
+      {src ? (
+        <>
+          {lessonFileHref(src.worksheet_file) && <WorksheetLink file={src.worksheet_file} />}
+          {(src.worksheet_images || []).length > 0 && <WorksheetImages images={src.worksheet_images} title={title || `ใบงาน (จากคาบที่แล้ว)`} />}
+          {!lessonFileHref(src.worksheet_file) && !(src.worksheet_images || []).some(img => lessonFileHref(img)) && <div style={{ fontSize: "0.82rem", color: "#64748b" }}>กำลังโหลดไฟล์ใบงาน...</div>}
+        </>
+      ) : (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
+          <div style={{ fontSize: "0.82rem", color: "#7c5a12", lineHeight: 1.55, flex: "1 1 240px" }}>{emptyNote ? `ℹ️ ${emptyNote}` : "ไม่มีไฟล์ใบงานในระบบ (ใช้ใบงานชุดเดิมของคาบก่อน)"}</div>
+          {emptyAction}
+        </div>
+      )}
+    </div>
+  );
+}
+
 async function uploadLessonFile(file, employeeId) {
   const isImage = String(file.type || "").startsWith("image/");
   const body = isImage ? await compressImageBlob(file) : file;
@@ -3735,6 +3817,7 @@ function periodHasDetail(period) {
     || period?.homework_file?.dataUrl
     || period?.worksheet_file?.url || period?.worksheet_file?.dataUrl
     || (period?.worksheet_images || []).length > 0
+    || period?.use_prev_worksheet === true
     || (period?.youtube_links || []).some(link => String(link || "").trim())
     || postNoteHasData(period?.post_note)
     || String(period?.plan_unit || "").trim()
@@ -3846,7 +3929,7 @@ function DayCard({ title, summary, children, defaultOpen = false }) {
   );
 }
 
-function WeekPeriodEditor({ period, disabled, onChange, onPickFile, onPickWorksheet, worksheetBusy, onPickImages, imageBusy, imagesLocked = false, teacherName, slot = null, timetable = [], defaultOpen = false }) {
+function WeekPeriodEditor({ period, disabled, onChange, onPickFile, onPickWorksheet, worksheetBusy, onPickImages, imageBusy, imagesLocked = false, teacherName, slot = null, timetable = [], defaultOpen = false, onTogglePrevWorksheet = null, prevBusy = false }) {
   const [open, setOpen] = useState(defaultOpen);
   const [typing, setTyping] = useState(false);
   const subjectOptions = [...new Map((timetable || []).map(row => [timetableSlotLabel(row), row])).values()];
@@ -3924,8 +4007,26 @@ function WeekPeriodEditor({ period, disabled, onChange, onPickFile, onPickWorksh
           <textarea value={period.lesson_summary || ""} onChange={event => onChange({ lesson_summary: event.target.value })} style={periodArea} />
         </Field>
       </QuietFold>
-      <QuietFold title="สื่อ / ใบงาน / YouTube">
-        <Field label="ใบงาน (PDF)">
+      <QuietFold title={period.use_prev_worksheet ? "สื่อ / ใบงาน / YouTube · ♻️ ใช้ใบงานจากคาบที่แล้ว" : "สื่อ / ใบงาน / YouTube"}>
+        {onTogglePrevWorksheet && (
+          <div style={{ display: "grid", gap: "0.5rem", minWidth: 0 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", minHeight: 44, padding: "0.35rem 0.7rem", border: `1.5px solid ${period.use_prev_worksheet ? "#A6192E" : "#E8D6A6"}`, borderRadius: 10, background: period.use_prev_worksheet ? "#FDF2F3" : "#fff", fontWeight: 800, color: "#2B0A10", cursor: disabled || prevBusy ? "not-allowed" : "pointer", width: "fit-content", maxWidth: "100%" }}>
+              <input type="checkbox" aria-label="ใช้ใบงานจากคาบที่แล้ว" checked={!!period.use_prev_worksheet} disabled={disabled || prevBusy} onChange={event => onTogglePrevWorksheet(event.target.checked)} style={{ width: 20, height: 20, accentColor: "#A6192E" }} />
+              ♻️ ใช้ใบงานจากคาบที่แล้ว
+              {prevBusy && <span style={{ fontSize: "0.78rem", fontWeight: 600, color: "#64748b" }}>กำลังค้นหา...</span>}
+            </label>
+            {period.use_prev_worksheet && !prevBusy && (
+              <PrevWorksheetBlock
+                period={period}
+                title={`ใบงาน ${teacherName || ""}`}
+                emptyNote={PREV_NONE_NOTE}
+                emptyAction={<button type="button" disabled={disabled || prevBusy} onClick={() => onTogglePrevWorksheet(true)} style={{ ...btnSecondary, flex: "none", minHeight: 36, padding: "0.3rem 0.7rem", fontSize: "0.8rem" }}>ค้นหาอีกครั้ง</button>}
+              />
+            )}
+            {period.use_prev_worksheet && <div style={{ fontSize: "0.78rem", color: "#64748b" }}>แนบใบงานเพิ่มเติมด้านล่างได้ถ้ามี (ไม่บังคับ) · เอาติ๊กออกได้ ไฟล์ของคาบเดิมจะไม่ถูกลบ</div>}
+          </div>
+        )}
+        <Field label={period.use_prev_worksheet ? "ใบงานเพิ่มเติม (PDF) — ไม่บังคับ" : "ใบงาน (PDF)"}>
           <label style={{ ...btnSecondary, flex: "none", width: "fit-content", cursor: disabled ? "not-allowed" : "pointer" }}>
             <Upload size={16} /> {worksheetBusy ? "กำลังอัปโหลด..." : "อัปโหลดใบงาน PDF"}
             <input type="file" accept=".pdf,application/pdf" disabled={disabled || worksheetBusy} onChange={onPickWorksheet} style={{ display: "none" }} />
@@ -3935,7 +4036,7 @@ function WeekPeriodEditor({ period, disabled, onChange, onPickFile, onPickWorksh
             <button type="button" onClick={() => onChange({ worksheet_file: null })} style={{ ...btnSecondary, flex: "none", marginTop: "0.6rem", color: "#dc2626" }}>เอาใบงาน PDF ออก</button>
           )}
         </Field>
-        <Field label="แนบรูปใบงาน (ถ่ายรูป/เลือกจากคลัง ได้หลายรูป)">
+        <Field label={period.use_prev_worksheet ? "รูปใบงานเพิ่มเติม — ไม่บังคับ" : "แนบรูปใบงาน (ถ่ายรูป/เลือกจากคลัง ได้หลายรูป)"}>
           {!imagesLocked && (
             <label style={{ ...btnSecondary, flex: "none", width: "fit-content", cursor: disabled || imageBusy ? "not-allowed" : "pointer" }}>
               <Upload size={16} /> {imageBusy ? "กำลังอัปโหลด..." : "เพิ่มรูปใบงาน"}
@@ -4091,9 +4192,15 @@ function SupervisionPeriodRead({ period, defaultOpen = false, adminSlot = null, 
               <FullText value={period.media_detail} />
             </div>
           )}
+          {period.use_prev_worksheet && (
+            <div>
+              <div style={{ fontWeight: 800, color: "#2B0A10", marginBottom: "0.3rem" }}>ใบงาน</div>
+              <PrevWorksheetBlock period={period} />
+            </div>
+          )}
           {lessonFileHref(period.worksheet_file) && (
             <div>
-              <div style={{ fontWeight: 800, color: "#2B0A10" }}>ใบงาน (PDF)</div>
+              <div style={{ fontWeight: 800, color: "#2B0A10" }}>{period.use_prev_worksheet ? "ใบงานเพิ่มเติม (PDF)" : "ใบงาน (PDF)"}</div>
               <WorksheetLink file={period.worksheet_file} />
             </div>
           )}
@@ -4888,6 +4995,34 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
     }
   };
 
+  // ติ๊ก "ใช้ใบงานจากคาบที่แล้ว": หาในสัปดาห์นี้ก่อน แล้วย้อนดูแผนสัปดาห์ก่อน ๆ (อ่านอย่างเดียว) สูงสุด 4 สัปดาห์
+  const [prevBusy, setPrevBusy] = useState("");
+  const togglePrevWorksheet = async (period, checked) => {
+    if (!checked) {
+      // เอาติ๊กออก = ล้างแค่การอ้างอิงในแผนนี้ ไม่แตะไฟล์ใน Storage ของคาบต้นทาง
+      updatePeriod(period.id, { use_prev_worksheet: false, prev_worksheet_source: null });
+      return;
+    }
+    updatePeriod(period.id, { use_prev_worksheet: true });
+    setPrevBusy(period.id);
+    try {
+      let found = findPrevWorksheetIn(periods, period);
+      for (let back = 1; !found && back <= PREV_WORKSHEET_WEEKS_BACK; back += 1) {
+        const week = shiftDateKey(weekStart, -7 * back);
+        try {
+          const rows = await fetchSupervisionRows(currentUser.id, week);
+          const plan = rows[0] ? parseSupervisionPlan(rows[0].subject, week) : null;
+          if (plan?.periods?.length) found = findPrevWorksheetIn(plan.periods, period);
+        } catch { /* อ่านสัปดาห์ก่อนไม่ได้ ข้ามไป */ }
+      }
+      setPeriods(current => current.map(item => item.id === period.id ? { ...item, use_prev_worksheet: item.use_prev_worksheet, prev_worksheet_source: item.use_prev_worksheet ? found : null } : item));
+      setError("");
+      setMessage(found ? `ใช้ใบงานจาก ${prevSourceLabel(found)} แล้ว กดบันทึกเพื่อเก็บลงแผน` : "ติ๊กใช้ใบงานจากคาบที่แล้วแล้ว (ยังไม่พบไฟล์ใบงานของคาบก่อนในระบบ) กดบันทึกได้ตามปกติ");
+    } finally {
+      setPrevBusy("");
+    }
+  };
+
   const actionButtons = blockedNoTimetable ? null : (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))", gap: "0.5rem" }}>
       <button type="button" onClick={copyPreviousWeek} disabled={saving || loading} style={{ ...btnSecondary, minHeight: 44 }}><Copy size={16} /> คัดลอกจากสัปดาห์ก่อน</button>
@@ -4967,6 +5102,8 @@ function SupervisionTeacher({ currentUser, planFocus = null }) {
                     imageBusy={imageBusy === period.id}
                     imagesLocked={status === "submitted" || status === "late"}
                     teacherName={currentUser.name}
+                    onTogglePrevWorksheet={checked => togglePrevWorksheet(period, checked)}
+                    prevBusy={prevBusy === period.id}
                   />
                 ))}
               </DayCard>

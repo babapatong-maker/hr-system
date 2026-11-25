@@ -5940,6 +5940,106 @@ function rollMonthSummary(book, month) {
   return { totals, perStudent };
 }
 
+function compareRollNumber(a, b) {
+  const an = Number(String(a?.number ?? "").trim());
+  const bn = Number(String(b?.number ?? "").trim());
+  if (Number.isFinite(an) && Number.isFinite(bn) && an !== bn) return an - bn;
+  const byNumber = String(a?.number || "").localeCompare(String(b?.number || ""), "th", { numeric: true });
+  if (byNumber) return byNumber;
+  return studentLabel(a).localeCompare(studentLabel(b), "th");
+}
+
+function formatLeaveDateList(dates) {
+  return (dates || []).map(formatThaiDateKey).join(", ");
+}
+
+function formatThaiMonthLabel(month) {
+  if (!/^\d{4}-\d{2}$/.test(month || "")) return month || "";
+  const [year, mon] = month.split("-").map(Number);
+  const names = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+  return `${names[mon - 1] || month} ${year + 543}`;
+}
+
+// สรุปวันลากิจ/ลาป่วยทั้งห้องในเดือนที่เลือก
+// นับจากวันที่บันทึกการเช็คชื่อแล้วเท่านั้น (เหมือนสถิติเดิม)
+// การเช็คชื่อเก็บสถานะรายวัน (วันละ 1 สถานะต่อคน) จึงนับเป็นจำนวนวันไม่ซ้ำต่อประเภทการลา
+function rollLeaveSummary(book, month) {
+  const days = Object.entries(book?.days || {})
+    .filter(([date, day]) => month && date.startsWith(month) && day?.saved_at)
+    .sort((left, right) => left[0].localeCompare(right[0]));
+  return [...(book?.students || [])].sort(compareRollNumber).map(student => {
+    const personalDates = [];
+    const sickDates = [];
+    days.forEach(([date, day]) => {
+      const status = day.marks?.[student.id];
+      if (status === "personal") personalDates.push(date);
+      else if (status === "sick") sickDates.push(date);
+    });
+    return {
+      student,
+      number: student.number || "",
+      name: studentLabel(student),
+      personalDates,
+      sickDates,
+      personalDays: personalDates.length,
+      sickDays: sickDates.length,
+    };
+  });
+}
+
+function leaveSummaryText(rows, title, month) {
+  const heading = [title || "สรุปการลา", formatThaiMonthLabel(month)].filter(Boolean).join(" · ");
+  return [
+    heading,
+    ["เลขที่", "ชื่อ", "ลากิจวันที่", "ลาป่วยวันที่", "รวมลาป่วย (วัน)", "รวมลากิจ (วัน)"].join("\t"),
+    ...rows.map(row => [
+      row.number,
+      row.name,
+      formatLeaveDateList(row.personalDates) || "-",
+      formatLeaveDateList(row.sickDates) || "-",
+      String(row.sickDays),
+      String(row.personalDays),
+    ].join("\t")),
+  ].join("\n");
+}
+
+function printLeaveSummary(rows, title, month) {
+  const win = window.open("", "_blank");
+  if (!win) return;
+  const heading = escapeHtml([title || "สรุปการลา", formatThaiMonthLabel(month)].filter(Boolean).join(" · "));
+  const body = rows.map(row => `<tr>
+    <td style="text-align:center">${escapeHtml(row.number)}</td>
+    <td>${escapeHtml(row.name)}</td>
+    <td>${escapeHtml(formatLeaveDateList(row.personalDates) || "-")}</td>
+    <td>${escapeHtml(formatLeaveDateList(row.sickDates) || "-")}</td>
+    <td style="text-align:center">${row.sickDays}</td>
+    <td style="text-align:center">${row.personalDays}</td>
+  </tr>`).join("");
+  win.document.open();
+  win.document.write(`<!doctype html><html lang="th"><head><meta charset="utf-8"><title>สรุปการลา</title>
+<style>
+@page{size:A4 portrait;margin:12mm}
+body{font-family:"Sarabun","TH Sarabun New",sans-serif;font-size:13px;color:#2B0A10;margin:0}
+h2{font-family:"Kanit",sans-serif;text-align:center;margin:0 0 4px;font-size:18px;color:#8E1426}
+.sub{text-align:center;margin:0 0 10px;color:#475569}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #888;padding:4px 6px;vertical-align:top}
+th{background:#FBF5E6;color:#8E1426;text-align:center}
+.note{margin-top:8px;color:#64748b;font-size:11px}
+</style></head><body>
+<h2>สรุปการลาของนักเรียน</h2>
+<div class="sub">${heading}</div>
+<table>
+<tr><th>เลขที่</th><th>ชื่อ</th><th>ลากิจวันที่</th><th>ลาป่วยวันที่</th><th>รวมลาป่วย (วัน)</th><th>รวมลากิจ (วัน)</th></tr>
+${body || '<tr><td colspan="6" style="text-align:center">ไม่มีรายชื่อนักเรียน</td></tr>'}
+</table>
+<div class="note">นับจากวันที่บันทึกการเช็คชื่อแล้วในเดือนนี้ · นับเป็นจำนวนวัน (วันละ 1 ครั้งต่อประเภทการลา)</div>
+</body></html>`);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 600);
+}
+
 function RollModeSwitch({ mode, onChange }) {
   const items = [
     { key: "check", label: "เช็คชื่อวันนี้" },
@@ -6072,6 +6172,22 @@ function SickCasesPanel({ book, month, title }) {
 
 function RollStatsPanel({ book, month, onMonth, title }) {
   const summary = rollMonthSummary(book, month);
+  const [showLeave, setShowLeave] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const leaveRows = showLeave ? rollLeaveSummary(book, month) : [];
+  const copyLeave = async () => {
+    const text = leaveSummaryText(rollLeaveSummary(book, month), title, month);
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
+      else throw new Error("no clipboard");
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      window.alert("คัดลอกไม่สำเร็จ");
+    }
+  };
+  const th = { padding: "0.3rem 0.45rem", fontWeight: 800, fontSize: "0.74rem", textAlign: "left", whiteSpace: "nowrap", borderBottom: "1px solid #e2e8f0", color: "#8E1426", background: "#FBF5E6" };
+  const td = { padding: "0.3rem 0.45rem", fontSize: "0.8rem", verticalAlign: "top", borderTop: "1px solid #f1f5f9" };
   return (
     <Card>
       <div style={{ display: "grid", gap: "0.8rem", minWidth: 0 }}>
@@ -6079,9 +6195,43 @@ function RollStatsPanel({ book, month, onMonth, title }) {
           <div style={{ fontWeight: 800, color: "#2B0A10", fontSize: "1.05rem" }}>{title || "สถิติการเช็คชื่อ"}</div>
           <div style={{ color: "#64748b", fontSize: "0.82rem" }}>นับจากวันที่บันทึกการเช็คชื่อแล้ว</div>
         </div>
-        <Field label="เดือน">
-          <input type="month" value={month} max={todayISO().slice(0, 7)} onChange={event => onMonth(event.target.value)} style={{ ...periodInput, width: "100%", maxWidth: 240 }} />
-        </Field>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.55rem", alignItems: "flex-end" }}>
+          <Field label="เดือน">
+            <input type="month" value={month} max={todayISO().slice(0, 7)} onChange={event => onMonth(event.target.value)} style={{ ...periodInput, width: "100%", maxWidth: 240 }} />
+          </Field>
+          {book.students.length > 0 && (
+            <button type="button" onClick={() => setShowLeave(value => !value)} aria-pressed={showLeave} style={{ ...btnPrimary, flex: "none", minHeight: 44, padding: "0.55rem 1.15rem", background: "linear-gradient(135deg, #A6192E, #8E1426)", color: "#fff", cursor: "pointer" }}>สรุป</button>
+          )}
+        </div>
+        {showLeave && (
+          <div style={{ display: "grid", gap: "0.45rem", minWidth: 0 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", alignItems: "center" }}>
+              <span style={{ fontWeight: 800, color: "#8E1426", flex: 1 }}>สรุปการลาทั้งห้อง{month ? ` · ${formatThaiMonthLabel(month)}` : ""}</span>
+              <button type="button" onClick={copyLeave} style={{ ...btnSecondary, flex: "none", padding: "0.25rem 0.6rem", fontSize: "0.78rem" }}><Copy size={14} /> {copied ? "คัดลอกแล้ว" : "คัดลอก"}</button>
+              <button type="button" onClick={() => printLeaveSummary(leaveRows, title, month)} style={{ ...btnSecondary, flex: "none", padding: "0.25rem 0.6rem", fontSize: "0.78rem" }}><Printer size={14} /> พิมพ์</button>
+            </div>
+            <div style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 8 }}>
+              <table style={{ width: "100%", minWidth: 640, borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>{["เลขที่", "ชื่อ", "ลากิจวันที่", "ลาป่วยวันที่", "รวมลาป่วย (วัน)", "รวมลากิจ (วัน)"].map(label => <th key={label} style={th}>{label}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {leaveRows.map(row => (
+                    <tr key={row.student.id}>
+                      <td style={{ ...td, whiteSpace: "nowrap", fontWeight: 800, color: "#64748b", textAlign: "center" }}>{row.number}</td>
+                      <td style={{ ...td, whiteSpace: "nowrap", fontWeight: 800, color: "#2B0A10" }}>{row.name}</td>
+                      <td style={td}>{formatLeaveDateList(row.personalDates) || <span style={{ color: "#94a3b8" }}>-</span>}</td>
+                      <td style={td}>{formatLeaveDateList(row.sickDates) || <span style={{ color: "#94a3b8" }}>-</span>}</td>
+                      <td style={{ ...td, textAlign: "center", fontWeight: 800, color: row.sickDays ? "#8E1426" : "#64748b" }}>{row.sickDays}</td>
+                      <td style={{ ...td, textAlign: "center", fontWeight: 800, color: row.personalDays ? "#b45309" : "#64748b" }}>{row.personalDays}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ color: "#64748b", fontSize: "0.78rem" }}>นับจากวันที่บันทึกการเช็คชื่อแล้วในเดือนนี้ · นับเป็นจำนวนวัน (วันละ 1 ครั้งต่อประเภทการลา)</div>
+          </div>
+        )}
         <div style={{ fontWeight: 800, color: "#2B0A10" }}>เช็คชื่อแล้ว {summary.totals.days} วัน</div>
         <RollCountChips counts={summary.totals} />
         {summary.totals.sick > 0 && <SickCasesPanel book={book} month={month} title={title} />}

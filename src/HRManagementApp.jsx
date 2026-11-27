@@ -958,22 +958,24 @@ function PageHeader({ title, count, onAdd, addLabel }) {
   );
 }
 
-function Modal({ title, subtitle, onClose, icon: Icon, color = "#8E1426", children }) {
+function Modal({ title, subtitle, onClose, icon: Icon, color = "#8E1426", children, compact = false, wide = false, headerExtra = null, footer = null }) {
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.7)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "1rem" }}>
-      <div style={{ background: "#fff", borderRadius: "1.5rem", width: "100%", maxWidth: "480px", boxShadow: "0 32px 80px rgba(0,0,0,0.25)", overflow: "hidden", fontFamily: "'Sarabun', 'Noto Sans Thai', sans-serif", maxHeight: "90vh", display: "flex", flexDirection: "column" }}>
-        <div style={{ background: `linear-gradient(135deg, ${color}, ${color}dd)`, padding: "1.5rem", position: "relative", flexShrink: 0 }}>
-          <button onClick={onClose} style={{ position: "absolute", top: "1rem", right: "1rem", background: "rgba(255,255,255,0.2)", border: "none", borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#fff" }}><X size={16} /></button>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.7)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: compact ? "0.5rem" : "1rem" }}>
+      <div style={{ background: "#fff", borderRadius: compact ? "1.25rem" : "1.5rem", width: "100%", maxWidth: wide ? "900px" : "480px", boxShadow: "0 32px 80px rgba(0,0,0,0.25)", overflow: "hidden", fontFamily: "'Sarabun', 'Noto Sans Thai', sans-serif", maxHeight: compact ? "96vh" : "90vh", display: "flex", flexDirection: "column" }}>
+        <div style={{ background: `linear-gradient(135deg, ${color}, ${color}dd)`, padding: compact ? "0.7rem 0.9rem" : "1.5rem", position: "relative", flexShrink: 0 }}>
+          <button onClick={onClose} style={{ position: "absolute", top: compact ? "0.6rem" : "1rem", right: compact ? "0.7rem" : "1rem", background: "rgba(255,255,255,0.2)", border: "none", borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#fff" }}><X size={16} /></button>
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", color: "#fff" }}>
-            <div style={{ background: "rgba(255,255,255,0.2)", borderRadius: "12px", padding: "0.5rem", display: "flex" }}><Icon size={22} /></div>
+            <div style={{ background: "rgba(255,255,255,0.2)", borderRadius: "12px", padding: compact ? "0.35rem" : "0.5rem", display: "flex" }}><Icon size={compact ? 18 : 22} /></div>
             <div>
-              <div style={{ fontSize: "0.75rem", opacity: 0.8 }}>HR System</div>
+              <div style={{ fontSize: compact ? "0.68rem" : "0.75rem", opacity: 0.8 }}>HR System</div>
               <div style={{ fontSize: "1.1rem", fontWeight: 700 }}>{title}</div>
             </div>
           </div>
-          {subtitle && <div style={{ color: "rgba(255,255,255,0.9)", fontSize: "0.85rem", marginTop: "0.75rem", background: "rgba(255,255,255,0.1)", borderRadius: "8px", padding: "0.5rem 0.75rem" }}>{subtitle}</div>}
+          {subtitle && <div style={{ color: "rgba(255,255,255,0.9)", fontSize: compact ? "0.78rem" : "0.85rem", marginTop: compact ? "0.45rem" : "0.75rem", background: "rgba(255,255,255,0.1)", borderRadius: "8px", padding: compact ? "0.25rem 0.6rem" : "0.5rem 0.75rem" }}>{subtitle}</div>}
+          {headerExtra}
         </div>
-        <div style={{ padding: "1.5rem", overflowY: "auto" }}>{children}</div>
+        <div style={{ padding: compact ? "0.65rem 0.8rem" : "1.5rem", overflowY: "auto", flex: 1, minHeight: 0 }}>{children}</div>
+        {footer && <div style={{ padding: compact ? "0.55rem 0.8rem 0.7rem" : "0.75rem 1.5rem 1.25rem", borderTop: "1px solid #F0E6DC", flexShrink: 0, background: "#fff" }}>{footer}</div>}
       </div>
     </div>
   );
@@ -1465,10 +1467,58 @@ function OutingModal({ employees, currentUser, onClose, onSave }) {
     </Modal>
   );
 }
+// ติดตามความกว้างจอ (ใช้สลับ layout เดสก์ท็อป 2 คอลัมน์ / มือถือ)
+function useMinWidth(px) {
+  const query = `(min-width: ${px}px)`;
+  const [match, setMatch] = useState(() => typeof window !== "undefined" && !!window.matchMedia && window.matchMedia(query).matches);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return undefined;
+    const mq = window.matchMedia(query);
+    const onChange = () => setMatch(mq.matches);
+    onChange();
+    mq.addEventListener ? mq.addEventListener("change", onChange) : mq.addListener(onChange);
+    return () => { mq.removeEventListener ? mq.removeEventListener("change", onChange) : mq.removeListener(onChange); };
+  }, [query]);
+  return match;
+}
+
+// แถบคะแนนประเมิน + สถิติเดือนนี้ 4 ช่อง ในหัวป๊อปอัปลงเวลา (มือถือ)
+function AttendanceScoreKpi({ evalData, showEval, myStats }) {
+  const ready = evalData && !evalData.failed;
+  const chips = [
+    { key: "late", label: "มาสาย", color: "#dc2626" },
+    { key: "early", label: "กลับก่อน", color: "#d97706" },
+    { key: "leaves", label: "ลา", color: "#7c3aed" },
+    { key: "outings", label: "ออกนอก", color: "#A6192E" },
+  ];
+  return (
+    <div role="group" aria-label="คะแนนและสถิติเดือนนี้" style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginTop: "0.5rem", background: "rgba(255,255,255,0.14)", borderRadius: 12, padding: "0.4rem 0.55rem", color: "#fff" }}>
+      {showEval && (
+        <>
+          <div style={{ fontSize: "1.6rem", fontWeight: 900, lineHeight: 1 }}>{ready ? evalData.score : evalData ? "–" : "…"}</div>
+          <div style={{ fontSize: "0.64rem", lineHeight: 1.25, whiteSpace: "nowrap" }}>
+            <b style={{ fontSize: "0.78rem" }}>คะแนนฉัน</b><br />{ready ? evalLevel(evalData.score).label : evalData ? "โหลดไม่ได้" : "กำลังโหลด"}<br />{ready ? `ภาค ${evalData.sem.term}/${evalData.sem.year}` : ""}
+          </div>
+        </>
+      )}
+      <div style={{ marginLeft: "auto", display: "flex", gap: "0.2rem" }}>
+        {chips.map(chip => (
+          <div key={chip.key} style={{ background: "#fff", borderRadius: 8, padding: "0.2rem 0.3rem", textAlign: "center", minWidth: 38, whiteSpace: "nowrap", color: chip.color }}>
+            <b style={{ display: "block", fontSize: "0.95rem", fontWeight: 800, lineHeight: 1.1 }}>{myStats[chip.key]}</b>
+            <span style={{ fontSize: "0.56rem", fontWeight: 700 }}>{chip.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 
 // ─── ATTENDANCE MODAL ─────────────────────────────────────────────────────────
 function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings, mode = "in", onOpenCleaning, onCleaningIncomplete, cleaningStatus: sharedCleaningStatus, refreshCleaningStatus: sharedRefreshCleaning }) {
   const [myStats, setMyStats] = useState({ late: 0, early: 0, leaves: 0, outings: 0 });
+  const isWide = useMinWidth(900);
+  const evalData = useMyEvalData(currentUser, !isTestTeacher(currentUser));
   const [gpsState, setGpsState] = useState("idle");
   const [coords, setCoords] = useState(null);
   const [distance, setDistance] = useState(null);
@@ -1687,26 +1737,52 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
   const pct = distance !== null ? Math.min(distance / GEOFENCE_RADIUS, 1) : 0;
   const canSubmit = isInZone && !done && !savingAttendance && (gpsExempt || gpsState === "success") && selectedEmp && (mode === "in" ? !openAttendance : openAttendance && !cleaningBlocked);
 
-  return (
-    <Modal title={mode === "in" ? "ลงเวลาเข้างาน" : "ลงเวลากลับบ้าน"} subtitle={`📍 รัศมี ${GEOFENCE_RADIUS} เมตรจากโรงเรียน`} onClose={onClose} icon={mode === "in" ? LogIn : LogOut} color={mode === "in" ? "#8E1426" : "#d97706"}>
-      {mode === "in" && <WeeklyCleaningWinnerBanner compact />}
-      <div style={{ ...inputStyle, background: "#FBF5E6", color: "#8E1426", marginBottom: "1rem", textAlign: "center", fontWeight: 700, border: "1.5px solid #E8D6A6" }}>
+  const ringSize = isWide ? 120 : 64;
+  const gpsNoticeEls = (
+    <>
+      {gpsExempt && (
+        <div style={{ textAlign: "center", marginBottom: 0, background: "#eff6ff", border: "1.5px solid #93c5fd", borderRadius: "12px", padding: "0.4rem 0.6rem", color: "#1d4ed8", fontWeight: 700 }}>
+          🔓 บัญชีนี้ได้รับยกเว้นการล็อก GPS · ลงเวลาได้จากทุกที่
+          {gpsState === "success" && <div style={{ fontSize: "0.8rem", color: "#64748b", marginTop: "0.25rem", fontWeight: 400 }}>ห่างจากโรงเรียน {distance} เมตร (บันทึกไว้เป็นข้อมูล)</div>}
+        </div>
+      )}
+      {!gpsExempt && gpsState === "error" && (
+        <div style={{ textAlign: "center", marginBottom: 0, background: "#fef2f2", border: "1.5px solid #fca5a5", borderRadius: "12px", padding: "0.4rem 0.6rem", color: "#dc2626", fontWeight: 700 }}>
+          ❌ หาตำแหน่ง GPS ไม่ได้ ลงเวลาไม่ได้
+          <div style={{ fontSize: "0.8rem", color: "#64748b", marginTop: "0.25rem", fontWeight: 400 }}>เปิด GPS และอนุญาตให้เว็บเข้าถึงตำแหน่ง แล้วลองใหม่</div>
+          <button type="button" onClick={fetchLocation} style={{ ...btnSecondary, flex: "none", margin: "0.5rem auto 0" }}>ลองหาตำแหน่งใหม่</button>
+        </div>
+      )}
+      {!gpsExempt && gpsState === "success" && (
+        <div style={{ textAlign: "center", marginBottom: 0, background: isInZone ? "#ecfdf5" : "#fef2f2", border: `1.5px solid ${isInZone ? "#6ee7b7" : "#fca5a5"}`, borderRadius: "12px", padding: "0.4rem 0.6rem" }}>
+          <div style={{ fontSize: "1rem", fontWeight: 700, color: isInZone ? "#059669" : "#dc2626" }}>{isInZone ? "✅ คุณอยู่ในพื้นที่" : "❌ อยู่นอกพื้นที่"}</div>
+          <div style={{ fontSize: "0.8rem", color: "#64748b", marginTop: "0.25rem" }}>ห่างจากโรงเรียน {distance} เมตร</div>
+        </div>
+      )}
+    </>
+  );
+  const nameEl = (
+      <div style={{ ...inputStyle, background: "#FBF5E6", color: "#8E1426", marginBottom: 0, padding: "0.35rem 0.5rem", boxSizing: "border-box", textAlign: "center", fontWeight: 700, border: "1.5px solid #E8D6A6" }}>
         👤 {currentUser?.name}
       </div>
-
+  );
+  const formEl = (
+    <>
       {mode === "in" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem", marginBottom: "1.25rem" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
           {formError && <ErrorBox>{formError}</ErrorBox>}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", textAlign: "left" }}>
           <Field label="🚦 เวรวันนี้">
-            <select value={duty} onChange={e => setDuty(e.target.value)} style={selectStyle}>
+            <select value={duty} onChange={e => setDuty(e.target.value)} style={{ ...selectStyle, padding: "0.45rem 0.5rem" }}>
               {DUTY_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
           </Field>
           <Field label="📌 วันนี้ทำงานแบบไหน">
-            <select value={workActivity} onChange={e => setWorkActivity(e.target.value)} style={selectStyle}>
+            <select value={workActivity} onChange={e => setWorkActivity(e.target.value)} style={{ ...selectStyle, padding: "0.45rem 0.5rem" }}>
               {WORK_ACTIVITY_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </Field>
+          </div>
           {workActivity === "training" && (
             <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "14px", padding: "0.85rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
               <Field label="สถานที่อบรม *">
@@ -1727,10 +1803,13 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
           )}
         </div>
       )}
-
+    </>
+  );
+  const alertsEl = (
+    <>
       {staleOpenAttendance && (
-        <div style={{ background: "#fee2e2", border: "3px solid #dc2626", borderRadius: "16px", padding: "1rem", marginBottom: "1.25rem", textAlign: "center", color: "#991b1b", boxShadow: "0 10px 28px rgba(220,38,38,0.18)" }}>
-          <div style={{ fontSize: "1.15rem", fontWeight: 900, marginBottom: "0.3rem" }}>คุณไม่ได้ลงเวลากลับบ้าน</div>
+        <div style={{ background: "#fee2e2", border: "3px solid #dc2626", borderRadius: "14px", padding: "0.5rem 0.75rem", marginBottom: 0, lineHeight: 1.3, textAlign: "center", color: "#991b1b", boxShadow: "0 10px 28px rgba(220,38,38,0.18)" }}>
+          <div style={{ fontSize: "1rem", fontWeight: 900, marginBottom: "0.1rem" }}>คุณไม่ได้ลงเวลากลับบ้าน</div>
           <div style={{ fontSize: "0.85rem", fontWeight: 700 }}>
             เมื่อวาน {fmtDate(staleOpenAttendance.check_in)} เวลา {fmtTime(staleOpenAttendance.check_in)} น. ระบบตัดเป็นวันใหม่แล้ว
           </div>
@@ -1738,73 +1817,55 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
       )}
 
       {mode === "in" && openAttendance && (
-        <div style={{ background: "#FBF5E6", border: "1.5px solid #D9BC74", borderRadius: "12px", padding: "0.75rem", marginBottom: "1.25rem", textAlign: "center", color: "#8E1426", fontSize: "0.85rem", fontWeight: 700 }}>
+        <div style={{ background: "#FBF5E6", border: "1.5px solid #D9BC74", borderRadius: "12px", padding: "0.45rem 0.65rem", marginBottom: 0, textAlign: "center", color: "#8E1426", fontSize: "0.85rem", fontWeight: 700 }}>
           ลงเวลาเข้างานวันนี้แล้ว เวลา {fmtTime(openAttendance.check_in)} น. ถ้าจะกลับบ้านให้กดเมนูกลับบ้าน
         </div>
       )}
 
       {mode === "out" && selectedEmp && !openAttendance && (
-        <div style={{ background: "#fef2f2", border: "1.5px solid #fca5a5", borderRadius: "12px", padding: "0.75rem", marginBottom: "1.25rem", textAlign: "center", color: "#dc2626", fontSize: "0.85rem", fontWeight: 600 }}>⚠️ ยังไม่ได้ลงเวลาเข้างานวันนี้</div>
+        <div style={{ background: "#fef2f2", border: "1.5px solid #fca5a5", borderRadius: "12px", padding: "0.45rem 0.65rem", marginBottom: 0, textAlign: "center", color: "#dc2626", fontSize: "0.85rem", fontWeight: 600 }}>⚠️ ยังไม่ได้ลงเวลาเข้างานวันนี้</div>
       )}
 
       {mode === "out" && openAttendance && (
-        <div style={{ background: "#FBF5E6", border: "1.5px solid #D9BC74", borderRadius: "12px", padding: "0.75rem", marginBottom: "1.25rem", textAlign: "center", color: "#8E1426", fontSize: "0.85rem", fontWeight: 600 }}>🕐 เข้างานเมื่อ {fmtTime(openAttendance.check_in)} น.</div>
+        <div style={{ background: "#FBF5E6", border: "1.5px solid #D9BC74", borderRadius: "12px", padding: "0.45rem 0.65rem", marginBottom: 0, textAlign: "center", color: "#8E1426", fontSize: "0.85rem", fontWeight: 600 }}>🕐 เข้างานเมื่อ {fmtTime(openAttendance.check_in)} น.</div>
       )}
 
       {mode === "out" && !done && formError && <ErrorBox>{formError}</ErrorBox>}
       {mode === "out" && !done && cleaningLock === "loading" && <div style={{ background: "#f1f5f9", border: "1.5px solid #cbd5e1", borderRadius: "12px", padding: "0.7rem", marginBottom: "1rem", textAlign: "center", color: "#475569", fontWeight: 700 }}>🔒 กำลังตรวจสอบเวรพื้นที่...</div>}
       {mode === "out" && !done && <CleaningCheckoutBlockNotice status={cleaningStatus} compact onRetry={refreshCleaningStatus} onOpenCleaning={onOpenCleaning ? date => { onClose && onClose(); onOpenCleaning(date); } : null} />}
-
-      <div style={{ display: "flex", justifyContent: "center", marginBottom: "1.25rem" }}>
-        <div style={{ position: "relative", width: 140, height: 140 }}>
-          <svg width={140} height={140} style={{ transform: "rotate(-90deg)" }}>
-            <circle cx={70} cy={70} r={54} fill="none" stroke="#f1f5f9" strokeWidth={10} />
-            <circle cx={70} cy={70} r={54} fill="none" stroke={ringColor} strokeWidth={10} strokeDasharray={circumference} strokeDashoffset={gpsState === "success" ? circumference * (1 - pct) : circumference} strokeLinecap="round" style={{ transition: "stroke-dashoffset 0.8s ease, stroke 0.4s ease" }} />
-          </svg>
-          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-            {gpsState === "loading" && <RefreshCw size={28} color="#A6192E" style={{ animation: "spin 1s linear infinite" }} />}
-            {gpsState === "success" && <><Navigation size={20} color={ringColor} /><div style={{ fontSize: "1.5rem", fontWeight: 800, color: ringColor, lineHeight: 1.1 }}>{distance}</div><div style={{ fontSize: "0.7rem", color: "#64748b" }}>เมตร</div></>}
-            {gpsState === "error" && <WifiOff size={28} color="#ef4444" />}
-          </div>
+    </>
+  );
+  const ringEl = (
+    <>
+      {/* ring GPS: ใหญ่บนเดสก์ท็อป / เล็กบนมือถือ */}
+      <div style={{ position: "relative", width: ringSize, height: ringSize, flexShrink: 0 }}>
+        <svg width={ringSize} height={ringSize} viewBox="0 0 140 140" style={{ transform: "rotate(-90deg)" }}>
+          <circle cx={70} cy={70} r={54} fill="none" stroke="#f1f5f9" strokeWidth={10} />
+          <circle cx={70} cy={70} r={54} fill="none" stroke={ringColor} strokeWidth={10} strokeDasharray={circumference} strokeDashoffset={gpsState === "success" ? circumference * (1 - pct) : circumference} strokeLinecap="round" style={{ transition: "stroke-dashoffset 0.8s ease, stroke 0.4s ease" }} />
+        </svg>
+        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+          {gpsState === "loading" && <RefreshCw size={isWide ? 28 : 20} color="#A6192E" style={{ animation: "spin 1s linear infinite" }} />}
+          {gpsState === "success" && <>{isWide && <Navigation size={20} color={ringColor} />}<div style={{ fontSize: isWide ? "1.5rem" : "1.05rem", fontWeight: 800, color: ringColor, lineHeight: 1.1 }}>{distance}</div><div style={{ fontSize: isWide ? "0.7rem" : "0.6rem", color: "#64748b" }}>เมตร</div></>}
+          {gpsState === "error" && <WifiOff size={isWide ? 28 : 20} color="#ef4444" />}
         </div>
       </div>
-
-      {gpsExempt && (
-        <div style={{ textAlign: "center", marginBottom: "1.25rem", background: "#eff6ff", border: "1.5px solid #93c5fd", borderRadius: "12px", padding: "0.75rem", color: "#1d4ed8", fontWeight: 700 }}>
-          🔓 บัญชีนี้ได้รับยกเว้นการล็อก GPS · ลงเวลาได้จากทุกที่
-          {gpsState === "success" && <div style={{ fontSize: "0.8rem", color: "#64748b", marginTop: "0.25rem", fontWeight: 400 }}>ห่างจากโรงเรียน {distance} เมตร (บันทึกไว้เป็นข้อมูล)</div>}
-        </div>
-      )}
-      {!gpsExempt && gpsState === "error" && (
-        <div style={{ textAlign: "center", marginBottom: "1.25rem", background: "#fef2f2", border: "1.5px solid #fca5a5", borderRadius: "12px", padding: "0.75rem", color: "#dc2626", fontWeight: 700 }}>
-          ❌ หาตำแหน่ง GPS ไม่ได้ ลงเวลาไม่ได้
-          <div style={{ fontSize: "0.8rem", color: "#64748b", marginTop: "0.25rem", fontWeight: 400 }}>เปิด GPS และอนุญาตให้เว็บเข้าถึงตำแหน่ง แล้วลองใหม่</div>
-          <button type="button" onClick={fetchLocation} style={{ ...btnSecondary, flex: "none", margin: "0.5rem auto 0" }}>ลองหาตำแหน่งใหม่</button>
-        </div>
-      )}
-      {!gpsExempt && gpsState === "success" && (
-        <div style={{ textAlign: "center", marginBottom: "1.25rem", background: isInZone ? "#ecfdf5" : "#fef2f2", border: `1.5px solid ${isInZone ? "#6ee7b7" : "#fca5a5"}`, borderRadius: "12px", padding: "0.75rem" }}>
-          <div style={{ fontSize: "1rem", fontWeight: 700, color: isInZone ? "#059669" : "#dc2626" }}>{isInZone ? "✅ คุณอยู่ในพื้นที่" : "❌ อยู่นอกพื้นที่"}</div>
-          <div style={{ fontSize: "0.8rem", color: "#64748b", marginTop: "0.25rem" }}>ห่างจากโรงเรียน {distance} เมตร</div>
-        </div>
-      )}
-
-      {done && (
-        <>
-          <div style={{ background: "#f0fdf4", border: "1.5px solid #86efac", borderRadius: "12px", padding: "1rem", marginBottom: "0.75rem", textAlign: "center" }}>
-            <CheckCircle size={32} color="#16a34a" style={{ margin: "0 auto 0.5rem" }} />
+    </>
+  );
+  const successEl = done && (
+          <div style={{ background: "#f0fdf4", border: "1.5px solid #86efac", borderRadius: "12px", padding: "0.4rem 0.6rem", marginBottom: 0, textAlign: "center" }}>
+            <CheckCircle size={18} color="#16a34a" style={{ margin: "0 auto 0.1rem" }} />
             <div style={{ fontWeight: 700, color: "#15803d" }}>บันทึกสำเร็จ!</div>
             <div style={{ color: "#166534", fontSize: "0.85rem" }}>เวลา {doneTime} น.</div>
             {mode === "in" && doneStatus && (() => {
               let badge;
-              if (doneStatus.type === "weekend") badge = <div style={{ marginTop: "0.5rem", background: "#dcfce7", border: "1px solid #86efac", color: "#16a34a", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>🤝 {WEEKEND_HELP_LABEL} (วันหยุด)</div>;
-              else if (doneStatus.type === "late") badge = <div style={{ marginTop: "0.5rem", background: "#fef2f2", border: "1px solid #fca5a5", color: "#dc2626", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>⚠️ มาสาย {formatMinutes(doneStatus.minutes)}</div>;
-              else if (doneStatus.type === "early") badge = <div style={{ marginTop: "0.5rem", background: "#FBF5E6", border: "1px solid #D9BC74", color: "#A6192E", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>⏰ เข้าก่อนเวลา {formatMinutes(doneStatus.minutes)}</div>;
-              else badge = <div style={{ marginTop: "0.5rem", color: "#16a34a", fontSize: "0.8rem", fontWeight: 600 }}>✓ มาตรงเวลา</div>;
+              if (doneStatus.type === "weekend") badge = <div style={{ marginTop: "0.25rem", background: "#dcfce7", border: "1px solid #86efac", color: "#16a34a", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>🤝 {WEEKEND_HELP_LABEL} (วันหยุด)</div>;
+              else if (doneStatus.type === "late") badge = <div style={{ marginTop: "0.25rem", background: "#fef2f2", border: "1px solid #fca5a5", color: "#dc2626", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>⚠️ มาสาย {formatMinutes(doneStatus.minutes)}</div>;
+              else if (doneStatus.type === "early") badge = <div style={{ marginTop: "0.25rem", background: "#FBF5E6", border: "1px solid #D9BC74", color: "#A6192E", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>⏰ เข้าก่อนเวลา {formatMinutes(doneStatus.minutes)}</div>;
+              else badge = <div style={{ marginTop: "0.25rem", color: "#16a34a", fontSize: "0.8rem", fontWeight: 600 }}>✓ มาตรงเวลา</div>;
               return (
                 <>
                   {badge}
-                  <div style={{ marginTop: "0.5rem", fontSize: "0.85rem", color: "#475569", fontStyle: "italic", textAlign: "center", padding: "0.5rem", background: "#f8fafc", borderRadius: "8px" }}>
+                  <div style={{ marginTop: "0.25rem", fontSize: "0.75rem", color: "#475569", fontStyle: "italic", textAlign: "center", padding: "0.25rem 0.4rem", background: "#f8fafc", borderRadius: "8px" }}>
                     💬 {doneQuote}
                   </div>
                 </>
@@ -1812,23 +1873,22 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
             })()}
             {mode === "out" && doneStatus && (() => {
               let badge;
-              if (doneStatus.type === "leaveEarly") badge = <div style={{ marginTop: "0.5rem", background: "#fef2f2", border: "1px solid #fca5a5", color: "#dc2626", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>🚪 กลับก่อนเวลา {formatMinutes(doneStatus.minutes)}</div>;
-              else if (doneStatus.type === "stayLate") badge = <div style={{ marginTop: "0.5rem", background: "#dcfce7", border: "1px solid #86efac", color: "#16a34a", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>✓ กลับช้ากว่าเวลา {formatMinutes(doneStatus.minutes)}</div>;
-              else badge = <div style={{ marginTop: "0.5rem", color: "#16a34a", fontSize: "0.8rem", fontWeight: 600 }}>✓ กลับตรงเวลา</div>;
+              if (doneStatus.type === "leaveEarly") badge = <div style={{ marginTop: "0.25rem", background: "#fef2f2", border: "1px solid #fca5a5", color: "#dc2626", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>🚪 กลับก่อนเวลา {formatMinutes(doneStatus.minutes)}</div>;
+              else if (doneStatus.type === "stayLate") badge = <div style={{ marginTop: "0.25rem", background: "#dcfce7", border: "1px solid #86efac", color: "#16a34a", padding: "0.4rem 0.6rem", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 700 }}>✓ กลับช้ากว่าเวลา {formatMinutes(doneStatus.minutes)}</div>;
+              else badge = <div style={{ marginTop: "0.25rem", color: "#16a34a", fontSize: "0.8rem", fontWeight: 600 }}>✓ กลับตรงเวลา</div>;
               return (
                 <>
                   {badge}
-                  <div style={{ marginTop: "0.5rem", fontSize: "0.85rem", color: "#475569", fontStyle: "italic", textAlign: "center", padding: "0.5rem", background: "#f8fafc", borderRadius: "8px" }}>
+                  <div style={{ marginTop: "0.25rem", fontSize: "0.75rem", color: "#475569", fontStyle: "italic", textAlign: "center", padding: "0.25rem 0.4rem", background: "#f8fafc", borderRadius: "8px" }}>
                     💬 {doneQuote}
                   </div>
                 </>
               );
             })()}
           </div>
-
-          {!isTestTeacher(currentUser) && <MyEvalScoreCard currentUser={currentUser} />}
-          {/* สรุปสถิติเดือนนี้ */}
-          <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.75rem", marginBottom: "1.25rem" }}>
+  );
+  const statsEl = (
+          <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "0.75rem", marginBottom: 0 }}>
             <div style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: 600, marginBottom: "0.5rem", textAlign: "center" }}>📊 สถิติเดือนนี้</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.4rem" }}>
               <div style={{ background: "#fef2f2", borderRadius: "8px", padding: "0.4rem", textAlign: "center" }}>
@@ -1849,16 +1909,65 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
               </div>
             </div>
           </div>
-        </>
-      )}
-
-      <div style={{ display: "flex", gap: "0.75rem" }}>
+  );
+  const showEval = !isTestTeacher(currentUser);
+  const footerEl = (
+      <div style={{ display: "flex", gap: "0.5rem" }}>
         <button onClick={fetchLocation} style={btnSecondary}><RefreshCw size={16} /> อัปเดต GPS</button>
         <button onClick={handleSubmit} disabled={!canSubmit} style={{ ...btnPrimary, background: done ? "#dcfce7" : canSubmit ? (mode === "in" ? "linear-gradient(135deg, #A6192E, #8E1426)" : "linear-gradient(135deg, #f59e0b, #d97706)") : "#e2e8f0", color: done ? "#16a34a" : canSubmit ? "#fff" : "#94a3b8", cursor: canSubmit ? "pointer" : "not-allowed" }}>
           {mode === "in" ? <LogIn size={18} /> : <LogOut size={18} />}
           {done ? "บันทึกแล้ว" : mode === "in" ? "ลงเวลาเข้างาน" : cleaningLock === "loading" ? "🔒 กำลังตรวจสอบเวรพื้นที่..." : cleaningLock === "error" ? "🔒 ตรวจสอบเวรพื้นที่ไม่สำเร็จ" : "ลงเวลากลับบ้าน"}
         </button>
       </div>
+  );
+
+  return (
+    <Modal
+      title={mode === "in" ? "ลงเวลาเข้างาน" : "ลงเวลากลับบ้าน"}
+      subtitle={`📍 รัศมี ${GEOFENCE_RADIUS} เมตรจากโรงเรียน`}
+      onClose={onClose}
+      icon={mode === "in" ? LogIn : LogOut}
+      color={mode === "in" ? "#8E1426" : "#d97706"}
+      compact
+      wide={isWide}
+      footer={footerEl}
+      headerExtra={
+        <>
+          {mode === "in" && <CleaningScoreHeaderStrip />}
+          {!isWide && <AttendanceScoreKpi evalData={evalData} showEval={showEval} myStats={myStats} />}
+        </>
+      }
+    >
+      {isWide ? (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1.1fr", gap: "1rem", alignItems: "start" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+            {nameEl}
+            <div style={{ display: "flex", justifyContent: "center" }}>{ringEl}</div>
+            {gpsNoticeEls}
+            {formEl}
+            {successEl}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+            {showEval && <MyEvalScoreCard currentUser={currentUser} data={evalData} />}
+            {statsEl}
+            {alertsEl}
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          {nameEl}
+          <div style={{ display: "flex", gap: "0.6rem", alignItems: "center" }}>
+            {ringEl}
+            <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+              {gpsNoticeEls}
+              {successEl}
+            </div>
+          </div>
+          {formEl}
+          {showEval && <MyEvalScoreCard currentUser={currentUser} data={evalData} variant="detail" />}
+          {alertsEl}
+        </div>
+      )}
       {checkoutNotice && <CleaningCheckoutIncompleteModal status={checkoutNotice} onClose={() => setCheckoutNotice(null)} onOpenCleaning={onOpenCleaning ? date => { setCheckoutNotice(null); onClose && onClose(); onOpenCleaning(date); } : null} />}
     </Modal>
   );
@@ -7339,9 +7448,11 @@ function computeAutoEntries(teacherId, sources, range, settings) {
 }
 
 // คะแนนประเมินของครูคนที่ลงเวลา (เฉพาะของตัวเอง) แสดงหลังลงเวลาสำเร็จ — โหลดไม่ได้ก็ซ่อนไป ไม่กระทบการลงเวลา
-function MyEvalScoreCard({ currentUser }) {
+// คะแนนประเมินของฉัน: โหลดแบบอ่านอย่างเดียว (ใช้ร่วมกันระหว่างหัวป๊อปอัปและการ์ดรายละเอียด)
+function useMyEvalData(currentUser, enabled = true) {
   const [data, setData] = useState(null);
   useEffect(() => {
+    if (!enabled) return undefined;
     let active = true;
     const empId = currentUser?.id;
     if (!empId) return undefined;
@@ -7370,13 +7481,33 @@ function MyEvalScoreCard({ currentUser }) {
     })().catch(() => { if (active) setData({ failed: true }); });
     return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id]);
+  }, [currentUser?.id, enabled]);
+  return data;
+}
+
+function MyEvalScoreCard({ currentUser, data: given, variant = "full" }) {
+  const own = useMyEvalData(currentUser, given === undefined);
+  const data = given === undefined ? own : given;
   if (!data || data.failed) return data ? null : <div style={{ fontSize: "0.75rem", color: "#94a3b8", textAlign: "center", marginBottom: "0.75rem" }}>กำลังโหลดคะแนนของคุณ...</div>;
   const level = evalLevel(data.score);
   const msg = data.score >= 95 ? "ยอดเยี่ยมมาก รักษามาตรฐานนี้ไว้นะคะ 🌟" : data.score >= 85 ? "ดีมากค่ะ อีกนิดเดียวก็เต็มแล้ว 💪" : data.score >= 70 ? "สู้ๆ ค่ะ มาตรงเวลาและแจ้งก่อนออกนอกบริเวณ คะแนนจะกลับมาเร็ว 🙂" : "เริ่มใหม่ได้ทุกวัน ค่อยๆ เก็บคะแนนคืนนะคะ ❤️";
   const r = n => Math.round(n * 10) / 10;
+  if (variant === "detail") {
+    return (
+      <div style={{ border: "1.5px solid #E8D6A6", background: "#F5FAFF", borderRadius: 12, padding: "0.4rem 0.6rem", fontSize: "0.74rem", textAlign: "left", lineHeight: 1.3 }}>
+        <div style={{ fontWeight: 700, color: "#334155", fontSize: "0.72rem" }}>เดือนนี้ (ทั้งเทอม: หัก −{data.deduct} · เพิ่ม +{data.bonus})</div>
+        {data.month.length === 0 ? <div style={{ color: "#15803d" }}>ยังไม่มีรายการหัก/เพิ่มคะแนน 👍</div> : data.month.slice(0, 5).map(g => (
+          <div key={g.type + g.label} style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", fontSize: "0.72rem" }}>
+            <span style={{ color: "#475569" }}>{g.label}{g.count > 1 ? ` ×${g.count}` : ""}</span>
+            <b style={{ color: g.type === "add" ? "#15803d" : "#dc2626" }}>{g.type === "add" ? "+" : "−"}{r(g.points)}</b>
+          </div>
+        ))}
+        <div style={{ marginTop: "0.15rem", color: "#8E1426", fontWeight: 600 }}>{msg}</div>
+      </div>
+    );
+  }
   return (
-    <div style={{ border: "1.5px solid #E8D6A6", background: "#F5FAFF", borderRadius: 12, padding: "0.7rem 0.8rem", marginBottom: "0.75rem", fontSize: "0.82rem" }}>
+    <div style={{ border: "1.5px solid #E8D6A6", background: "#F5FAFF", borderRadius: 12, padding: "0.7rem 0.8rem", marginBottom: "0.75rem", fontSize: "0.82rem", textAlign: "left", lineHeight: 1.35 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
         <div><div style={{ fontWeight: 800, color: "#2B0A10" }}>คะแนนประเมินของฉัน</div><div style={{ fontSize: "0.7rem", color: "#64748b" }}>ภาคเรียน {data.sem.term}/{data.sem.year} · คะแนนตั้งต้น 100</div></div>
         <div style={{ textAlign: "right" }}><div style={{ fontSize: "1.6rem", fontWeight: 900, color: level.color, lineHeight: 1 }}>{data.score}</div><div style={{ fontSize: "0.7rem", fontWeight: 700, color: level.color }}>{level.label}</div></div>
@@ -9186,12 +9317,14 @@ async function computeWeeklyCleaningWinner(weekStart) {
   return { weekStart, weekEnd, winners, roomsScored: list.length, inspections: list.reduce((sum, row) => sum + row.count, 0) };
 }
 
-function WeeklyCleaningWinnerBanner({ compact = false }) {
+// ผลห้องที่ได้คะแนนเวรพื้นที่สูงสุดของสัปดาห์ล่าสุด (อ่านอย่างเดียว) · always=true แสดงทุกวัน (ใช้ในหัวป๊อปอัปลงเวลา)
+function useWeeklyCleaningWinner(always = false) {
   const today = todayISO();
   const isMonday = (() => { const [y, m, d] = today.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)).getUTCDay() === 1; })();
-  const show = isMonday || cleaningWinnerPreviewOn();
+  const show = always || isMonday || cleaningWinnerPreviewOn();
   const weekStart = isMonday ? shiftDateKey(today, -7) : shiftDateKey(mondayOf(today), -7);
   const [result, setResult] = useState(() => cleaningWinnerCache.get(weekStart) || null);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     if (!show) return;
     let alive = true;
@@ -9199,9 +9332,34 @@ function WeeklyCleaningWinnerBanner({ compact = false }) {
     if (cached) { setResult(cached); return; }
     computeWeeklyCleaningWinner(weekStart)
       .then(next => { if (!alive) return; cleaningWinnerCache.set(weekStart, next || { empty: true }); setResult(next || { empty: true }); })
-      .catch(() => { /* โหลดไม่ได้ก็ไม่แสดง */ });
+      .catch(() => { if (alive) setFailed(true); /* โหลดไม่ได้ก็ไม่แสดง */ });
     return () => { alive = false; };
   }, [show, weekStart]);
+  return { show, isMonday, result, failed, weekStart };
+}
+
+// แถบคะแนนเวรพื้นที่บนสุดของหัวป๊อปอัปลงเวลาเข้างาน (ก่อนคะแนนประเมินและสถิติ)
+function CleaningScoreHeaderStrip() {
+  const { isMonday, result, failed } = useWeeklyCleaningWinner(true);
+  const fmt = n => (Number.isInteger(n) ? String(n) : n.toFixed(2));
+  const base = { borderRadius: 10, padding: "0.35rem 0.6rem", marginTop: "0.5rem", fontSize: "0.74rem", lineHeight: 1.3, textAlign: "left" };
+  if (!result || result.empty || !result.winners?.length) {
+    return <div role="status" style={{ ...base, background: "rgba(255,255,255,0.16)", color: "#fff" }}>🏆 คะแนนเวรพื้นที่ประจำสัปดาห์: {!result ? (failed ? "โหลดไม่ได้" : "กำลังโหลด...") : "ยังไม่มีผลการตรวจสัปดาห์ที่แล้ว"}</div>;
+  }
+  const tie = result.winners.length > 1;
+  return (
+    <div role="status" style={{ ...base, background: "linear-gradient(135deg, #fef9c3, #fde68a)", border: "1.5px solid #d97706", color: "#713f12" }}>
+      <div style={{ fontWeight: 900, fontSize: "0.78rem" }}>🏆 คะแนนเวรพื้นที่สูงสุดประจำสัปดาห์{tie ? " (คะแนนเท่ากัน)" : ""} · {thaiShortRange(result.weekStart, result.weekEnd)}</div>
+      {result.winners.map(row => (
+        <div key={row.id}>🥇 <b style={{ color: "#92400e" }}>{cleaningRoomShortName(row)}</b> · เฉลี่ย {fmt(row.average)}/{fmt(row.avgMax)} คะแนน ({row.percent.toFixed(1)}%) · ตรวจ {row.count} ครั้ง</div>
+      ))}
+      {isMonday && <div style={{ fontWeight: 800, fontSize: "0.68rem", color: "#9a3412" }}>(รบกวนครูเวรเสาธงติดสติ๊กเกอร์ที่ห้องชั้นนั้นให้ด้วย)</div>}
+    </div>
+  );
+}
+
+function WeeklyCleaningWinnerBanner({ compact = false }) {
+  const { show, result } = useWeeklyCleaningWinner(false);
   if (!show || !result || result.empty || !result.winners?.length) return null;
   const tie = result.winners.length > 1;
   const fmt = n => (Number.isInteger(n) ? String(n) : n.toFixed(2));

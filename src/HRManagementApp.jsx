@@ -1632,7 +1632,13 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
         return;
       }
       if (latest.required && !latest.done) {
-        setFormError(`ยังไม่ได้ให้คะแนนเวรพื้นที่: ${(latest.missingDates || []).map(thaiDayLabel).join(", ")} · กรุณาลงเวรให้เรียบร้อยก่อนจึงจะลงเวลากลับบ้านได้`);
+        {
+          const remain = latest.pendingRooms || [];
+          const remainText = (latest.missingDates || []).includes(todayISO()) && remain.length
+            ? ` · เหลืออีก ${remain.length} พื้นที่: ${remain.slice(0, 12).join(", ")}${remain.length > 12 ? ` และอีก ${remain.length - 12} พื้นที่` : ""}`
+            : "";
+          setFormError(`ยังให้คะแนนเวรพื้นที่ไม่ครบ: ${(latest.missingDates || []).map(thaiDayLabel).join(", ")} · ต้องให้คะแนนทุกพื้นที่ยกเว้นห้องตัวเองก่อนจึงจะลงเวลากลับบ้านได้${remainText}`);
+        }
         setSavingAttendance(false);
         return;
       }
@@ -1847,7 +1853,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
         <button onClick={fetchLocation} style={btnSecondary}><RefreshCw size={16} /> อัปเดต GPS</button>
         <button onClick={handleSubmit} disabled={!canSubmit} style={{ ...btnPrimary, background: done ? "#dcfce7" : canSubmit ? (mode === "in" ? "linear-gradient(135deg, #A6192E, #8E1426)" : "linear-gradient(135deg, #f59e0b, #d97706)") : "#e2e8f0", color: done ? "#16a34a" : canSubmit ? "#fff" : "#94a3b8", cursor: canSubmit ? "pointer" : "not-allowed" }}>
           {mode === "in" ? <LogIn size={18} /> : <LogOut size={18} />}
-          {done ? "บันทึกแล้ว" : mode === "in" ? "ลงเวลาเข้างาน" : cleaningLock === "loading" ? "🔒 กำลังตรวจสอบเวรพื้นที่..." : cleaningLock === "error" ? "🔒 ตรวจสอบเวรพื้นที่ไม่สำเร็จ" : cleaningBlocked ? "🔒 ให้คะแนนเวรพื้นที่ก่อน" : "ลงเวลากลับบ้าน"}
+          {done ? "บันทึกแล้ว" : mode === "in" ? "ลงเวลาเข้างาน" : cleaningLock === "loading" ? "🔒 กำลังตรวจสอบเวรพื้นที่..." : cleaningLock === "error" ? "🔒 ตรวจสอบเวรพื้นที่ไม่สำเร็จ" : cleaningBlocked ? "🔒 ให้คะแนนเวรพื้นที่ให้ครบก่อน" : "ลงเวลากลับบ้าน"}
         </button>
       </div>
     </Modal>
@@ -2087,8 +2093,8 @@ function AttendancePage({ employees, activityLog, currentUser, settings, onRefre
           <LogIn size={32} /><div style={{ fontSize: "1.1rem", fontWeight: 800 }}>ลงเวลาเข้างาน</div>
           <div style={{ fontSize: "0.75rem", opacity: 0.9 }}>เวลาทำงาน: {wsOf(currentUser?.id, settings?.work_start)?.slice(0,5)} น.</div>
         </button>
-        <button disabled={outLocked} aria-disabled={outLocked} onClick={() => { if (!outLocked) setShowOut(true); }} title={outLocked ? "ล็อก: ยังไม่ลงเวรพื้นที่" : "ลงเวลากลับบ้าน"} style={{ background: outLocked ? "#cbd5e1" : "linear-gradient(135deg, #f59e0b, #d97706)", border: "none", borderRadius: "1rem", padding: "1.5rem", color: outLocked ? "#475569" : "#fff", cursor: outLocked ? "not-allowed" : "pointer", fontFamily: "inherit", boxShadow: outLocked ? "none" : "0 8px 24px rgba(245,158,11,0.3)", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
-          {outLocked ? <span style={{ fontSize: "2rem", lineHeight: 1 }}>🔒</span> : <LogOut size={32} />}<div style={{ fontSize: "1.1rem", fontWeight: 800 }}>{cleaningLock === "loading" ? "กำลังตรวจสอบเวรพื้นที่..." : outLocked ? "ล็อก: ยังไม่ลงเวรพื้นที่" : "ลงเวลากลับบ้าน"}</div>
+        <button disabled={outLocked} aria-disabled={outLocked} onClick={() => { if (!outLocked) setShowOut(true); }} title={outLocked ? "ล็อก: ยังให้คะแนนเวรพื้นที่ไม่ครบ" : "ลงเวลากลับบ้าน"} style={{ background: outLocked ? "#cbd5e1" : "linear-gradient(135deg, #f59e0b, #d97706)", border: "none", borderRadius: "1rem", padding: "1.5rem", color: outLocked ? "#475569" : "#fff", cursor: outLocked ? "not-allowed" : "pointer", fontFamily: "inherit", boxShadow: outLocked ? "none" : "0 8px 24px rgba(245,158,11,0.3)", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
+          {outLocked ? <span style={{ fontSize: "2rem", lineHeight: 1 }}>🔒</span> : <LogOut size={32} />}<div style={{ fontSize: "1.1rem", fontWeight: 800 }}>{cleaningLock === "loading" ? "กำลังตรวจสอบเวรพื้นที่..." : outLocked ? "ล็อก: ยังให้คะแนนเวรพื้นที่ไม่ครบ" : "ลงเวลากลับบ้าน"}</div>
           <div style={{ fontSize: "0.75rem", opacity: 0.9 }}>เวลาเลิก: {weOf(currentUser?.id, settings?.work_end)?.slice(0,5)} น.</div>
         </button>
       </div>
@@ -8689,7 +8695,8 @@ async function writeCleaningRow(item, employeeId) {
 
 // ─── บังคับครูประจำชั้นให้คะแนนเวรพื้นที่ก่อนลงเวลากลับบ้าน ─────────────────────────
 // กติกา: ครูประจำชั้น (ตั้ง "ชั้นที่สอน" ไว้ หรือเป็นครูอนุบาลประจำห้อง) ต้องบันทึกผลการตรวจเวรพื้นที่
-// ของตนเองอย่างน้อย 1 ครั้ง ลงวันที่วันนี้ ก่อนลงเวลากลับบ้าน
+// ทุกพื้นที่ยกเว้นพื้นที่ของห้องตัวเอง ลงวันที่วันนี้ ก่อนลงเวลากลับบ้าน
+// (ถ้าไม่มีห้องตัวเอง ต้องให้คะแนนครบทุกพื้นที่ · ถ้าทะเบียนพื้นที่ว่าง จะไม่บล็อก)
 // ยกเว้น: ผู้บริหาร, ครูทดลองระบบ, เจ้าหน้าที่ที่ไม่สอน, ครูที่ไม่ได้ประจำชั้น, เสาร์-อาทิตย์,
 // วันหยุดที่ตั้งไว้ (ตั้งค่าหักคะแนน), วันที่มีใบลาอนุมัติแล้ว, วันที่ลงเวลาแบบไปอบรม
 // ถ้าโหลดสถานะไม่ได้ (เน็ตมีปัญหา) จะไม่บล็อก เพื่อไม่ให้ครูติดอยู่กลับบ้านไม่ได้
@@ -8877,18 +8884,15 @@ async function fetchCleaningCheckoutStatus(user) {
     attByDate.set(key, [...(attByDate.get(key) || []), row]);
   });
   const todays = parseRows(todayRes.data).filter(item => item.date === today);
-  const mineDates = new Set([...parseRows(mineRes.data), ...todays].filter(item => String(item.by_id) === id).map(item => item.date));
+  const mineByDate = new Map();
+  const addMine = item => {
+    if (String(item.by_id) !== id || !item.date || !item.room_id) return;
+    if (!mineByDate.has(item.date)) mineByDate.set(item.date, new Set());
+    mineByDate.get(item.date).add(String(item.room_id));
+  };
+  [...parseRows(mineRes.data), ...todays].forEach(addMine);
   // ผลที่บันทึกในเครื่องนี้แต่ยังซิงก์ไม่ได้ก็นับว่าให้คะแนนแล้ว
-  readCleaningLocal().inspections.forEach(item => { if (String(item.by_id) === id) mineDates.add(item.date); });
-  const missingDates = dates.filter(d => {
-    if (holidays.has(d)) return false;
-    if (leaves.some(row => row.start_date <= d && (row.end_date || row.start_date) >= d)) return false;
-    const att = attByDate.get(d) || [];
-    if (att.some(row => row.work_activity === "training")) return false;
-    // วันก่อนหน้าที่ไม่ได้ลงเวลามาทำงานเลย ไม่นับว่าขาดเวร (วันนี้ต้องให้คะแนนเสมอ เพราะกำลังจะลงเวลากลับบ้าน)
-    if (d !== today && att.length === 0) return false;
-    return !mineDates.has(d);
-  });
+  readCleaningLocal().inspections.forEach(addMine);
   let config = null;
   (cfgRes.data || []).forEach(row => {
     try {
@@ -8897,10 +8901,20 @@ async function fetchCleaningCheckoutStatus(user) {
     } catch { /* ignore */ }
   });
   const rooms = roomsWithCleaningDefaults((config || cleanCleaningConfig(null)).rooms);
-  const scoredRoomIds = new Set(todays.map(item => String(item.room_id)));
-  const pendingRooms = rooms
-    .filter(room => !isOwnCleaningAssignment(room, grade, user) && !scoredRoomIds.has(String(room.id)))
-    .map(cleaningRoomShortName);
+  // ต้องให้คะแนนทุกห้องในทะเบียน ยกเว้นพื้นที่ของห้องตัวเอง · ถ้าทะเบียนว่างหรือไม่มีห้องที่ต้องตรวจ จะไม่บล็อก
+  const requiredRooms = rooms.filter(room => !isOwnCleaningAssignment(room, grade, user));
+  const remainingFor = date => requiredRooms.filter(room => !(mineByDate.get(date) || new Set()).has(String(room.id)));
+  const missingDates = dates.filter(d => {
+    if (holidays.has(d)) return false;
+    if (leaves.some(row => row.start_date <= d && (row.end_date || row.start_date) >= d)) return false;
+    const att = attByDate.get(d) || [];
+    if (att.some(row => row.work_activity === "training")) return false;
+    // วันก่อนหน้าที่ไม่ได้ลงเวลามาทำงานเลย ไม่นับว่าขาดเวร (วันนี้ต้องให้คะแนนเสมอ เพราะกำลังจะลงเวลากลับบ้าน)
+    if (d !== today && att.length === 0) return false;
+    if (!rooms.length || !requiredRooms.length) return false;
+    return remainingFor(d).length > 0;
+  });
+  const pendingRooms = remainingFor(today).map(cleaningRoomShortName);
   const done = missingDates.length === 0;
   return { required: true, done, reason: done ? "done" : "missing", missingDates, pendingRooms, catchup };
 }
@@ -9015,7 +9029,7 @@ function CleaningCheckoutBlockNotice({ status, onOpenCleaning, onRetry, compact 
   return (
     <div role="alert" style={{ position: "relative", overflow: "hidden", background: "#FFF3C4", border: "3px solid #F59E0B", borderRadius: "20px", padding: compact ? "1.15rem 1rem 1rem" : "1.4rem 1.3rem 1.25rem", marginBottom: "1.25rem", color: "#422006", boxShadow: "0 0 0 5px rgba(245,158,11,0.25), 0 10px 22px rgba(180,83,9,0.18)", animation: "cleaningPulse 2s ease-in-out infinite", textAlign: "center" }}>
       <div aria-hidden="true" style={{ position: "absolute", left: 0, right: 0, top: 0, height: 8, background: "repeating-linear-gradient(45deg, #111827 0 10px, #FACC15 10px 20px)" }} />
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.6rem", fontSize: compact ? "1.35rem" : "1.6rem", fontWeight: 900, lineHeight: 1.3, marginBottom: "0.5rem", marginTop: "0.2rem" }}><span aria-hidden="true" style={{ width: 38, height: 38, borderRadius: "50%", background: "#DC2626", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "1.3rem", flexShrink: 0, boxShadow: "0 0 0 4px #fecaca" }}>!</span>ท่านยังไม่ได้ให้คะแนนเวรพื้นที่</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.6rem", fontSize: compact ? "1.35rem" : "1.6rem", fontWeight: 900, lineHeight: 1.3, marginBottom: "0.5rem", marginTop: "0.2rem" }}><span aria-hidden="true" style={{ width: 38, height: 38, borderRadius: "50%", background: "#DC2626", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "1.3rem", flexShrink: 0, boxShadow: "0 0 0 4px #fecaca" }}>!</span>ท่านยังให้คะแนนเวรพื้นที่ไม่ครบ</div>
       <div style={{ display: "grid", gap: "0.45rem", margin: "0.6rem 0" }}>
         {missing.map(date => (
           <div key={date} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.6rem", flexWrap: "wrap", background: "#fff", border: "2px solid #F59E0B", borderRadius: "12px", padding: "0.5rem 0.7rem" }}>
@@ -9026,12 +9040,12 @@ function CleaningCheckoutBlockNotice({ status, onOpenCleaning, onRetry, compact 
           </div>
         ))}
       </div>
-      <div style={{ fontSize: compact ? "1.05rem" : "1.2rem", fontWeight: 900, color: "#7c2d12" }}>กรุณาลงเวรให้เรียบร้อยก่อนจึงจะลงเวลากลับบ้านได้</div>
+      <div style={{ fontSize: compact ? "1.05rem" : "1.2rem", fontWeight: 900, color: "#7c2d12" }}>กรุณาให้คะแนนทุกพื้นที่ยกเว้นห้องตัวเองให้ครบก่อนจึงจะลงเวลากลับบ้านได้</div>
       {missing.includes(today) && !cleaningScoringOpen(clockNow) && <div style={{ fontSize: "0.88rem", fontWeight: 800, marginTop: "0.35rem", color: "#1e3a8a" }}>🔒 ให้คะแนนเวรพื้นที่ของวันนี้ได้ตั้งแต่ 12:00 น. เป็นต้นไป — {CLEANING_NOON_REASON}</div>}
-      <div style={{ fontSize: "0.85rem", fontWeight: 700, marginTop: "0.35rem", color: "#5b3a0a" }}>ให้คะแนนพื้นที่ใดก็ได้ ยกเว้นพื้นที่ของห้องตัวเอง (อย่างน้อยวันละ 1 พื้นที่)</div>
+      <div style={{ fontSize: "0.85rem", fontWeight: 700, marginTop: "0.35rem", color: "#5b3a0a" }}>ต้องให้คะแนนทุกพื้นที่ ยกเว้นพื้นที่ของห้องตัวเอง</div>
       {missing.includes(today) && rooms.length > 0 && (
         <div style={{ fontSize: "0.82rem", marginTop: "0.35rem", color: "#7c2d12" }}>
-          พื้นที่ที่ยังไม่มีใครตรวจวันนี้: {rooms.slice(0, 12).join(", ")}{rooms.length > 12 ? ` และอีก ${rooms.length - 12} พื้นที่` : ""}
+          เหลืออีก {rooms.length} พื้นที่: {rooms.slice(0, 12).join(", ")}{rooms.length > 12 ? ` และอีก ${rooms.length - 12} พื้นที่` : ""}
         </div>
       )}
     </div>
@@ -12654,7 +12668,7 @@ function PayrollStandaloneApp({ employees, attendance, leaves, settings, current
 
 // ─── แถบเมนูล่างสำหรับมือถือ (แทนเมนูข้าง) ─────────────────────────────────────
 // ใช้รายการเมนูชุดเดียวกับเมนูข้าง (กรองสิทธิ์แล้ว) และเปิดลงเวลาผ่าน openCheckIn/openCheckOut เดิม
-// ปุ่มกลับบ้านล็อกเหมือนเมนูข้างทุกประการเมื่อยังไม่ลงเวรพื้นที่
+// ปุ่มกลับบ้านล็อกเหมือนเมนูข้างทุกประการเมื่อยังให้คะแนนเวรพื้นที่ไม่ครบ
 const MOBILE_TAB_KEYS = ["dashboard", "schedule", "academic"];
 function MobileTabBar({ activePage, navItems, menuOpen, setMenuOpen, attOpen, setAttOpen, onNavigate, onCheckIn, onCheckOut, checkoutLocked, cleaningLock, userName, onLogout }) {
   const has = key => navItems.some(item => item.key === key);
@@ -12712,14 +12726,14 @@ function MobileTabBar({ activePage, navItems, menuOpen, setMenuOpen, attOpen, se
             <button type="button" aria-label="เข้างาน" onClick={onCheckIn} style={{ background: "linear-gradient(135deg, #A6192E, #8E1426)", border: "none", borderRadius: 18, padding: "1.1rem 0.5rem", color: "#fff", fontWeight: 700, fontSize: "1rem", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.4rem", boxShadow: "0 6px 16px rgba(166,25,46,0.3)", fontFamily: "inherit", minHeight: 96 }}>
               <LogIn size={26} /> เข้างาน
             </button>
-            <button type="button" aria-label="กลับบ้าน" disabled={checkoutLocked} aria-disabled={checkoutLocked} title={checkoutLocked ? (cleaningLock === "loading" ? "กำลังตรวจสอบเวรพื้นที่..." : "ล็อก: ยังไม่ลงเวรพื้นที่") : "กลับบ้าน"} onClick={() => { if (checkoutLocked) return; onCheckOut(); }} style={{ background: checkoutLocked ? "#cbd5e1" : "linear-gradient(135deg, #7A5A14, #9C7A2E)", border: "none", borderRadius: 18, padding: "1.1rem 0.5rem", color: checkoutLocked ? "#475569" : "#fff", fontWeight: 700, fontSize: "1rem", cursor: checkoutLocked ? "not-allowed" : "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.4rem", boxShadow: checkoutLocked ? "none" : "0 6px 16px rgba(122,90,20,0.3)", fontFamily: "inherit", minHeight: 96 }}>
+            <button type="button" aria-label="กลับบ้าน" disabled={checkoutLocked} aria-disabled={checkoutLocked} title={checkoutLocked ? (cleaningLock === "loading" ? "กำลังตรวจสอบเวรพื้นที่..." : "ล็อก: ยังให้คะแนนเวรพื้นที่ไม่ครบ") : "กลับบ้าน"} onClick={() => { if (checkoutLocked) return; onCheckOut(); }} style={{ background: checkoutLocked ? "#cbd5e1" : "linear-gradient(135deg, #7A5A14, #9C7A2E)", border: "none", borderRadius: 18, padding: "1.1rem 0.5rem", color: checkoutLocked ? "#475569" : "#fff", fontWeight: 700, fontSize: "1rem", cursor: checkoutLocked ? "not-allowed" : "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.4rem", boxShadow: checkoutLocked ? "none" : "0 6px 16px rgba(122,90,20,0.3)", fontFamily: "inherit", minHeight: 96 }}>
               {checkoutLocked ? <span style={{ fontSize: "1.5rem", lineHeight: 1 }}>🔒</span> : <LogOut size={26} />}
-              {checkoutLocked ? (cleaningLock === "loading" ? "กำลังตรวจสอบ..." : "ล็อก: ยังไม่ลงเวร") : "กลับบ้าน"}
+              {checkoutLocked ? (cleaningLock === "loading" ? "กำลังตรวจสอบ..." : "ล็อก: ยังให้คะแนนไม่ครบ") : "กลับบ้าน"}
             </button>
           </div>
           {checkoutLocked && cleaningLock !== "loading" && (
             <div style={{ marginTop: "0.75rem", background: "#FFF3C4", border: "2px solid #F59E0B", borderRadius: 14, padding: "0.6rem 0.75rem", color: "#422006", fontSize: "0.85rem", fontWeight: 700, textAlign: "center" }}>
-              {cleaningLock === "error" ? "🔒 ตรวจสอบเวรพื้นที่ไม่สำเร็จ จึงยังลงเวลากลับบ้านไม่ได้" : "🔒 กรุณาลงเวรพื้นที่ให้เรียบร้อยก่อนจึงจะลงเวลากลับบ้านได้ (ดูรายละเอียดที่หน้าแรก)"}
+              {cleaningLock === "error" ? "🔒 ตรวจสอบเวรพื้นที่ไม่สำเร็จ จึงยังลงเวลากลับบ้านไม่ได้" : "🔒 ต้องให้คะแนนทุกพื้นที่ยกเว้นห้องตัวเองให้ครบก่อนจึงจะลงเวลากลับบ้านได้ (ดูรายละเอียดที่หน้าแรก)"}
             </div>
           )}
         </div>
@@ -13170,8 +13184,8 @@ export default function HRApp() {
             <button title="เข้างาน" aria-label="เข้างาน" onClick={() => { openCheckIn(); setSidebarOpen(false); }} style={{ background: "linear-gradient(135deg, #A6192E, #8E1426)", border: "none", borderRadius: "12px", padding: "0.85rem 0.5rem", color: "#fff", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.35rem", boxShadow: "0 4px 14px rgba(166,25,46,0.3)", fontFamily: "inherit" }}>
               <LogIn size={20} /> {!rail && "เข้างาน"}
             </button>
-            <button title={checkoutLocked ? (cleaningLock === "loading" ? "กำลังตรวจสอบเวรพื้นที่..." : "ล็อก: ยังไม่ลงเวรพื้นที่") : "กลับบ้าน"} aria-label="กลับบ้าน" disabled={checkoutLocked} aria-disabled={checkoutLocked} onClick={() => { if (checkoutLocked) return; openCheckOut(); setSidebarOpen(false); }} style={{ background: checkoutLocked ? "#cbd5e1" : "linear-gradient(135deg, #7A5A14, #9C7A2E)", border: "none", borderRadius: "14px", padding: "0.85rem 0.5rem", color: checkoutLocked ? "#475569" : "#fff", fontWeight: 700, fontSize: "0.85rem", cursor: checkoutLocked ? "not-allowed" : "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.35rem", boxShadow: checkoutLocked ? "none" : "0 4px 14px rgba(122,90,20,0.3)", fontFamily: "inherit" }}>
-              {checkoutLocked ? <span style={{ fontSize: "1.15rem", lineHeight: 1 }}>🔒</span> : <LogOut size={20} />} {!rail && (checkoutLocked ? (cleaningLock === "loading" ? "กำลังตรวจสอบ..." : "ล็อก: ยังไม่ลงเวร") : "กลับบ้าน")}
+            <button title={checkoutLocked ? (cleaningLock === "loading" ? "กำลังตรวจสอบเวรพื้นที่..." : "ล็อก: ยังให้คะแนนเวรพื้นที่ไม่ครบ") : "กลับบ้าน"} aria-label="กลับบ้าน" disabled={checkoutLocked} aria-disabled={checkoutLocked} onClick={() => { if (checkoutLocked) return; openCheckOut(); setSidebarOpen(false); }} style={{ background: checkoutLocked ? "#cbd5e1" : "linear-gradient(135deg, #7A5A14, #9C7A2E)", border: "none", borderRadius: "14px", padding: "0.85rem 0.5rem", color: checkoutLocked ? "#475569" : "#fff", fontWeight: 700, fontSize: "0.85rem", cursor: checkoutLocked ? "not-allowed" : "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.35rem", boxShadow: checkoutLocked ? "none" : "0 4px 14px rgba(122,90,20,0.3)", fontFamily: "inherit" }}>
+              {checkoutLocked ? <span style={{ fontSize: "1.15rem", lineHeight: 1 }}>🔒</span> : <LogOut size={20} />} {!rail && (checkoutLocked ? (cleaningLock === "loading" ? "กำลังตรวจสอบ..." : "ล็อก: ยังให้คะแนนไม่ครบ") : "กลับบ้าน")}
             </button>
           </div>
 

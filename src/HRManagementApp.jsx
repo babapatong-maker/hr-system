@@ -1933,7 +1933,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
       footer={footerEl}
       headerExtra={done && !isWide ? <AttendanceScoreKpi evalData={evalData} showEval={showEval} myStats={myStats} /> : null}
     >
-      {mode === "in" && <WeeklyCleaningWinnerBanner compact always />}
+      {mode === "in" && !done && <WeeklyCleaningWinnerBanner compact always />}
       {isWide ? (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1.1fr", gap: "1rem", alignItems: "start" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>

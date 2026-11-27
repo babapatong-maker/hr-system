@@ -1931,13 +1931,9 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
       compact
       wide={isWide}
       footer={footerEl}
-      headerExtra={
-        <>
-          {mode === "in" && <CleaningScoreHeaderStrip />}
-          {!isWide && <AttendanceScoreKpi evalData={evalData} showEval={showEval} myStats={myStats} />}
-        </>
-      }
+      headerExtra={done && !isWide ? <AttendanceScoreKpi evalData={evalData} showEval={showEval} myStats={myStats} /> : null}
     >
+      {mode === "in" && <WeeklyCleaningWinnerBanner compact always />}
       {isWide ? (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1.1fr", gap: "1rem", alignItems: "start" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
@@ -1948,8 +1944,8 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
             {successEl}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-            {showEval && <MyEvalScoreCard currentUser={currentUser} data={evalData} />}
-            {statsEl}
+            {done && showEval && <MyEvalScoreCard currentUser={currentUser} data={evalData} />}
+            {done && statsEl}
             {alertsEl}
           </div>
         </div>
@@ -1964,7 +1960,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
             </div>
           </div>
           {formEl}
-          {showEval && <MyEvalScoreCard currentUser={currentUser} data={evalData} variant="detail" />}
+          {done && showEval && <MyEvalScoreCard currentUser={currentUser} data={evalData} variant="detail" />}
           {alertsEl}
         </div>
       )}
@@ -9338,28 +9334,8 @@ function useWeeklyCleaningWinner(always = false) {
   return { show, isMonday, result, failed, weekStart };
 }
 
-// แถบคะแนนเวรพื้นที่บนสุดของหัวป๊อปอัปลงเวลาเข้างาน (ก่อนคะแนนประเมินและสถิติ)
-function CleaningScoreHeaderStrip() {
-  const { isMonday, result, failed } = useWeeklyCleaningWinner(true);
-  const fmt = n => (Number.isInteger(n) ? String(n) : n.toFixed(2));
-  const base = { borderRadius: 10, padding: "0.35rem 0.6rem", marginTop: "0.5rem", fontSize: "0.74rem", lineHeight: 1.3, textAlign: "left" };
-  if (!result || result.empty || !result.winners?.length) {
-    return <div role="status" style={{ ...base, background: "rgba(255,255,255,0.16)", color: "#fff" }}>🏆 คะแนนเวรพื้นที่ประจำสัปดาห์: {!result ? (failed ? "โหลดไม่ได้" : "กำลังโหลด...") : "ยังไม่มีผลการตรวจสัปดาห์ที่แล้ว"}</div>;
-  }
-  const tie = result.winners.length > 1;
-  return (
-    <div role="status" style={{ ...base, background: "linear-gradient(135deg, #fef9c3, #fde68a)", border: "1.5px solid #d97706", color: "#713f12" }}>
-      <div style={{ fontWeight: 900, fontSize: "0.78rem" }}>🏆 คะแนนเวรพื้นที่สูงสุดประจำสัปดาห์{tie ? " (คะแนนเท่ากัน)" : ""} · {thaiShortRange(result.weekStart, result.weekEnd)}</div>
-      {result.winners.map(row => (
-        <div key={row.id}>🥇 <b style={{ color: "#92400e" }}>{cleaningRoomShortName(row)}</b> · เฉลี่ย {fmt(row.average)}/{fmt(row.avgMax)} คะแนน ({row.percent.toFixed(1)}%) · ตรวจ {row.count} ครั้ง</div>
-      ))}
-      {isMonday && <div style={{ fontWeight: 800, fontSize: "0.68rem", color: "#9a3412" }}>(รบกวนครูเวรเสาธงติดสติ๊กเกอร์ที่ห้องชั้นนั้นให้ด้วย)</div>}
-    </div>
-  );
-}
-
-function WeeklyCleaningWinnerBanner({ compact = false }) {
-  const { show, result } = useWeeklyCleaningWinner(false);
+function WeeklyCleaningWinnerBanner({ compact = false, always = false }) {
+  const { show, isMonday, result } = useWeeklyCleaningWinner(always);
   if (!show || !result || result.empty || !result.winners?.length) return null;
   const tie = result.winners.length > 1;
   const fmt = n => (Number.isInteger(n) ? String(n) : n.toFixed(2));
@@ -9378,7 +9354,7 @@ function WeeklyCleaningWinnerBanner({ compact = false }) {
           </div>
         ))}
       </div>
-      <div style={{ fontSize: compact ? "0.95rem" : "1.05rem", fontWeight: 900, color: "#9a3412" }}>(รบกวนครูเวรเสาธงติดสติ๊กเกอร์ที่ห้องชั้นนั้นให้ด้วย)</div>
+      {isMonday && <div style={{ fontSize: compact ? "0.95rem" : "1.05rem", fontWeight: 900, color: "#9a3412" }}>(รบกวนครูเวรเสาธงติดสติ๊กเกอร์ที่ห้องชั้นนั้นให้ด้วย)</div>}
     </div>
   );
 }

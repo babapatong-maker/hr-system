@@ -1637,7 +1637,7 @@ function AttendanceModal({ onClose, onCheckin, employees, currentUser, settings,
           const remainText = (latest.missingDates || []).includes(todayISO()) && remain.length
             ? ` · เหลืออีก ${remain.length} พื้นที่: ${remain.slice(0, 12).join(", ")}${remain.length > 12 ? ` และอีก ${remain.length - 12} พื้นที่` : ""}`
             : "";
-          setFormError(`ยังให้คะแนนเวรพื้นที่ไม่ครบ: ${(latest.missingDates || []).map(thaiDayLabel).join(", ")} · ต้องให้คะแนนทุกพื้นที่ยกเว้นห้องตัวเองก่อนจึงจะลงเวลากลับบ้านได้${remainText}`);
+          setFormError(`ยังให้คะแนนเวรพื้นที่ไม่ครบ: ${(latest.missingDates || []).map(thaiDayLabel).join(", ")} · กรุณาลงเวรพื้นที่ให้ครบทุกพื้นที่ยกเว้นพื้นที่ตัวเอง ก่อนจึงจะลงเวลากลับบ้านได้${remainText}`);
         }
         setSavingAttendance(false);
         return;
@@ -9040,7 +9040,7 @@ function CleaningCheckoutBlockNotice({ status, onOpenCleaning, onRetry, compact 
           </div>
         ))}
       </div>
-      <div style={{ fontSize: compact ? "1.05rem" : "1.2rem", fontWeight: 900, color: "#7c2d12" }}>กรุณาให้คะแนนทุกพื้นที่ยกเว้นห้องตัวเองให้ครบก่อนจึงจะลงเวลากลับบ้านได้</div>
+      <div style={{ fontSize: compact ? "1.05rem" : "1.2rem", fontWeight: 900, color: "#7c2d12" }}>กรุณาลงเวรพื้นที่ให้ครบทุกพื้นที่ยกเว้นพื้นที่ตัวเอง ก่อนจึงจะลงเวลากลับบ้านได้</div>
       {missing.includes(today) && !cleaningScoringOpen(clockNow) && <div style={{ fontSize: "0.88rem", fontWeight: 800, marginTop: "0.35rem", color: "#1e3a8a" }}>🔒 ให้คะแนนเวรพื้นที่ของวันนี้ได้ตั้งแต่ 12:00 น. เป็นต้นไป — {CLEANING_NOON_REASON}</div>}
       <div style={{ fontSize: "0.85rem", fontWeight: 700, marginTop: "0.35rem", color: "#5b3a0a" }}>ต้องให้คะแนนทุกพื้นที่ ยกเว้นพื้นที่ของห้องตัวเอง</div>
       {missing.includes(today) && rooms.length > 0 && (
@@ -12733,7 +12733,7 @@ function MobileTabBar({ activePage, navItems, menuOpen, setMenuOpen, attOpen, se
           </div>
           {checkoutLocked && cleaningLock !== "loading" && (
             <div style={{ marginTop: "0.75rem", background: "#FFF3C4", border: "2px solid #F59E0B", borderRadius: 14, padding: "0.6rem 0.75rem", color: "#422006", fontSize: "0.85rem", fontWeight: 700, textAlign: "center" }}>
-              {cleaningLock === "error" ? "🔒 ตรวจสอบเวรพื้นที่ไม่สำเร็จ จึงยังลงเวลากลับบ้านไม่ได้" : "🔒 ต้องให้คะแนนทุกพื้นที่ยกเว้นห้องตัวเองให้ครบก่อนจึงจะลงเวลากลับบ้านได้ (ดูรายละเอียดที่หน้าแรก)"}
+              {cleaningLock === "error" ? "🔒 ตรวจสอบเวรพื้นที่ไม่สำเร็จ จึงยังลงเวลากลับบ้านไม่ได้" : "🔒 กรุณาลงเวรพื้นที่ให้ครบทุกพื้นที่ยกเว้นพื้นที่ตัวเอง ก่อนจึงจะลงเวลากลับบ้านได้ (ดูรายละเอียดที่หน้าแรก)"}
             </div>
           )}
         </div>
